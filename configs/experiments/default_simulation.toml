@@ -1,7 +1,6 @@
 [paths]
 data_format_config = "configs/data_format/run_v1.toml"
 output_runs_dir = "data/runs"
-legacy_simulator_dir = "make_simulation_data"
 
 [simulation]
 num_runs = 1

@@ -10,10 +10,26 @@ import pandas as pd
 from research_program.config.loader import load_toml
 from research_program.io.data_contract import RunDataContract, load_data_contract
 from research_program.io.run_store import discover_runs, records_to_frame
-from research_program.simulation.legacy_runner import (
+from research_program.simulation.runner import (
     request_from_config,
     run_simulation_request,
 )
+
+
+MODULE_COMMANDS = {
+    "import-raw-data": "research_program.io.import_raw_data_to_results",
+    "calculate-cycle-data": "research_program.analysis.calculate_cycle_data",
+    "calculate-phase-gap-error": "research_program.analysis.calculate_phase_gap_error",
+    "aggregate-phase-gap-error": "research_program.analysis.aggregate_phase_gap_error_stats",
+    "compare-per": "research_program.analysis.compare_per_by_devices_and_interval",
+    "plot-phase-diff": "research_program.plotting.visualize_phase_diff",
+    "plot-phase-gap-error": "research_program.plotting.plot_phase_gap_error",
+    "plot-per": "research_program.plotting.plot_PER",
+    "plot-per-aligned": "research_program.plotting.plot_per_aligned",
+    "plot-aggregated-phase-gap-error": "research_program.plotting.plot_aggregated_phase_gap_error",
+    "plot-aggregated-phase-gap-error-overlay": "research_program.plotting.plot_aggregated_phase_gap_error_overlay",
+    "plot-convergence-summary": "research_program.plotting.plot_convergence_summary",
+}
 
 
 def _contract_to_dict(contract: RunDataContract) -> dict[str, Any]:
@@ -78,6 +94,14 @@ def run_simulation(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_module_command(args: argparse.Namespace) -> int:
+    import importlib
+
+    module = importlib.import_module(args.module_name)
+    module.main()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="research-program")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -102,6 +126,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("configs/experiments/default_simulation.toml"),
     )
     simulation_parser.set_defaults(func=run_simulation)
+
+    for command_name, module_name in MODULE_COMMANDS.items():
+        command_parser = subparsers.add_parser(command_name)
+        command_parser.set_defaults(func=run_module_command, module_name=module_name)
 
     return parser
 

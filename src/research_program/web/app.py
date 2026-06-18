@@ -35,7 +35,7 @@ from research_program.plotting.phase_gap import (
     build_phase_gap_error_figure,
     figure_to_bytes,
 )
-from research_program.simulation.legacy_runner import (
+from research_program.simulation.runner import (
     SimulationRequest,
     request_from_config,
     run_simulation_request,
@@ -254,7 +254,6 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
         start_step=int(start_step),
         tags=tuple(tag.strip() for tag in tags.split(";") if tag.strip()),
         output_root=resolve_project_path(output_root),
-        legacy_simulator_dir=defaults.legacy_simulator_dir,
         max_workers=int(max_workers),
     )
 

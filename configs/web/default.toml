@@ -1,13 +1,9 @@
 [paths]
 data_format_config = "configs/data_format/run_v1.toml"
-runs_dirs = ["data/runs", "make_simulation_data/results"]
-aggregated_dirs = ["data/aggregated", "make_simulation_data/aggregated_stats"]
+runs_dirs = ["data/runs"]
+aggregated_dirs = ["data/aggregated"]
 figure_dirs = [
   "outputs/figures",
-  "make_simulation_data/aggregated_stats_graphs",
-  "make_simulation_data/aggregated_stats_overlay_graphs",
-  "make_simulation_data/per_aligned_graphs",
-  "make_simulation_data/phase_gap_error_graphs",
 ]
 simulation_config = "configs/experiments/default_simulation.toml"
 

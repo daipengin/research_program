@@ -3,7 +3,6 @@ description = "Standard run directory format for real-device and simulation data
 
 [layout]
 runs_dir = "data/runs"
-legacy_runs_dir = "make_simulation_data/results"
 run_directory_pattern = "<run_id>"
 required_files = ["metadata.csv", "send_log.csv"]
 derived_files = [

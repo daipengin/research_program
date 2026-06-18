@@ -1,36 +1,36 @@
 # research_program
 
-研究で扱うシミュレーション、実機データ処理、Web可視化のためのプロジェクトです。
+Research tools for simulation, data processing, statistics, plotting, and web visualization.
 
-## 構成
+All runnable Python code now lives under `src/research_program`. The project does not depend on `make_simulation_data`; that directory can be removed after you confirm you no longer need it as an archive of the old layout.
+
+## Layout
 
 ```text
 configs/
-  data_format/      run データ形式の定義
-  experiments/      シミュレーション条件
-  web/              Web画面が読む設定
+  data_format/      Run data format contracts
+  experiments/      Simulation parameter files
+  web/              Streamlit configuration
 data/
-  raw/              実機・シミュレーションの元データ
-  runs/             共通形式に変換済みの run データ
-  aggregated/       統計処理後の集約データ
+  raw/real/         Raw real-device CSV files
+  raw/simulation/   Raw simulation inputs, if needed
+  runs/             Standard run directories
+  aggregated/       Aggregated statistics
 outputs/
-  figures/          Webやスクリプトから生成した画像
-  reports/
+  figures/          Generated and imported figures
+  reports/          Logs and reports
 src/research_program/
-  simulation/       シミュレーション実行
-  io/               CSV、metadata、画像、データ形式
-  analysis/         統計処理
-  plotting/         グラフ生成
+  simulation/       Oscillators, coupling functions, scheduler, runner
+  io/               CSV, metadata, run discovery, figure discovery
+  analysis/         Cycle data, phase-gap error, aggregation, PER comparison
+  plotting/         Matplotlib plotting scripts
+  pipelines/        Higher-level workflows
   web/              Streamlit Web UI
 ```
 
-既存の `make_simulation_data/` は移行元として残しています。新しいWeb画面は、標準の `data/runs/` と既存の `make_simulation_data/results/` の両方を読めます。
+## Run Data Format
 
-## データ形式
-
-run データ形式は [configs/data_format/run_v1.toml](configs/data_format/run_v1.toml) に明示しています。
-
-1つの run は次のようなディレクトリです。
+The run data contract is defined in [configs/data_format/run_v1.toml](configs/data_format/run_v1.toml).
 
 ```text
 data/runs/<run_id>/
@@ -40,7 +40,7 @@ data/runs/<run_id>/
   phase_gap_error.csv
 ```
 
-`metadata.csv` と `send_log.csv` が必須です。`calculated_Cycle_data.csv` と `phase_gap_error.csv` は後処理で作る派生データです。
+`metadata.csv` and `send_log.csv` are required. `calculated_Cycle_data.csv` and `phase_gap_error.csv` are derived files.
 
 ## Web UI
 
@@ -48,14 +48,14 @@ data/runs/<run_id>/
 uv run streamlit run src/research_program/web/app.py
 ```
 
-Web UI では次を扱えます。
+The Web UI supports:
 
-- シミュレーション条件を変更して実行
-- run データを条件で絞り込み
-- 条件に合う run 数を表示
-- 絞り込んだ run だけで phase gap error グラフを生成
-- 生成グラフを `png`, `pdf`, `svg` でダウンロード
-- 既存の結果画像を一覧表示、プレビュー、ダウンロード
+- running simulations with editable parameters
+- filtering runs by parameters and tags
+- showing how many runs match the filters
+- plotting only the filtered runs
+- downloading generated graphs as `png`, `pdf`, or `svg`
+- browsing, previewing, and downloading result figures
 
 ## CLI
 
@@ -63,6 +63,14 @@ Web UI では次を扱えます。
 uv run research-program describe-data-format
 uv run research-program list-runs
 uv run research-program run-simulation
+uv run research-program import-raw-data
+uv run research-program calculate-cycle-data
+uv run research-program calculate-phase-gap-error
+uv run research-program aggregate-phase-gap-error
+uv run research-program plot-phase-diff
+uv run research-program plot-phase-gap-error
+uv run research-program plot-per
+uv run research-program plot-per-aligned
 ```
 
-シミュレーション条件は [configs/experiments/default_simulation.toml](configs/experiments/default_simulation.toml) で変更できます。
+Simulation defaults are in [configs/experiments/default_simulation.toml](configs/experiments/default_simulation.toml).
