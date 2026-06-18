@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 import sys
+import subprocess
+import tempfile
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -15,6 +18,10 @@ import streamlit as st
 
 from research_program.config.loader import load_toml
 from research_program.config.paths import resolve_project_path
+from research_program.io.cleanup import (
+    CleanupResult,
+    cleanup_experiment_outputs,
+)
 from research_program.io.data_contract import RunDataContract, load_data_contract
 from research_program.io.figures import (
     FigureAsset,
@@ -144,7 +151,7 @@ def _render_runs_tab(records: list[RunRecord], web_config: dict[str, Any]) -> No
         ]
         if column in filtered_df.columns
     ]
-    st.dataframe(filtered_df[visible_columns], use_container_width=True, hide_index=True)
+    st.dataframe(filtered_df[visible_columns], width="stretch", hide_index=True)
 
     y_column = st.selectbox(
         "Y column",
@@ -265,7 +272,65 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
             return
 
     st.success(f"Finished {len(results)} run(s).")
-    st.dataframe(pd.DataFrame(results), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(results), width="stretch", hide_index=True)
+
+
+@st.cache_data(show_spinner=False)
+def _render_pdf_pages(
+    pdf_path_text: str,
+    pdf_mtime_ns: int,
+    max_pages: int,
+    dpi: int,
+) -> tuple[bytes, ...]:
+    renderer = shutil.which("pdftoppm")
+    if renderer is None:
+        return tuple()
+
+    pdf_path = Path(pdf_path_text)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_prefix = Path(temp_dir) / "page"
+        subprocess.run(
+            [
+                renderer,
+                "-f",
+                "1",
+                "-l",
+                str(max_pages),
+                "-r",
+                str(dpi),
+                "-png",
+                str(pdf_path),
+                str(output_prefix),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        page_paths = sorted(Path(temp_dir).glob("page-*.png"))
+        return tuple(path.read_bytes() for path in page_paths)
+
+
+def _render_pdf_preview(pdf_path: Path, max_pages: int = 5, dpi: int = 160) -> None:
+    try:
+        page_images = _render_pdf_pages(
+            pdf_path_text=str(pdf_path),
+            pdf_mtime_ns=pdf_path.stat().st_mtime_ns,
+            max_pages=max_pages,
+            dpi=dpi,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        st.warning(f"PDF preview could not be generated: {exc}")
+        return
+
+    if not page_images:
+        st.info("PDF preview requires pdftoppm. Please use the download button below.")
+        return
+
+    for page_number, page_image in enumerate(page_images, start=1):
+        st.image(
+            page_image,
+            width="stretch",
+            caption=f"{pdf_path.name} - page {page_number}",
+        )
 
 
 def _render_figures_tab(web_config: dict[str, Any]) -> None:
@@ -293,7 +358,7 @@ def _render_figures_tab(web_config: dict[str, Any]) -> None:
         if asset.extension in set(selected_extensions)
     ]
     filtered_df = figures_to_frame(filtered_assets)
-    st.dataframe(filtered_df, use_container_width=True, hide_index=True)
+    st.dataframe(filtered_df, width="stretch", hide_index=True)
 
     if not filtered_assets:
         return
@@ -305,7 +370,10 @@ def _render_figures_tab(web_config: dict[str, Any]) -> None:
     )
 
     if selected_asset.is_raster or selected_asset.extension == ".svg":
-        st.image(str(selected_asset.path), use_container_width=True)
+        st.image(str(selected_asset.path), width="stretch")
+    elif selected_asset.extension == ".pdf":
+        max_pages = st.number_input("PDF preview pages", min_value=1, max_value=20, value=5)
+        _render_pdf_preview(selected_asset.path, max_pages=int(max_pages))
     else:
         st.write(selected_asset.name)
 
@@ -347,7 +415,63 @@ def _render_contract_tab(contract: RunDataContract) -> None:
                     "description": column.description,
                 }
             )
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+
+
+def _cleanup_result_to_frame(result: CleanupResult) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "path": str(item.path.relative_to(PROJECT_ROOT)),
+                "kind": "directory" if item.is_dir else "file",
+                "size_kb": round(item.size_bytes / 1024, 1),
+            }
+            for item in result.items
+        ]
+    )
+
+
+def _render_maintenance_tab() -> None:
+    st.subheader("Delete Experiment Outputs")
+    st.warning("This deletes generated experiment outputs. Raw real-device data is not selected by default.")
+
+    target_options = {
+        "runs": "data/runs",
+        "aggregated": "data/aggregated",
+        "figures": "outputs/figures",
+        "reports": "outputs/reports",
+        "raw_real": "data/raw/real",
+        "raw_simulation": "data/raw/simulation",
+    }
+    selected_targets = st.multiselect(
+        "Targets",
+        options=list(target_options),
+        default=["runs", "aggregated", "figures"],
+        format_func=lambda key: f"{key} ({target_options[key]})",
+    )
+
+    preview_result = cleanup_experiment_outputs(
+        target_names=tuple(selected_targets),
+        dry_run=True,
+    )
+    col_count, col_size = st.columns(2)
+    col_count.metric("Items", preview_result.deleted_count)
+    col_size.metric("Size [MB]", f"{preview_result.deleted_size_mb:.3f}")
+
+    preview_df = _cleanup_result_to_frame(preview_result)
+    st.dataframe(preview_df, width="stretch", hide_index=True)
+
+    confirmation = st.text_input("Type DELETE to enable deletion")
+    delete_disabled = confirmation != "DELETE" or not selected_targets or preview_result.deleted_count == 0
+
+    if st.button("Delete selected outputs", disabled=delete_disabled, type="primary"):
+        result = cleanup_experiment_outputs(
+            target_names=tuple(selected_targets),
+            dry_run=False,
+        )
+        st.success(f"Deleted {result.deleted_count} item(s), {result.deleted_size_mb:.3f} MB.")
+        st.cache_data.clear()
+        st.rerun()
 
 
 def main() -> None:
@@ -360,8 +484,8 @@ def main() -> None:
     web_config, contract = _load_runtime()
     records = _discover_records(web_config, contract)
 
-    runs_tab, simulation_tab, figures_tab, contract_tab = st.tabs(
-        ["Runs", "Simulation", "Figures", "Data format"]
+    runs_tab, simulation_tab, figures_tab, maintenance_tab, contract_tab = st.tabs(
+        ["Runs", "Simulation", "Figures", "Maintenance", "Data format"]
     )
     with runs_tab:
         _render_runs_tab(records, web_config)
@@ -369,6 +493,8 @@ def main() -> None:
         _render_simulation_tab(web_config)
     with figures_tab:
         _render_figures_tab(web_config)
+    with maintenance_tab:
+        _render_maintenance_tab()
     with contract_tab:
         _render_contract_tab(contract)
 

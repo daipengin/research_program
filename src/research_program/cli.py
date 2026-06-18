@@ -8,6 +8,12 @@ from typing import Any
 import pandas as pd
 
 from research_program.config.loader import load_toml
+from research_program.io.cleanup import (
+    DEFAULT_TARGETS,
+    TARGET_PATHS,
+    cleanup_experiment_outputs,
+    format_cleanup_result,
+)
 from research_program.io.data_contract import RunDataContract, load_data_contract
 from research_program.io.run_store import discover_runs, records_to_frame
 from research_program.simulation.runner import (
@@ -94,6 +100,23 @@ def run_simulation(args: argparse.Namespace) -> int:
     return 0
 
 
+def clear_experiment_outputs(args: argparse.Namespace) -> int:
+    target_names = tuple(args.targets or DEFAULT_TARGETS)
+    if args.include_raw_real and "raw_real" not in target_names:
+        target_names = (*target_names, "raw_real")
+    if args.include_raw_simulation and "raw_simulation" not in target_names:
+        target_names = (*target_names, "raw_simulation")
+
+    result = cleanup_experiment_outputs(
+        target_names=target_names,
+        dry_run=not args.yes,
+    )
+    print(format_cleanup_result(result))
+    if not args.yes:
+        print("\nThis was a dry run. Add --yes to delete these items.")
+    return 0
+
+
 def run_module_command(args: argparse.Namespace) -> int:
     import importlib
 
@@ -126,6 +149,31 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("configs/experiments/default_simulation.toml"),
     )
     simulation_parser.set_defaults(func=run_simulation)
+
+    cleanup_parser = subparsers.add_parser("clear-experiment-outputs")
+    cleanup_parser.add_argument(
+        "--target",
+        dest="targets",
+        action="append",
+        choices=sorted(name for name in TARGET_PATHS if not name.startswith("raw_")),
+        help="Cleanup target. Can be specified multiple times. Defaults to runs, aggregated, figures.",
+    )
+    cleanup_parser.add_argument(
+        "--include-raw-real",
+        action="store_true",
+        help="Also delete files under data/raw/real.",
+    )
+    cleanup_parser.add_argument(
+        "--include-raw-simulation",
+        action="store_true",
+        help="Also delete files under data/raw/simulation.",
+    )
+    cleanup_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Actually delete files. Without this option, only a dry run is shown.",
+    )
+    cleanup_parser.set_defaults(func=clear_experiment_outputs)
 
     for command_name, module_name in MODULE_COMMANDS.items():
         command_parser = subparsers.add_parser(command_name)
