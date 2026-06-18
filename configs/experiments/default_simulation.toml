@@ -1,0 +1,24 @@
+[paths]
+data_format_config = "configs/data_format/run_v1.toml"
+output_runs_dir = "data/runs"
+legacy_simulator_dir = "make_simulation_data"
+
+[simulation]
+num_runs = 1
+seed = 12345
+coupling_function = "LINEAR"
+coupling_strength = 10
+strength_ratio = -0.0001
+cycle_time = 30000
+listening_rate = 25
+device_count = 20
+duration = 30000000
+start_step_count = 100
+start_step = 10
+tags = ["auto", "generated", "20dai", "web"]
+max_workers = 1
+
+[sweep]
+enabled = false
+coupling_functions = ["KURAMOTO", "LINEAR", "NewSIN"]
+coupling_strength_values = [10, 20, 30, 40, 50]

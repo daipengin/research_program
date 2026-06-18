@@ -1,0 +1,127 @@
+version = "run_v1"
+description = "Standard run directory format for real-device and simulation data."
+
+[layout]
+runs_dir = "data/runs"
+legacy_runs_dir = "make_simulation_data/results"
+run_directory_pattern = "<run_id>"
+required_files = ["metadata.csv", "send_log.csv"]
+derived_files = [
+  "calculated_Cycle_data.csv",
+  "phase_gap_error.csv",
+]
+
+[[files.metadata.columns]]
+name = "run_id"
+type = "string"
+required = true
+description = "Unique run identifier."
+
+[[files.metadata.columns]]
+name = "coupling_strength"
+type = "integer"
+required = true
+description = "Coupling strength parameter."
+
+[[files.metadata.columns]]
+name = "strength_ratio"
+type = "float"
+required = false
+aliases = ["strengrh_ratio"]
+description = "Scale factor used for phase correction. The alias keeps compatibility with older generated metadata."
+
+[[files.metadata.columns]]
+name = "coupling_function"
+type = "string"
+required = true
+description = "Coupling function name, for example KURAMOTO, LINEAR, or NewSIN."
+
+[[files.metadata.columns]]
+name = "cycle_time"
+type = "float"
+required = true
+unit = "ms"
+description = "One oscillator cycle length."
+
+[[files.metadata.columns]]
+name = "listening_rate"
+type = "float"
+required = true
+unit = "percent"
+description = "Awake/listening percentage in one cycle."
+
+[[files.metadata.columns]]
+name = "tags"
+type = "list[string]"
+required = false
+separator = ";"
+description = "Semicolon-separated tags such as real, generated, 20dai, sec, or hex."
+
+[[files.metadata.columns]]
+name = "ranges"
+type = "list[range]"
+required = false
+separator = "|"
+description = "Optional start:end:device_id ranges for simulation sources."
+
+[[files.send_log.columns]]
+name = "time"
+type = "float"
+required = true
+unit = "ms"
+description = "Send timestamp. If metadata tags contain sec, readers convert seconds to milliseconds."
+
+[[files.send_log.columns]]
+name = "oscillator_id"
+type = "string"
+required = true
+description = "Oscillator or device id. If metadata tags contain hex, readers convert hex ids to integers for analysis."
+
+[[files.send_log.columns]]
+name = "send_count"
+type = "integer"
+required = false
+description = "Sequential send count for simulation logs."
+
+[[files.calculated_cycle_data.columns]]
+name = "cycle_index"
+type = "integer"
+required = true
+description = "1-based cycle index."
+
+[[files.calculated_cycle_data.columns]]
+name = "cycle_start_time"
+type = "float"
+required = true
+unit = "ms"
+description = "Reference cycle start timestamp."
+
+[[files.calculated_cycle_data.columns]]
+name = "is_original_cycle"
+type = "boolean"
+required = true
+description = "True when the reference cycle was observed, false when filled."
+
+[[files.calculated_cycle_data.columns]]
+name = "reference_id"
+type = "integer"
+required = true
+description = "Reference oscillator id used for cycle alignment."
+
+[[files.phase_gap_error.columns]]
+name = "cycle_index"
+type = "integer"
+required = true
+description = "1-based cycle index."
+
+[[files.phase_gap_error.columns]]
+name = "mean_abs_diff_from_ideal_phase_gap"
+type = "float"
+required = false
+description = "Mean absolute phase-gap error in radians."
+
+[[files.phase_gap_error.columns]]
+name = "mean_abs_diff_from_ideal_phase_gap_ratio"
+type = "float"
+required = false
+description = "Phase-gap error divided by the ideal phase gap."
