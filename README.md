@@ -18,7 +18,7 @@ data/
   aggregated/       統計処理後の集約データ
 outputs/
   figures/          作成したグラフ画像
-  reports/          ログやレポート
+  reports/          ログ、レポート、run一覧インデックス
 src/research_program/
   simulation/       シミュレータ本体
   io/               CSV読み書き、run探索、画像探索
@@ -50,15 +50,65 @@ data/runs/<run_id>/
 
 主な設定項目は [configs/experiments/default_simulation.toml](configs/experiments/default_simulation.toml) で変更できます。
 
-- `coupling_function`: 結合関数。例: `KURAMOTO`, `LINEAR`, `NewSIN`
+- `coupling_function`: 結合関数。例: `KURAMOTO`, `LINEAR`, `NewSIN`, `NONE`
 - `coupling_strength`: 結合強度
 - `strength_ratio`: 位相補正量の倍率
 - `cycle_time`: 1周期の長さ
 - `listening_rate`: 受信待機時間の割合
 - `device_count`: 振動子数
 - `duration`: シミュレーション時間
+- `start_timing_mode`: 開始タイミング。`random` または `fixed`
+- `start_step_count`, `start_step`: ランダム開始時刻の候補範囲。`0` から `start_step_count * start_step` までを `start_step` 間隔で扱います。
+- `fixed_start_times`: 固定開始時刻を手入力する場合の開始時刻リスト
+- `fixed_start_interval`, `fixed_start_offset`: 固定開始時刻を一定間隔プリセットで作る場合の間隔とオフセット
+- `simulation_mode`: シミュレーションモード。`standard` または `per_measurement`
+- `carrier_sense_duration_ms`: PER測定時のキャリアセンス時間。`0` にすると送信前の待機時間を自動で使います。
+- `lora_payload_bytes`: LoRa送信時間計算に使うペイロード長
+- `lora_spreading_factor`: LoRa送信時間計算に使うSF
+- `lora_bandwidth_hz`: LoRa送信時間計算に使う帯域幅
+- `lora_coding_rate_denominator`: LoRa符号化率の分母。`5` は `4/5`、`8` は `4/8`
+- `lora_preamble_symbols`: LoRaプリアンブル長
+- `lora_explicit_header`, `lora_crc_enabled`, `lora_low_data_rate_optimize`: LoRa送信時間計算に使うヘッダー、CRC、LDRO設定
 - `num_runs`: 同じ条件で作成するrun数
 - `seed`: 乱数シード
+- `max_workers`: 並列実行数。`0` にすると実行数とCPU数から自動で最大値を使います。
+- `tags`: runに付与するタグ。`20dai` のような台数タグは `device_count` から自動で付与・更新されます。開始タイミングに応じて `start_random` または `start_fixed` も自動で付与されます。
+
+開始タイミングの考え方:
+
+- `random`: 各runで、指定範囲内からデバイス数分の開始時刻をランダムに選びます。runごとに同じ開始時刻セットが重ならないようにします。
+- `fixed`: 全runで同じ開始時刻を使います。Web UIでは、一定間隔プリセットまたは手入力を選べます。
+
+PER測定モード:
+
+- `simulation_mode = "per_measurement"` にすると、送信は瞬間ではなくLoRa送信時間ぶんの占有区間として扱います。
+- 送信予定時刻の直前にキャリアセンス区間を見て、他デバイスの送信区間と重なっていた場合、そのサイクルでは送信しません。
+- 実際に送ったものだけが `send_log.csv` に入り、スキップは `carrier_sense_log.csv` に `skip_busy` として記録されます。
+- 送信時間はLoRa airtime式から計算し、実効値は `metadata.csv` の `transmission_time_ms` に保存されます。
+
+結合関数:
+
+- `KURAMOTO`: `sin(phase_diff)` を使います。
+- `LINEAR`: 既存の線形補正関数を使います。
+- `NewSIN`: 既存のNewSIN補正関数を使います。
+- `NONE`: 位相更新量を常に0にします。受信ログは残りますが、受信による次周期の補正は行いません。
+
+LoRa送信時間の式:
+
+```text
+T_sym = 2^SF / BW
+DE = 1 if T_sym >= 0.016 else 0   # lora_low_data_rate_optimize が auto の場合
+H = 0 if explicit_header else 1
+CRC = 1 if crc_enabled else 0
+CR = coding_rate_denominator - 4
+
+T_preamble = (preamble_symbols + 4.25) * T_sym
+payload_symbol_count =
+  8 + max(ceil((8 * payload_bytes - 4 * SF + 28 + 16 * CRC - 20 * H)
+               / (4 * (SF - 2 * DE))) * (CR + 4), 0)
+T_payload = payload_symbol_count * T_sym
+T_airtime_ms = (T_preamble + T_payload) * 1000
+```
 
 CLIから実行する場合:
 
@@ -72,7 +122,13 @@ Webから実行する場合:
 uv run streamlit run src/research_program/web/app.py
 ```
 
-Web UIの `Simulation` タブから、結合関数、結合強度、周期、振動子数などを変えながらシミュレーションを実行できます。出力は標準で `data/runs/` に保存されます。
+Web UIの `Simulation` ページから、結合関数、結合強度、周期、振動子数などを変えながらシミュレーションを実行できます。出力は標準で `data/runs/` に保存されます。
+
+Web UIでは、シミュレーションを実行する前にパラメーター確認画面が表示されます。確認画面には、自動付与後のタグと実際に使用されるワーカー数も表示されます。`Sweep parameter ranges` を使うと、結合関数や主要な数値パラメータを一定範囲で変化させ、全組み合わせの結果を一括で作成できます。
+
+Web UIから実行したシミュレーションは、バックグラウンドのジョブとして開始されます。ジョブ状態は `outputs/reports/simulation_jobs/` のJSONファイルに保存されるため、ページをリロードした後でも `Simulation` ページの `Running jobs` から進行状況を確認できます。シミュレーション実行中は、完了run数、経過時間、残り時間、終了予測時刻、直近に完了したrunがWeb上に表示されます。
+
+Web UIで最後に成功したシミュレーション条件は `outputs/reports/last_simulation_request.json` に保存され、次回のシミュレーション画面の初期値として使われます。
 
 ## 実機データの取り込み
 
@@ -107,7 +163,7 @@ send_log.csv
 
 ## グラフ作成
 
-グラフ作成処理は `src/research_program/plotting/` にあります。`data/runs/` や `data/aggregated/` のデータを読み、結果を `outputs/figures/` に保存します。
+グラフ作成処理は `src/research_program/plotting/` にあります。`data/runs/` や `data/aggregated/` のデータを読み、結果を `outputs/figures/` に保存します。既定の保存形式はPDFです。
 
 代表的なグラフ作成コマンド:
 
@@ -116,6 +172,7 @@ uv run research-program plot-phase-diff
 uv run research-program plot-phase-gap-error
 uv run research-program plot-per
 uv run research-program plot-per-aligned
+uv run research-program compare-per
 uv run research-program plot-aggregated-phase-gap-error
 uv run research-program plot-aggregated-phase-gap-error-overlay
 uv run research-program plot-convergence-summary
@@ -127,10 +184,12 @@ uv run research-program plot-convergence-summary
 - 位相ギャップ誤差グラフ
 - PERグラフ
 - 複数runを基準周期でそろえたPER比較グラフ
+- 台数・送信間隔ごとのPER比較グラフ
 - 結合関数・結合強度ごとの集約統計グラフ
+- 集約統計を重ね描きした位相ギャップ誤差グラフ
 - 収束傾向の比較グラフ
 
-Web UIの `Runs` タブでは、条件に合うrun数を確認し、その条件に合うrunだけを使ってグラフを作成できます。`Figures` タブでは、作成済みの画像やPDFを一覧表示し、任意の形式でダウンロードできます。
+Web UIの `Runs` ページでは、条件に合うrun数を確認し、その条件に合うrunだけを使ってグラフを作成できます。`Graph creation` ページでは、上記の画像データをWeb上から選択して作成できます。対象runをパラメーターやタグで絞り込み、既定ではフィルタ後のrunを全て対象にするため、大量のrunを個別選択リストへ展開しません。個別選択が必要な場合だけ、run IDやパスで候補を絞ってから選択できます。必要に応じて、周期データ、位相ギャップ誤差、集約統計の前処理も同時に実行できます。グラフ作成はバックグラウンドジョブとして開始され、ジョブ状態は `outputs/reports/graph_creation_jobs/` に保存されます。ページをリロードした後でも `Graph creation` ページの `Running graph jobs` から、完了コマンド数、経過時間、残り時間、終了予測時刻を確認できます。`Graph parameters` では、選択したグラフ種類ごとにx軸・y軸範囲、PER計算窓幅、基準周期、収束判定、画像サイズなどをWeb上から変更できます。ここで変更した値は、そのグラフ作成時だけ一時的に使われます。`Figures` ページでは、作成済みの画像やPDFを一覧表示し、PDFはプレビュー時とダウンロード時にPNG/JPEG/WebPへラスター化して扱えます。
 
 ## Web UI
 
@@ -141,12 +200,27 @@ uv run streamlit run src/research_program/web/app.py
 Web UIでは次を行えます。
 
 - シミュレーション条件を変更して実行
+- パラメータ範囲を一括実行
+- シミュレーションの進行度と終了予測を表示。ページリロード後も進行中ジョブを確認
 - runデータをパラメータやタグで絞り込み
 - 条件に合うrun数を表示
 - 絞り込んだrunだけでグラフ作成
+- 全種類の画像データを選択して作成
+- 画像作成に使う対象runを選択。既定ではフィルタ結果を一括対象にして高速化
+- グラフ作成時の軸範囲や主要パラメーターを変更
+- 画像作成に必要な前処理を実行
+- 画像作成の進行度と終了予測を表示。ページリロード後も進行中ジョブを確認
 - 作成済み画像やPDFの一覧表示
-- 結果画像のプレビューとダウンロード
+- 結果画像のプレビューとダウンロード。PDFはラスター化して表示・ダウンロード
 - 実験結果データや画像の削除
+
+Web UIの高速化:
+
+- 画面はページ切り替え式です。選択中のページで必要なデータだけ読み込みます。
+- `data/runs` の一覧は `outputs/reports/run_index.json` にインデックスとして保存します。
+- runフォルダ構成が変わっていない場合は、`metadata.csv` を全件読み直さずインデックスから復元します。
+- `run一覧を更新(Refresh runs)` は通常更新、`runインデックス再構築(Rebuild run index)` はmetadataを手で編集した後などに使う深い再スキャンです。
+- 画像一覧も短時間キャッシュし、`画像一覧を更新(Refresh figures)` で明示的に更新できます。
 
 ## 実験結果の削除
 
@@ -200,4 +274,8 @@ uv run research-program plot-phase-diff
 uv run research-program plot-phase-gap-error
 uv run research-program plot-per
 uv run research-program plot-per-aligned
+uv run research-program compare-per
+uv run research-program plot-aggregated-phase-gap-error
+uv run research-program plot-aggregated-phase-gap-error-overlay
+uv run research-program plot-convergence-summary
 ```

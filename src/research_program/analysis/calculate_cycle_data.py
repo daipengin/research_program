@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 
-RESULTS_DIR = Path("data/runs")
+RESULTS_DIR = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", "data/runs"))
 REFERENCE_GAP_RATIO = 1.3
 OUTPUT_FILENAME = "calculated_Cycle_data.csv"
 

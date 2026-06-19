@@ -35,6 +35,8 @@ class Oscillator:
         self.last_event_time: Optional[int] = None
         self.last_received_from: Optional[int] = None
         self.last_send_time: Optional[int] = None
+        self.current_awake_start_time: Optional[int] = None
+        self.current_cycle_send_time: Optional[int] = None
 
         self.phase: float = 0.0
         self.phase_shift: float = 0.0
@@ -49,6 +51,8 @@ class Oscillator:
 
         self.is_awake_window = True
         self.received_times_in_awake.clear()
+        self.current_awake_start_time = current_time
+        self.current_cycle_send_time = None
 
         next_time = current_time +  self.cycle_time * (self.listening_rate/2)/100
         return (self.event_type_enum.SEND_Event, next_time)
@@ -58,6 +62,8 @@ class Oscillator:
         self.active = False
         self.last_event_time = current_time
         self.is_awake_window = False
+        self.current_awake_start_time = None
+        self.current_cycle_send_time = None
 
     def on_send(self, current_time: int) -> Tuple[object, int]:
         
@@ -65,8 +71,16 @@ class Oscillator:
         self.send_count += 1
         self.last_event_time = current_time
         self.last_send_time = current_time
+        self.current_cycle_send_time = current_time
 
         next_time = current_time +  self.cycle_time * (self.listening_rate/2)/100
+        return (self.event_type_enum.ASLEEP_Event, next_time)
+
+    def on_skip_send(self, current_time: int) -> Tuple[object, int]:
+        self.last_event_time = current_time
+        self.current_cycle_send_time = None
+
+        next_time = current_time + self.cycle_time * (self.listening_rate / 2) / 100
         return (self.event_type_enum.ASLEEP_Event, next_time)
 
     def on_receive(self, sender_id: int, sender_phase: float, current_time: int) -> None:
@@ -87,14 +101,15 @@ class Oscillator:
         self.last_event_time = current_time
 
         self.is_awake_window = False
+        self.current_awake_start_time = None
 
-        if self.received_times_in_awake and self.last_send_time is not None:
+        if self.received_times_in_awake and self.current_cycle_send_time is not None:
             selected_receive_time = min(
                 self.received_times_in_awake,
-                key=lambda t: abs(t - self.last_send_time)
+                key=lambda t: abs(t - self.current_cycle_send_time)
             )
 
-            phase_diff = 2* np.pi*(selected_receive_time - self.last_send_time)/self.cycle_time
+            phase_diff = 2* np.pi*(selected_receive_time - self.current_cycle_send_time)/self.cycle_time
             coupling_value = self.coupling_function(phase_diff)
 
             next_awake_delay = coupling_value*self.coupling_strength*self.cycle_time*self.strength_ratio
@@ -102,6 +117,7 @@ class Oscillator:
             next_awake_delay = 0
 
         self.received_times_in_awake.clear()
+        self.current_cycle_send_time = None
 
         
 
@@ -115,6 +131,8 @@ class Oscillator:
 
         self.is_awake_window = True
         self.received_times_in_awake.clear()
+        self.current_awake_start_time = current_time
+        self.current_cycle_send_time = None
 
         next_time = current_time +  self.cycle_time * (self.listening_rate/2)/100
         return (self.event_type_enum.SEND_Event, next_time)

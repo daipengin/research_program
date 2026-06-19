@@ -13,7 +13,7 @@ import pandas as pd
 from research_program.analysis.calculate_cycle_data import ensure_cycle_data_for_run
 
 
-RESULTS_DIR = Path("data/runs")
+RESULTS_DIR = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", "data/runs"))
 OUTPUT_FILENAME = "phase_gap_error.csv"
 
 

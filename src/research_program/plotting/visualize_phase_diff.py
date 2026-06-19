@@ -279,7 +279,7 @@ def process_run(run_dir: Path, graphs_dir: Path) -> Optional[str]:
 
 
 def main() -> None:
-    results_dir = CFG.results_dir
+    results_dir = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", CFG.results_dir))
     graphs_dir = CFG.graphs_dir
     graphs_dir.mkdir(parents=True, exist_ok=True)
 

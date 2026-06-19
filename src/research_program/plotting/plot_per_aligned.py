@@ -335,7 +335,7 @@ def save_individual_plots(results: list[dict], output_dir: Path) -> list[Path]:
         plt.grid(True)
         plt.tight_layout()
 
-        output_path = output_dir / f"{run_id}_aligned.png"
+        output_path = output_dir / f"{run_id}_aligned.pdf"
         plt.savefig(output_path, dpi=CFG.save_dpi)
         plt.close()
 
@@ -405,12 +405,13 @@ def save_overlay_plot(results: list[dict], output_dir: Path) -> Optional[Path]:
 
 
 def main() -> None:
-    if not CFG.results_dir.exists():
-        raise FileNotFoundError(f"results folder not found: {CFG.results_dir}")
+    results_dir = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", CFG.results_dir))
+    if not results_dir.exists():
+        raise FileNotFoundError(f"results folder not found: {results_dir}")
 
     CFG.graphs_dir.mkdir(parents=True, exist_ok=True)
 
-    results = collect_all_results(CFG.results_dir)
+    results = collect_all_results(results_dir)
 
     if CFG.save_individual_plots:
         paths = save_individual_plots(results, CFG.graphs_dir)

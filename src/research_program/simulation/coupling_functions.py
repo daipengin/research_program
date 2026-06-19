@@ -9,6 +9,7 @@ class CouplingFunction(Enum):
     KURAMOTO = "KURAMOTO"
     LINEAR = "LINEAR"
     NewSIN = "NewSIN"
+    NONE = "NONE"
 
 
 CouplingFuncType = Callable[[float], float]
@@ -29,11 +30,15 @@ def NewSin_coupling(phase_diff: float) -> float:
         return -1-np.sin(phase_diff)
 
 
+def none_coupling(phase_diff: float) -> float:
+    return 0.0
+
 
 COUPLING_FUNCTION_MAP: Dict[CouplingFunction, CouplingFuncType] = {
     CouplingFunction.KURAMOTO: kuramoto_coupling,
     CouplingFunction.LINEAR: linear_coupling,
     CouplingFunction.NewSIN: NewSin_coupling,
+    CouplingFunction.NONE: none_coupling,
 }
 
 

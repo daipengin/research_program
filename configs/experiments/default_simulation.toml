@@ -14,8 +14,22 @@ device_count = 20
 duration = 30000000
 start_step_count = 100
 start_step = 10
-tags = ["auto", "generated", "20dai", "web"]
-max_workers = 1
+start_timing_mode = "random"
+fixed_start_times = []
+fixed_start_interval = 10
+fixed_start_offset = 0
+simulation_mode = "standard"
+carrier_sense_duration_ms = 0.0
+lora_payload_bytes = 16
+lora_spreading_factor = 7
+lora_bandwidth_hz = 125000
+lora_coding_rate_denominator = 5
+lora_preamble_symbols = 8
+lora_explicit_header = true
+lora_crc_enabled = true
+lora_low_data_rate_optimize = "auto"
+tags = ["auto", "generated", "web"]
+max_workers = 0
 
 [sweep]
 enabled = false

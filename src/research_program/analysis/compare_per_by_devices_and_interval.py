@@ -282,11 +282,11 @@ def format_send_interval_label(send_interval_ms: float) -> str:
     """
     送信間隔を秒表示に変換する。
     例:
-        10000 -> 10 s
-        15000 -> 15 s
-        12500 -> 12.5 s
+        10000 ms -> 10 s
+        30000 ms -> 30 s
+        12500 ms -> 12.5 s
     """
-    sec = send_interval_ms / 1000.0/1000.0
+    sec = send_interval_ms / 1000.0
 
     if float(sec).is_integer():
         return f"{int(sec)} s"
@@ -417,7 +417,7 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
         add_sample_watermark()
         plt.tight_layout()
 
-        output_path = output_dir / f"{coupling_function}_cycle_{CFG.target_cycle}.png"
+        output_path = output_dir / f"{coupling_function}_cycle_{CFG.target_cycle}.pdf"
         plt.savefig(output_path, dpi=CFG.save_dpi)
         plt.close()
 
@@ -434,7 +434,7 @@ def save_combined_method_plot(df: pd.DataFrame, output_dir: Path) -> Optional[Pa
         return None
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"combined_methods_cycle_{CFG.target_cycle}.png"
+    output_path = output_dir / f"combined_methods_cycle_{CFG.target_cycle}.pdf"
 
     plt.figure(figsize=(CFG.figure_width, CFG.figure_height))
 
@@ -530,18 +530,20 @@ def save_combined_method_plot(df: pd.DataFrame, output_dir: Path) -> Optional[Pa
 
 
 def main() -> None:
-    if not CFG.results_dir.exists():
-        raise FileNotFoundError(f"results folder not found: {CFG.results_dir}")
+    results_dir = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", CFG.results_dir))
+    force_recalculate = os.environ.get("RESEARCH_PROGRAM_FORCE_RECALCULATE") == "1"
+    if not results_dir.exists():
+        raise FileNotFoundError(f"results folder not found: {results_dir}")
 
     CFG.graphs_dir.mkdir(parents=True, exist_ok=True)
 
     aggregated_csv_path = get_aggregated_csv_path(CFG.graphs_dir)
 
-    if CFG.use_existing_csv_if_available and aggregated_csv_path.exists():
+    if CFG.use_existing_csv_if_available and aggregated_csv_path.exists() and not force_recalculate:
         agg_df = read_aggregated_csv(aggregated_csv_path)
         print(f"loaded existing csv: {aggregated_csv_path}")
     else:
-        raw_df = collect_all_results(CFG.results_dir)
+        raw_df = collect_all_results(results_dir)
         agg_df = aggregate_results(raw_df)
 
         csv_path = save_aggregated_csv(agg_df, CFG.graphs_dir)

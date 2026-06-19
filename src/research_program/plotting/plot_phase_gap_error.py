@@ -37,7 +37,7 @@ def save_phase_gap_error_plot(
     filename_suffix: str = "",
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{run_dir.name}{filename_suffix}.png"
+    output_path = output_dir / f"{run_dir.name}{filename_suffix}.pdf"
 
     plt.figure(figsize=(CFG.figure_width, CFG.figure_height))
 
@@ -111,7 +111,7 @@ def process_run(run_dir: Path, graphs_dir: Path) -> Optional[str]:
 
 
 def main() -> None:
-    results_dir = CFG.results_dir
+    results_dir = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", CFG.results_dir))
     graphs_dir = CFG.graphs_dir
     graphs_dir.mkdir(parents=True, exist_ok=True)
 

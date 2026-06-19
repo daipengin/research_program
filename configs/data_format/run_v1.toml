@@ -8,6 +8,7 @@ required_files = ["metadata.csv", "send_log.csv"]
 derived_files = [
   "calculated_Cycle_data.csv",
   "phase_gap_error.csv",
+  "carrier_sense_log.csv",
 ]
 
 [[files.metadata.columns]]
@@ -50,6 +51,76 @@ unit = "percent"
 description = "Awake/listening percentage in one cycle."
 
 [[files.metadata.columns]]
+name = "simulation_mode"
+type = "string"
+required = false
+description = "Simulation mode. standard keeps legacy point-send behavior; per_measurement enables carrier sense and LoRa airtime."
+
+[[files.metadata.columns]]
+name = "carrier_sense_duration_ms"
+type = "float"
+required = false
+unit = "ms"
+description = "Carrier-sense duration used before the scheduled send. 0 in config means auto, stored metadata contains the effective value."
+
+[[files.metadata.columns]]
+name = "transmission_time_ms"
+type = "float"
+required = false
+unit = "ms"
+description = "Packet airtime used as the transmission occupation width."
+
+[[files.metadata.columns]]
+name = "lora_payload_bytes"
+type = "integer"
+required = false
+unit = "bytes"
+description = "LoRa payload size used to calculate airtime."
+
+[[files.metadata.columns]]
+name = "lora_spreading_factor"
+type = "integer"
+required = false
+description = "LoRa spreading factor used to calculate airtime."
+
+[[files.metadata.columns]]
+name = "lora_bandwidth_hz"
+type = "integer"
+required = false
+unit = "Hz"
+description = "LoRa bandwidth used to calculate airtime."
+
+[[files.metadata.columns]]
+name = "lora_coding_rate_denominator"
+type = "integer"
+required = false
+description = "LoRa coding-rate denominator. 5 means 4/5, 8 means 4/8."
+
+[[files.metadata.columns]]
+name = "lora_preamble_symbols"
+type = "integer"
+required = false
+description = "LoRa preamble length in symbols."
+
+[[files.metadata.columns]]
+name = "lora_explicit_header"
+type = "string"
+required = false
+description = "Whether explicit header mode was used for LoRa airtime calculation."
+
+[[files.metadata.columns]]
+name = "lora_crc_enabled"
+type = "string"
+required = false
+description = "Whether CRC was included in LoRa airtime calculation."
+
+[[files.metadata.columns]]
+name = "lora_low_data_rate_optimize"
+type = "string"
+required = false
+description = "Resolved low-data-rate optimization flag used for LoRa airtime calculation."
+
+[[files.metadata.columns]]
 name = "tags"
 type = "list[string]"
 required = false
@@ -81,6 +152,73 @@ name = "send_count"
 type = "integer"
 required = false
 description = "Sequential send count for simulation logs."
+
+[[files.send_log.columns]]
+name = "transmission_end_time"
+type = "float"
+required = false
+unit = "ms"
+description = "End timestamp of the simulated packet airtime."
+
+[[files.send_log.columns]]
+name = "transmission_time_ms"
+type = "float"
+required = false
+unit = "ms"
+description = "Packet airtime width used for this send."
+
+[[files.carrier_sense_log.columns]]
+name = "time"
+type = "float"
+required = true
+unit = "ms"
+description = "Scheduled send timestamp where carrier sense was evaluated."
+
+[[files.carrier_sense_log.columns]]
+name = "oscillator_id"
+type = "string"
+required = true
+description = "Oscillator or device id."
+
+[[files.carrier_sense_log.columns]]
+name = "action"
+type = "string"
+required = true
+description = "send_clear when transmission occurred, skip_busy when carrier sense suppressed the send."
+
+[[files.carrier_sense_log.columns]]
+name = "carrier_sense_start"
+type = "float"
+required = false
+unit = "ms"
+description = "Start of the carrier-sense window."
+
+[[files.carrier_sense_log.columns]]
+name = "carrier_sense_end"
+type = "float"
+required = false
+unit = "ms"
+description = "End of the carrier-sense window."
+
+[[files.carrier_sense_log.columns]]
+name = "blocking_oscillator_id"
+type = "string"
+required = false
+description = "Device whose transmission made the channel busy."
+
+[[files.carrier_sense_log.columns]]
+name = "blocking_transmission_start"
+type = "float"
+required = false
+unit = "ms"
+description = "Start time of the blocking transmission."
+
+[[files.carrier_sense_log.columns]]
+name = "blocking_transmission_end"
+type = "float"
+required = false
+unit = "ms"
+description = "End time of the blocking transmission."
 
 [[files.calculated_cycle_data.columns]]
 name = "cycle_index"

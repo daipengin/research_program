@@ -1,11 +1,45 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import json
+import os
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, Optional
 
 
 YRangeMode = Literal["0_to_2pi", "minus_pi_to_pi"]
+
+
+def _plot_overrides() -> dict[str, dict[str, object]]:
+    raw_overrides = os.environ.get("RESEARCH_PROGRAM_PLOT_OVERRIDES")
+    if not raw_overrides:
+        return {}
+    try:
+        loaded = json.loads(raw_overrides)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(loaded, dict):
+        return {}
+    return {
+        str(config_name): overrides
+        for config_name, overrides in loaded.items()
+        if isinstance(overrides, dict)
+    }
+
+
+def _apply_plot_overrides(config: object, config_name: str):
+    overrides = _plot_overrides().get(config_name)
+    if not overrides:
+        return config
+    dataclass_fields = getattr(config, "__dataclass_fields__", {})
+    clean_overrides = {
+        field_name: value
+        for field_name, value in overrides.items()
+        if field_name in dataclass_fields
+    }
+    if not clean_overrides:
+        return config
+    return replace(config, **clean_overrides)
 
 
 @dataclass(frozen=True)
@@ -49,10 +83,13 @@ class VisualizePhaseDiffConfig:
     # 散布図の点サイズ
     scatter_size: float = 12.0
 
-VISUALIZE_PHASE_DIFF_CONFIG = VisualizePhaseDiffConfig(
-    xlim_min = 0,
-    xlim_max = 1000,
-    hide_filled_cycles = False,
+VISUALIZE_PHASE_DIFF_CONFIG = _apply_plot_overrides(
+    VisualizePhaseDiffConfig(
+        xlim_min = 0,
+        xlim_max = 1000,
+        hide_filled_cycles = False,
+    ),
+    "VISUALIZE_PHASE_DIFF_CONFIG",
 )
 
 
@@ -189,7 +226,7 @@ class AggregatedPhaseGapErrorOverlayPlotConfig:
     show_legend: bool = True
 
     # 出力ファイル名
-    output_filename: str = "overlay_mean_phase_gap_error_ratio.png"
+    output_filename: str = "overlay_mean_phase_gap_error_ratio.pdf"
 
     # coupling_function ごとの基準色
     coupling_function_base_colors: dict[str, str] = field(
@@ -297,7 +334,7 @@ class ConvergenceAnalysisConfig:
     figure_height: float = 6.0
 
     save_dpi: int = 300
-    output_filename: str = "convergence_summary.png"
+    output_filename: str = "convergence_summary.pdf"
 
     # coupling_function ごとの色
     coupling_function_base_colors: dict[str, str] = field(
@@ -330,72 +367,83 @@ class ConvergenceAnalysisConfig:
 
 
 
-AGGREGATED_PHASE_GAP_ERROR_OVERLAY_PLOT_CONFIG = AggregatedPhaseGapErrorOverlayPlotConfig(
-    xlim_min = 50,
-    xlim_max = 200,
-    ylim_min = 0,
-    ylim_max = 1,
+AGGREGATED_PHASE_GAP_ERROR_OVERLAY_PLOT_CONFIG = _apply_plot_overrides(
+    AggregatedPhaseGapErrorOverlayPlotConfig(
+        xlim_min = 50,
+        xlim_max = 200,
+        ylim_min = 0,
+        ylim_max = 1,
 
-    figure_width = 10.0,
-    figure_height = 8.0,
+        figure_width = 10.0,
+        figure_height = 8.0,
 
-    output_filename = "nolta2026_fig.pdf",
-    #target_coupling_functions=["KURAMOTO", "LINEAR","NewSIN"],
-    target_coupling_functions=["KURAMOTO","LINEAR"],
-    coupling_strength_min=100,
-    coupling_strength_max=500,
-    coupling_function_strength_rules={
-        "KURAMOTO": CouplingStrengthFilterRule(
-            strength_min=200,
-            strength_max=300,
-            step=50,
-        ),
-        "LINEAR": CouplingStrengthFilterRule(
-            strength_min=30,
-            strength_max=50,
-            step=10,
-        ),
-        "NewSIN":CouplingStrengthFilterRule(
-            strength_min=70,
-            strength_max=90,
-            step=10,
-        )#70,80,90が同じくらい
-    },
-    show_convergence_marker = False,
-    convergence_window_cycles = 10,
-    convergence_threshold = 0.01,
+        output_filename = "nolta2026_fig.pdf",
+        #target_coupling_functions=["KURAMOTO", "LINEAR","NewSIN"],
+        target_coupling_functions=["KURAMOTO","LINEAR"],
+        coupling_strength_min=100,
+        coupling_strength_max=500,
+        coupling_function_strength_rules={
+            "KURAMOTO": CouplingStrengthFilterRule(
+                strength_min=200,
+                strength_max=300,
+                step=50,
+            ),
+            "LINEAR": CouplingStrengthFilterRule(
+                strength_min=30,
+                strength_max=50,
+                step=10,
+            ),
+            "NewSIN":CouplingStrengthFilterRule(
+                strength_min=70,
+                strength_max=90,
+                step=10,
+            )#70,80,90が同じくらい
+        },
+        show_convergence_marker = False,
+        convergence_window_cycles = 10,
+        convergence_threshold = 0.01,
 
-    show_strength_label=True,
-    strength_label_position="middle",
+        show_strength_label=True,
+        strength_label_position="middle",
     
 
 
-    # フォントサイズ
-    font_size_label = 30,
-    font_size_title = 16,
-    font_size_legend = 20,
-    font_size_ticks = 30,
-    strength_label_font_size=20,
-
+        # フォントサイズ
+        font_size_label = 30,
+        font_size_title = 16,
+        font_size_legend = 20,
+        font_size_ticks = 30,
+        strength_label_font_size=20,
+    ),
+    "AGGREGATED_PHASE_GAP_ERROR_OVERLAY_PLOT_CONFIG",
 )
 
-AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG = AggregatedPhaseGapErrorPlotConfig()
+AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG = _apply_plot_overrides(
+    AggregatedPhaseGapErrorPlotConfig(),
+    "AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG",
+)
 
-PHASE_GAP_ERROR_PLOT_CONFIG = PhaseGapErrorPlotConfig()
+PHASE_GAP_ERROR_PLOT_CONFIG = _apply_plot_overrides(
+    PhaseGapErrorPlotConfig(),
+    "PHASE_GAP_ERROR_PLOT_CONFIG",
+)
 
 
 
 
 
-CONVERGENCE_ANALYSIS_CONFIG = ConvergenceAnalysisConfig(
-    target_coupling_functions=["KURAMOTO", "LINEAR","NewSIN"],
-    coupling_function_strength_rules={
-        "KURAMOTO": CouplingStrengthFilterRule(strength_min=200, strength_max=300, step=50),
-        "LINEAR": CouplingStrengthFilterRule(strength_min=30, strength_max=50, step=10),
-        "NewSIN": CouplingStrengthFilterRule(strength_min=70, strength_max=90, step=10),
-    },
-    convergence_window_cycles=10,
-    convergence_threshold=0.01,
+CONVERGENCE_ANALYSIS_CONFIG = _apply_plot_overrides(
+    ConvergenceAnalysisConfig(
+        target_coupling_functions=["KURAMOTO", "LINEAR","NewSIN"],
+        coupling_function_strength_rules={
+            "KURAMOTO": CouplingStrengthFilterRule(strength_min=200, strength_max=300, step=50),
+            "LINEAR": CouplingStrengthFilterRule(strength_min=30, strength_max=50, step=10),
+            "NewSIN": CouplingStrengthFilterRule(strength_min=70, strength_max=90, step=10),
+        },
+        convergence_window_cycles=10,
+        convergence_threshold=0.01,
+    ),
+    "CONVERGENCE_ANALYSIS_CONFIG",
 )
 
 @dataclass(frozen=True)
@@ -444,13 +492,16 @@ class PerPlotConfig:
     scatter_size: float = 10.0
 
 
-PER_PLOT_CONFIG = PerPlotConfig(
-    xlim_min = 0,
-    xlim_max=500,
-    per_ylim_max= 100,
-    per_ylim_min= 0,
-    per_window_width_cycles = 10,
-    per_change_width_cycles = 1,
+PER_PLOT_CONFIG = _apply_plot_overrides(
+    PerPlotConfig(
+        xlim_min = 0,
+        xlim_max=500,
+        per_ylim_max= 100,
+        per_ylim_min= 0,
+        per_window_width_cycles = 10,
+        per_change_width_cycles = 1,
+    ),
+    "PER_PLOT_CONFIG",
 )
 
 
@@ -532,15 +583,18 @@ class ComparePerByDevicesIntervalConfig:
     max_interval_white_mix: float = 0.6
 
 
-COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG = ComparePerByDevicesIntervalConfig(
-    #target_coupling_functions=("KURAMOTO", "LINEAR","NONE"),
-    target_coupling_functions=("KURAMOTO","NONE"),
-    #use_existing_csv_if_available = False,
-    use_existing_csv_if_available= True,
+COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG = _apply_plot_overrides(
+    ComparePerByDevicesIntervalConfig(
+        #target_coupling_functions=("KURAMOTO", "LINEAR","NONE"),
+        target_coupling_functions=("KURAMOTO","NONE"),
+        #use_existing_csv_if_available = False,
+        use_existing_csv_if_available= True,
 
     
-    target_cycle = 90,
-    per_window_width_cycles = 10,
+        target_cycle = 90,
+        per_window_width_cycles = 10,
+    ),
+    "COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG",
 )
 
 
@@ -610,46 +664,49 @@ class PerAlignedPlotConfig:
 
 
 
-PER_ALIGNED_PLOT_CONFIG = PerAlignedPlotConfig(
-    results_dir=Path("data/runs"),
-    graphs_dir=Path("outputs/figures/per_aligned_graphs"),
+PER_ALIGNED_PLOT_CONFIG = _apply_plot_overrides(
+    PerAlignedPlotConfig(
+        results_dir=Path("data/runs"),
+        graphs_dir=Path("outputs/figures/per_aligned_graphs"),
 
-    #per_window_width_cycles=10,
+        #per_window_width_cycles=10,
 
-    # 指定が無いrunだけ fallback で使う
-    base_cycle_mode="first_available",
-    fixed_base_cycle=100,
+        # 指定が無いrunだけ fallback で使う
+        base_cycle_mode="first_available",
+        fixed_base_cycle=100,
 
     
-    # run_idごとに個別指定
-    #per_aligned_base_cycle_by_run_id={
-    #    "kura_20_10_30mac_300K_15sec_01": 211,
-    #    "LIN_20_10_30mac_50K_15sec": 306,
-    #},
+        # run_idごとに個別指定
+        #per_aligned_base_cycle_by_run_id={
+        #    "kura_20_10_30mac_300K_15sec_01": 211,
+        #    "LIN_20_10_30mac_50K_15sec": 306,
+        #},
 
-    legend_name_by_run_id={
-        "kura_50mac_50K_15sec_same": "Kuramoto(K=0.005)",
-        "kura_50mac_350K_15sec_same": "Kuramoto(K=0.035)",
-        "lin_50mac_50K_15sec_same": "FrogChorus(K=0.005)",
-    },
+        legend_name_by_run_id={
+            "kura_50mac_50K_15sec_same": "Kuramoto(K=0.005)",
+            "kura_50mac_350K_15sec_same": "Kuramoto(K=0.035)",
+            "lin_50mac_50K_15sec_same": "FrogChorus(K=0.005)",
+        },
 
-    save_individual_plots=True,
-    save_overlay_plot=True,
+        save_individual_plots=True,
+        save_overlay_plot=True,
 
-    xlim_min=0,
-    xlim_max=500,
-    ylim_min=0,
-    ylim_max=100,
+        xlim_min=0,
+        xlim_max=500,
+        ylim_min=0,
+        ylim_max=100,
 
-    show_title=False,
-    figure_width=12.0,
-    figure_height=6.0,
-    save_dpi=300,
-    line_width=1.5,
+        show_title=False,
+        figure_width=12.0,
+        figure_height=6.0,
+        save_dpi=300,
+        line_width=1.5,
 
-    # フォント
-    font_size_label = 30,
-    font_size_title = 16,
-    font_size_legend = 15,
-    font_size_ticks = 30,
+        # フォント
+        font_size_label = 30,
+        font_size_title = 16,
+        font_size_legend = 15,
+        font_size_ticks = 30,
+    ),
+    "PER_ALIGNED_PLOT_CONFIG",
 )

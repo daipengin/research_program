@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -535,7 +536,7 @@ def save_overlay_plot(
 
 
 def main() -> None:
-    aggregated_stats_dir = CFG.aggregated_stats_dir
+    aggregated_stats_dir = Path(os.environ.get("RESEARCH_PROGRAM_AGGREGATED_DIR", CFG.aggregated_stats_dir))
     graphs_dir = CFG.graphs_dir
     graphs_dir.mkdir(parents=True, exist_ok=True)
 

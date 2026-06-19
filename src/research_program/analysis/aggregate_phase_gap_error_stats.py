@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import List
 
@@ -8,8 +9,8 @@ import pandas as pd
 from research_program.analysis.calculate_phase_gap_error import ensure_phase_gap_error_for_run
 
 
-RESULTS_DIR = Path("data/runs")
-OUTPUT_DIR = Path("data/aggregated")
+RESULTS_DIR = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", "data/runs"))
+OUTPUT_DIR = Path(os.environ.get("RESEARCH_PROGRAM_AGGREGATED_DIR", "data/aggregated"))
 
 
 def read_metadata(metadata_path: Path) -> tuple[str, int]:

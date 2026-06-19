@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -92,9 +93,10 @@ def find_convergence_point(
     return None, None
 
 
-def collect_convergence_data() -> pd.DataFrame:
+def collect_convergence_data(aggregated_stats_dir: Path | None = None) -> pd.DataFrame:
     rows = []
-    csv_files = sorted(CFG.aggregated_stats_dir.glob("*.csv"))
+    source_dir = aggregated_stats_dir or CFG.aggregated_stats_dir
+    csv_files = sorted(source_dir.glob("*.csv"))
 
     for csv_path in csv_files:
         coupling_function, coupling_strength = parse_filename(csv_path)
@@ -247,12 +249,13 @@ def save_convergence_plot(df: pd.DataFrame, output_dir: Path) -> Path:
 
 
 def main() -> None:
-    if not CFG.aggregated_stats_dir.exists():
-        raise FileNotFoundError(f"aggregated_stats folder not found: {CFG.aggregated_stats_dir}")
+    aggregated_stats_dir = Path(os.environ.get("RESEARCH_PROGRAM_AGGREGATED_DIR", CFG.aggregated_stats_dir))
+    if not aggregated_stats_dir.exists():
+        raise FileNotFoundError(f"aggregated_stats folder not found: {aggregated_stats_dir}")
 
     CFG.graphs_dir.mkdir(parents=True, exist_ok=True)
 
-    df = collect_convergence_data()
+    df = collect_convergence_data(aggregated_stats_dir)
     csv_path = save_convergence_csv(df, CFG.graphs_dir)
     print(f"saved: {csv_path}")
 

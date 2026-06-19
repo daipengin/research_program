@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 import re
 from typing import Any, Iterable
@@ -13,6 +14,9 @@ from research_program.io.data_contract import (
     load_data_contract,
     missing_required_files,
 )
+
+
+DEFAULT_RUN_INDEX_PATH = Path("outputs/reports/run_index.json")
 
 
 @dataclass(frozen=True)
@@ -109,6 +113,104 @@ def read_metadata(metadata_path: Path, contract: RunDataContract | None = None) 
     return metadata
 
 
+def _run_signature(run_dir: Path, contract: RunDataContract) -> dict[str, Any]:
+    metadata_path = run_dir / "metadata.csv"
+    metadata_stat = metadata_path.stat() if metadata_path.exists() else None
+    run_stat = run_dir.stat()
+    return {
+        "path": str(run_dir.resolve()),
+        "contract_version": contract.version,
+        "required_files": list(contract.required_files),
+        "dir_mtime_ns": run_stat.st_mtime_ns,
+        "metadata_mtime_ns": metadata_stat.st_mtime_ns if metadata_stat is not None else None,
+        "metadata_size": metadata_stat.st_size if metadata_stat is not None else None,
+    }
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except (TypeError, ValueError):
+            pass
+    if pd.isna(value) if not isinstance(value, (list, tuple, dict)) else False:
+        return None
+    return value
+
+
+def _load_run_index(index_path: Path) -> dict[str, Any]:
+    if not index_path.exists():
+        return {"entries": {}}
+    try:
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"entries": {}}
+    if not isinstance(data, dict) or not isinstance(data.get("entries"), dict):
+        return {"entries": {}}
+    return data
+
+
+def _run_roots_signature(runs_dirs: Iterable[str | Path]) -> list[dict[str, Any]]:
+    signatures: list[dict[str, Any]] = []
+    for root_value in runs_dirs:
+        source_root = resolve_project_path(root_value)
+        if not source_root.exists():
+            signatures.append(
+                {
+                    "path": str(source_root.resolve()),
+                    "exists": False,
+                    "mtime_ns": None,
+                }
+            )
+            continue
+        root_stat = source_root.stat()
+        signatures.append(
+            {
+                "path": str(source_root.resolve()),
+                "exists": True,
+                "mtime_ns": root_stat.st_mtime_ns,
+            }
+        )
+    return signatures
+
+
+def _records_from_index_entries(entries: dict[str, Any]) -> list[RunRecord]:
+    records: list[RunRecord] = []
+    for record_key, entry in sorted(entries.items()):
+        if not isinstance(entry, dict):
+            continue
+        signature = entry.get("signature") if isinstance(entry.get("signature"), dict) else {}
+        path_text = signature.get("path") or record_key
+        source_root_text = entry.get("source_root") or str(Path(path_text).parent)
+        metadata = dict(entry.get("metadata") or {})
+        records.append(
+            RunRecord(
+                run_id=str(entry.get("run_id") or metadata.get("run_id") or Path(path_text).name),
+                path=Path(path_text),
+                source_root=Path(source_root_text),
+                metadata=metadata,
+                missing_files=tuple(str(item) for item in entry.get("missing_files", [])),
+                available_files=tuple(str(item) for item in entry.get("available_files", [])),
+            )
+        )
+    return records
+
+
+def _save_run_index(index_path: Path, entries: dict[str, Any], roots_signature: list[dict[str, Any]]) -> None:
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"version": 1, "roots": roots_signature, "entries": entries}
+    tmp_path = index_path.with_suffix(f"{index_path.suffix}.tmp")
+    tmp_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    tmp_path.replace(index_path)
+
+
 def discover_runs(
     runs_dirs: Iterable[str | Path],
     contract: RunDataContract | None = None,
@@ -139,6 +241,77 @@ def discover_runs(
                 )
             )
 
+    return records
+
+
+def discover_runs_with_index(
+    runs_dirs: Iterable[str | Path],
+    contract: RunDataContract | None = None,
+    index_path: str | Path = DEFAULT_RUN_INDEX_PATH,
+    force_rescan: bool = False,
+) -> list[RunRecord]:
+    if contract is None:
+        contract = load_data_contract()
+
+    runs_dirs = tuple(runs_dirs)
+    resolved_index_path = resolve_project_path(index_path)
+    index_data = _load_run_index(resolved_index_path)
+    cached_entries = index_data.get("entries", {})
+    roots_signature = _run_roots_signature(runs_dirs)
+
+    if (
+        not force_rescan
+        and cached_entries
+        and index_data.get("roots") == roots_signature
+    ):
+        return _records_from_index_entries(cached_entries)
+
+    records: list[RunRecord] = []
+    next_entries: dict[str, Any] = {}
+
+    for root_value in runs_dirs:
+        source_root = resolve_project_path(root_value)
+        if not source_root.exists():
+            continue
+
+        for run_dir in sorted(path for path in source_root.iterdir() if path.is_dir()):
+            record_key = str(run_dir.resolve())
+            signature = _run_signature(run_dir, contract)
+            cached = cached_entries.get(record_key)
+
+            if isinstance(cached, dict) and cached.get("signature") == signature:
+                metadata = dict(cached.get("metadata") or {})
+                run_id = str(cached.get("run_id") or metadata.get("run_id") or run_dir.name)
+                missing_files = tuple(str(item) for item in cached.get("missing_files", []))
+                available_files = tuple(str(item) for item in cached.get("available_files", []))
+            else:
+                metadata_path = run_dir / "metadata.csv"
+                metadata = read_metadata(metadata_path, contract) if metadata_path.exists() else {}
+                run_id = str(metadata.get("run_id") or run_dir.name)
+                missing_files = tuple(missing_required_files(run_dir, contract))
+                available_files = tuple(path.name for path in sorted(run_dir.iterdir()) if path.is_file())
+
+            next_entries[record_key] = {
+                "signature": signature,
+                "run_id": run_id,
+                "source_root": str(source_root.resolve()),
+                "metadata": _json_safe(metadata),
+                "missing_files": list(missing_files),
+                "available_files": list(available_files),
+            }
+            records.append(
+                RunRecord(
+                    run_id=run_id,
+                    path=run_dir,
+                    source_root=source_root,
+                    metadata=metadata,
+                    missing_files=missing_files,
+                    available_files=available_files,
+                )
+            )
+
+    if next_entries != cached_entries or index_data.get("roots") != roots_signature:
+        _save_run_index(resolved_index_path, next_entries, roots_signature)
     return records
 
 

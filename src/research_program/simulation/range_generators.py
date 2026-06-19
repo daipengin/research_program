@@ -49,3 +49,38 @@ def generate_ranges_same_duration_from_unique_starts(
 
 
     return ranges
+
+
+def generate_even_interval_start_times(
+    k: int,
+    interval: int,
+    start_time: int = 0,
+) -> List[int]:
+    if k < 1:
+        raise ValueError("k must be at least 1")
+    if interval < 0:
+        raise ValueError("interval must be non-negative")
+    return [start_time + i * interval for i in range(k)]
+
+
+def generate_ranges_from_start_times(
+    start_times: List[int],
+    duration: int,
+    start_device_id: int = 0,
+) -> RangeType:
+    if duration < 1:
+        raise ValueError("duration must be at least 1")
+
+    ranges: RangeType = []
+    for i, start_time in enumerate(start_times):
+        end_time = int(start_time) + duration
+        device_id = start_device_id + i
+        ranges.append((int(start_time), end_time, device_id))
+    return ranges
+
+
+def parse_start_times_text(text: str) -> List[int]:
+    normalized = text.replace("\n", ",").replace(";", ",")
+    if not normalized.strip():
+        return []
+    return [int(part.strip()) for part in normalized.split(",") if part.strip()]

@@ -20,4 +20,4 @@ tag_field = "tags"
 [figures]
 extensions = [".png", ".jpg", ".jpeg", ".webp", ".pdf", ".svg"]
 raster_download_formats = ["png", "jpeg", "webp"]
-generated_graph_formats = ["png", "pdf", "svg"]
+generated_graph_formats = ["pdf", "png", "svg"]

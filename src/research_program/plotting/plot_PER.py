@@ -16,7 +16,7 @@ from research_program.analysis.calculate_cycle_data import ensure_cycle_data_for
 
 CFG = PER_PLOT_CONFIG
 WINDOW_WIDTH_CYCLES = CFG.per_window_width_cycles
-RESULTS_DIR = CFG.results_dir
+RESULTS_DIR = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", CFG.results_dir))
 OUTPUT_DIR = CFG.graphs_dir
 REFERENCE_GAP_RATIO = 1.3
 
@@ -177,7 +177,7 @@ def save_per_plot(
     window_width_cycles: int,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{run_dir.name}.png"
+    output_path = output_dir / f"{run_dir.name}.pdf"
 
     plt.figure(figsize=(CFG.figure_width, CFG.figure_height))
     plt.scatter(x, per_percent, s=CFG.scatter_size)
@@ -215,7 +215,7 @@ def save_per_change_plot(
     change_width_cycles: int,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{run_dir.name}_change.png"
+    output_path = output_dir / f"{run_dir.name}_change.pdf"
 
     plt.figure(figsize=(CFG.figure_width, CFG.figure_height))
     plt.scatter(x_change, per_change, s=CFG.scatter_size)

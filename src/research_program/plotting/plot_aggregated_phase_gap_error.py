@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -70,7 +71,7 @@ def save_plot(
     df: pd.DataFrame,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{csv_path.stem}.png"
+    output_path = output_dir / f"{csv_path.stem}.pdf"
 
     plt.figure(figsize=(CFG.figure_width, CFG.figure_height))
 
@@ -169,7 +170,7 @@ def process_file(csv_path: Path, output_dir: Path) -> Optional[str]:
 
 
 def main() -> None:
-    aggregated_stats_dir = CFG.aggregated_stats_dir
+    aggregated_stats_dir = Path(os.environ.get("RESEARCH_PROGRAM_AGGREGATED_DIR", CFG.aggregated_stats_dir))
     graphs_dir = CFG.graphs_dir
     graphs_dir.mkdir(parents=True, exist_ok=True)
 
