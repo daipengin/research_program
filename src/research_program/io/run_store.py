@@ -81,6 +81,8 @@ def _coerce_metadata_value(value: Any, dtype: str, separator: str | None) -> Any
         return float(value)
     if dtype == "list[string]":
         return parse_tags(value, separator or ";")
+    if dtype == "list[integer]":
+        return [int(item) for item in parse_tags(value, separator or ";")]
     return str(value)
 
 
@@ -333,6 +335,8 @@ def records_to_frame(records: Iterable[RunRecord]) -> pd.DataFrame:
         row.update(record.metadata)
         if isinstance(row.get("tags"), list):
             row["tags"] = ";".join(row["tags"])
+        if isinstance(row.get("selected_start_times"), list):
+            row["selected_start_times"] = ";".join(str(value) for value in row["selected_start_times"])
         rows.append(row)
 
     return pd.DataFrame(rows)

@@ -49,6 +49,8 @@ def build_run_configs(
             base_config,
             run_id=run_id,
             ranges=ranges,
+            random_seed=seed if base_config.start_timing_mode == "random" else None,
+            random_run_index=index if base_config.start_timing_mode == "random" else None,
         )
         configs.append(config)
 

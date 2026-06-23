@@ -184,12 +184,13 @@ def run_simulation_job_file(job_path: str | Path) -> int:
     total_runs = sum(request.num_runs for request in requests)
     results: list[dict[str, Any]] = []
 
+    started_at = payload.get("started_at") or _now_iso()
     payload.update(
         {
             "status": "running",
             "pid": os.getpid(),
-            "started_at": payload.get("started_at") or _now_iso(),
-            "updated_at": _now_iso(),
+            "started_at": started_at,
+            "updated_at": started_at,
             "total_conditions": len(requests),
             "total_runs": total_runs,
             "completed_runs": 0,
@@ -230,24 +231,26 @@ def run_simulation_job_file(job_path: str | Path) -> int:
 
             run_simulation_request(request, progress_callback=on_progress)
 
+        finished_at = _now_iso()
         payload.update(
             {
                 "status": "completed",
                 "completed_runs": completed_runs,
                 "current_run_id": "",
-                "updated_at": _now_iso(),
-                "finished_at": _now_iso(),
+                "updated_at": finished_at,
+                "finished_at": finished_at,
                 "results": results,
             }
         )
         _atomic_write_json(path, payload)
         return 0
     except Exception as exc:
+        finished_at = _now_iso()
         payload.update(
             {
                 "status": "failed",
-                "updated_at": _now_iso(),
-                "finished_at": _now_iso(),
+                "updated_at": finished_at,
+                "finished_at": finished_at,
                 "error": f"{exc}\n{traceback.format_exc()}",
                 "results": results,
             }

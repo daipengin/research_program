@@ -21,6 +21,7 @@ class OscillatorEventType(Enum):
     AWAKE_Event = 2
     ADD_Oscillator_Event = 3
     REMOVE_Oscillator_Event = 4
+    RECEIVE_Event = 5
 
 
 @dataclass
@@ -33,6 +34,12 @@ class RunConfig:
     cycle_time: int
     listening_rate: int
     tags: List[str] = field(default_factory=list)
+    start_timing_mode: str = "random"
+    random_sampling_method: str = ""
+    random_seed: Optional[int] = None
+    random_run_index: Optional[int] = None
+    start_step: Optional[int] = None
+    start_step_count: Optional[int] = None
     simulation_mode: str = "standard"
     carrier_sense_duration_ms: float = 0.0
     transmission_time_ms: float = 0.0
@@ -175,7 +182,20 @@ class BufferedCsvEventLogger:
             f"{start}:{end}:{device_id}"
             for start, end, device_id in config.ranges
         )
+        selected_start_times_as_text = ";".join(str(start) for start, _, _ in config.ranges)
         tags_as_text = ";".join(config.tags)
+        is_random_start = config.start_timing_mode == "random"
+        random_start_min = 0 if is_random_start else ""
+        random_start_max = (
+            int(config.start_step) * int(config.start_step_count)
+            if is_random_start and config.start_step is not None and config.start_step_count is not None
+            else ""
+        )
+        random_start_candidate_count = (
+            int(config.start_step_count) + 1
+            if is_random_start and config.start_step_count is not None
+            else ""
+        )
 
         with self.metadata_log_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -187,6 +207,16 @@ class BufferedCsvEventLogger:
                     "coupling_function",
                     "cycle_time",
                     "listening_rate",
+                    "start_timing_mode",
+                    "random_sampling_method",
+                    "random_seed",
+                    "random_run_index",
+                    "random_start_min",
+                    "random_start_max",
+                    "start_step",
+                    "start_step_count",
+                    "random_start_candidate_count",
+                    "selected_start_times",
                     "simulation_mode",
                     "carrier_sense_duration_ms",
                     "transmission_time_ms",
@@ -210,6 +240,16 @@ class BufferedCsvEventLogger:
                     config.coupling_function.value,
                     config.cycle_time,
                     config.listening_rate,
+                    config.start_timing_mode,
+                    config.random_sampling_method if is_random_start else "",
+                    "" if config.random_seed is None else config.random_seed,
+                    "" if config.random_run_index is None else config.random_run_index,
+                    random_start_min,
+                    random_start_max,
+                    "" if config.start_step is None else config.start_step,
+                    "" if config.start_step_count is None else config.start_step_count,
+                    random_start_candidate_count,
+                    selected_start_times_as_text,
                     config.simulation_mode,
                     effective_carrier_sense_duration_ms(config),
                     config.transmission_time_ms,
@@ -415,6 +455,9 @@ class EventScheduler:
             next_type, next_time = oscillator.on_add(current_time)
             self.schedule_event(next_time, source_id, session_id, next_type)
 
+        elif event_type == OscillatorEventType.RECEIVE_Event:
+            self._broadcast_receive(sender_id=source_id, current_time=current_time)
+
         elif event_type == OscillatorEventType.SEND_Event:
             if not oscillator.active:
                 return
@@ -476,7 +519,15 @@ class EventScheduler:
                         blocking_transmission_end=None,
                     )
 
-            self._broadcast_receive(sender_id=source_id, current_time=current_time)
+            if transmission_end <= float(current_time):
+                self._broadcast_receive(sender_id=source_id, current_time=current_time)
+            else:
+                self.schedule_event(
+                    time_=transmission_end,
+                    source_id=source_id,
+                    session_id=session_id,
+                    event_type=OscillatorEventType.RECEIVE_Event,
+                )
             self.schedule_event(next_time, source_id, session_id, next_type)
 
         elif event_type == OscillatorEventType.ASLEEP_Event:

@@ -13,6 +13,11 @@ import matplotlib.colors as mcolors
 
 from research_program.config.plot_config import COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG
 from research_program.analysis.calculate_cycle_data import ensure_cycle_data_for_run
+from research_program.io.send_log import (
+    add_detection_time_column,
+    detection_time_values,
+    normalize_send_time_columns,
+)
 
 
 CFG = COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG
@@ -83,12 +88,7 @@ def normalize_oscillator_id_column(send_df: pd.DataFrame, tags: list[str]) -> pd
 
 
 def normalize_time_column(send_df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
-    send_df = send_df.copy()
-
-    if "sec" in tags:
-        send_df["time"] = send_df["time"] * 1000.0
-
-    return send_df
+    return add_detection_time_column(normalize_send_time_columns(send_df, tags))
 
 
 def assign_cycles_from_reference_windows(
@@ -96,10 +96,10 @@ def assign_cycles_from_reference_windows(
     cycle_starts: np.ndarray,
 ) -> pd.DataFrame:
     df = send_df.copy()
-    times = df["time"].to_numpy(dtype=np.float64)
+    times = detection_time_values(df)
 
     cycle_index = np.searchsorted(cycle_starts, times, side="right")
-    valid = cycle_index > 0
+    valid = np.isfinite(times) & (cycle_index > 0)
 
     df = df.loc[valid].copy()
     df["cycle_index"] = cycle_index[valid].astype(np.int64)

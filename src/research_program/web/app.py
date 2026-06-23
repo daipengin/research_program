@@ -31,6 +31,7 @@ from research_program.config.paths import resolve_project_path
 from research_program.io.cleanup import (
     CleanupResult,
     cleanup_experiment_outputs,
+    cleanup_run_directories,
 )
 from research_program.io.data_contract import RunDataContract, load_data_contract
 from research_program.io.figures import (
@@ -61,6 +62,7 @@ from research_program.config.plot_config import (
     AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG,
     COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG,
     CONVERGENCE_ANALYSIS_CONFIG,
+    PER_BY_COUPLING_STRENGTH_PLOT_CONFIG,
     PER_ALIGNED_PLOT_CONFIG,
     PER_PLOT_CONFIG,
     PHASE_GAP_ERROR_PLOT_CONFIG,
@@ -89,6 +91,7 @@ from research_program.simulation.range_generators import (
 
 DEFAULT_WEB_CONFIG = Path("configs/web/default.toml")
 LAST_SIMULATION_REQUEST_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_simulation_request.json"
+LAST_GRAPH_PLOT_OVERRIDES_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_graph_plot_overrides.json"
 COUPLING_FUNCTION_OPTIONS = ["KURAMOTO", "LINEAR", "NewSIN", "NONE"]
 
 SWEEP_PARAMETER_SPECS: dict[str, dict[str, Any]] = {
@@ -224,6 +227,16 @@ RUN_COLUMN_LABELS = {
     "cycle_time": "周期時間(Cycle time)",
     "listening_rate": "待機率(Listening rate)",
     "device_count": "デバイス数(Device count)",
+    "start_timing_mode": "開始タイミング(Start timing)",
+    "random_sampling_method": "ランダム抽出方式(Random sampling)",
+    "random_seed": "ランダムseed(Random seed)",
+    "random_run_index": "ランダムrun番号(Random run index)",
+    "random_start_min": "候補開始最小[ms](Candidate min [ms])",
+    "random_start_max": "候補開始最大[ms](Candidate max [ms])",
+    "start_step": "候補刻み[ms](Candidate step [ms])",
+    "start_step_count": "候補ステップ数(Candidate step count)",
+    "random_start_candidate_count": "候補数(Candidates)",
+    "selected_start_times": "選択開始時刻[ms](Selected starts [ms])",
     "simulation_mode": "シミュレーションモード(Simulation mode)",
     "carrier_sense_duration_ms": "キャリアセンス時間[ms](Carrier-sense [ms])",
     "transmission_time_ms": "送信時間[ms](Transmission time [ms])",
@@ -312,6 +325,10 @@ GRAPH_CREATION_COMMANDS = {
         "label": "台数・送信間隔別PER比較(PER comparison by devices and interval)",
         "output": "outputs/figures/compare_per_graphs/*.pdf",
     },
+    "compare-per-by-coupling-strength": {
+        "label": "PER vs K by coupling function",
+        "output": "outputs/figures/per_by_coupling_strength_graphs/*.pdf",
+    },
     "plot-aggregated-phase-gap-error": {
         "label": "集約位相ギャップ誤差グラフ(Aggregated phase-gap error graphs)",
         "output": "outputs/figures/aggregated_stats_graphs/*.pdf",
@@ -326,12 +343,39 @@ GRAPH_CREATION_COMMANDS = {
     },
 }
 
+GRAPH_CREATION_PAGE_PREFIX = "graph_create::"
+
+GRAPH_PREPROCESS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
+    "plot-phase-diff": ("calculate-cycle-data",),
+    "plot-phase-gap-error": ("calculate-phase-gap-error",),
+    "plot-per": ("calculate-cycle-data",),
+    "plot-per-aligned": ("calculate-cycle-data",),
+    "compare-per": ("calculate-cycle-data",),
+    "compare-per-by-coupling-strength": ("calculate-cycle-data",),
+    "plot-aggregated-phase-gap-error": (
+        "calculate-phase-gap-error",
+        "aggregate-phase-gap-error",
+    ),
+    "plot-aggregated-phase-gap-error-overlay": (
+        "calculate-phase-gap-error",
+        "aggregate-phase-gap-error",
+    ),
+    "plot-convergence-summary": (
+        "calculate-phase-gap-error",
+        "aggregate-phase-gap-error",
+    ),
+}
+
 PLOT_CONFIG_BY_GRAPH_COMMAND: dict[str, tuple[str, Any]] = {
     "plot-phase-diff": ("VISUALIZE_PHASE_DIFF_CONFIG", VISUALIZE_PHASE_DIFF_CONFIG),
     "plot-phase-gap-error": ("PHASE_GAP_ERROR_PLOT_CONFIG", PHASE_GAP_ERROR_PLOT_CONFIG),
     "plot-per": ("PER_PLOT_CONFIG", PER_PLOT_CONFIG),
     "plot-per-aligned": ("PER_ALIGNED_PLOT_CONFIG", PER_ALIGNED_PLOT_CONFIG),
     "compare-per": ("COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG", COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG),
+    "compare-per-by-coupling-strength": (
+        "PER_BY_COUPLING_STRENGTH_PLOT_CONFIG",
+        PER_BY_COUPLING_STRENGTH_PLOT_CONFIG,
+    ),
     "plot-aggregated-phase-gap-error": (
         "AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG",
         AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG,
@@ -358,6 +402,7 @@ GRAPH_TYPE_BY_OUTPUT_DIR = {
     "per_graphs": GRAPH_CREATION_COMMANDS["plot-per"]["label"],
     "per_aligned_graphs": GRAPH_CREATION_COMMANDS["plot-per-aligned"]["label"],
     "compare_per_graphs": GRAPH_CREATION_COMMANDS["compare-per"]["label"],
+    "per_by_coupling_strength_graphs": GRAPH_CREATION_COMMANDS["compare-per-by-coupling-strength"]["label"],
     "aggregated_stats_graphs": GRAPH_CREATION_COMMANDS["plot-aggregated-phase-gap-error"]["label"],
     "aggregated_stats_overlay_graphs": GRAPH_CREATION_COMMANDS["plot-aggregated-phase-gap-error-overlay"]["label"],
     "convergence_graphs": GRAPH_CREATION_COMMANDS["plot-convergence-summary"]["label"],
@@ -375,12 +420,14 @@ FIGURE_SCOPE_BY_OUTPUT_DIR = {
     "per_graphs": "single",
     "per_aligned_graphs": "single",
     "compare_per_graphs": "multiple",
+    "per_by_coupling_strength_graphs": "multiple",
     "aggregated_stats_graphs": "multiple",
     "aggregated_stats_overlay_graphs": "multiple",
     "convergence_graphs": "multiple",
 }
 
 GRAPH_DESCRIPTION_BY_OUTPUT_DIR = {
+    "per_by_coupling_strength_graphs": "Compares PER at a target time by coupling strength K, separated by coupling function",
     "phase_diff_graphs": "1つのrunの送信時刻から位相差を表示(Uses one run to show phase differences)",
     "phase_gap_error_graphs": "1つのrunの位相ギャップ誤差を表示(Uses one run to show phase-gap error)",
     "per_graphs": "1つのrunのPERを表示(Uses one run to show PER)",
@@ -408,6 +455,9 @@ GRAPH_TABLE_COLUMN_LABELS = {
 COMMAND_RESULT_COLUMN_LABELS = {
     "command": "コマンド(Command)",
     "status": "状態(Status)",
+    "started_at": "開始時刻(Started)",
+    "finished_at": "終了時刻(Finished)",
+    "duration": "所要時間(Duration)",
     "message": "メッセージ(Message)",
 }
 
@@ -557,6 +607,16 @@ def _render_runs_tab(records: list[RunRecord], web_config: dict[str, Any]) -> No
             "cycle_time",
             "listening_rate",
             "device_count",
+            "start_timing_mode",
+            "random_sampling_method",
+            "random_seed",
+            "random_run_index",
+            "random_start_min",
+            "random_start_max",
+            "start_step",
+            "start_step_count",
+            "random_start_candidate_count",
+            "selected_start_times",
             "simulation_mode",
             "carrier_sense_duration_ms",
             "transmission_time_ms",
@@ -612,18 +672,34 @@ def _render_runs_tab(records: list[RunRecord], web_config: dict[str, Any]) -> No
         plt.close(fig)
 
 
-def _manual_tags_text(tags: tuple[str, ...]) -> str:
+def _manual_tags_tuple(tags: tuple[str, ...]) -> tuple[str, ...]:
+    sweep_prefixes = tuple(f"{field_name}_" for field_name in SWEEP_PARAMETER_SPECS) + (
+        "coupling_function_",
+    )
+    auto_tag_values = {
+        "sweep",
+        "start_random",
+        "start_fixed",
+        "mode_standard",
+        "mode_per_measurement",
+    }
     manual_tags = [
-        tag
+        tag.strip()
         for tag in tags
-        if not tag.strip().endswith("dai") or not tag.strip()[:-3].isdigit()
+        if tag.strip()
     ]
     manual_tags = [
         tag
         for tag in manual_tags
-        if tag not in {"start_random", "start_fixed", "mode_standard", "mode_per_measurement"}
+        if not (tag.endswith("dai") and tag[:-3].isdigit())
+        and tag not in auto_tag_values
+        and not tag.startswith(sweep_prefixes)
     ]
-    return ";".join(manual_tags)
+    return tuple(manual_tags)
+
+
+def _manual_tags_text(tags: tuple[str, ...]) -> str:
+    return ";".join(_manual_tags_tuple(tags))
 
 
 def _display_project_path(path: Path) -> str:
@@ -726,6 +802,62 @@ def _save_last_simulation_request(request: SimulationRequest) -> None:
     st.session_state["last_simulation_request_defaults"] = request
 
 
+def _normalize_plot_overrides(data: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(data, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    for config_name, values in data.items():
+        if not isinstance(values, dict):
+            continue
+        normalized[str(config_name)] = {
+            str(field_name): value
+            for field_name, value in values.items()
+            if value is None or isinstance(value, (str, int, float, bool))
+        }
+    return normalized
+
+
+def _load_last_graph_plot_overrides() -> dict[str, dict[str, Any]]:
+    cached_overrides = st.session_state.get("last_graph_plot_overrides")
+    if isinstance(cached_overrides, dict):
+        return _normalize_plot_overrides(cached_overrides)
+
+    if not LAST_GRAPH_PLOT_OVERRIDES_PATH.exists():
+        return {}
+
+    try:
+        data = json.loads(LAST_GRAPH_PLOT_OVERRIDES_PATH.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+    overrides = _normalize_plot_overrides(data)
+    st.session_state["last_graph_plot_overrides"] = overrides
+    return overrides
+
+
+def _save_last_graph_plot_overrides(overrides: dict[str, dict[str, Any]]) -> None:
+    normalized = _normalize_plot_overrides(overrides)
+    merged = {**_load_last_graph_plot_overrides(), **normalized}
+    LAST_GRAPH_PLOT_OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LAST_GRAPH_PLOT_OVERRIDES_PATH.write_text(
+        json.dumps(merged, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    st.session_state["last_graph_plot_overrides"] = merged
+
+
+def _clear_last_graph_plot_overrides() -> None:
+    try:
+        LAST_GRAPH_PLOT_OVERRIDES_PATH.unlink(missing_ok=True)
+    except OSError:
+        pass
+    st.session_state.pop("last_graph_plot_overrides", None)
+    for key in list(st.session_state):
+        key_text = str(key)
+        if key_text == "graph_plot_use_web_parameters" or key_text.startswith("plot_override_"):
+            st.session_state.pop(key, None)
+
+
 def _start_simulation_job(requests: list[SimulationRequest]) -> tuple[str, Path]:
     job_id, job_path = create_simulation_job(requests)
     log_path = job_path.with_suffix(".log")
@@ -747,15 +879,72 @@ def _start_simulation_job(requests: list[SimulationRequest]) -> tuple[str, Path]
 
 
 def _parse_job_datetime(value: Any) -> datetime | None:
-    if not value:
+    if value is None:
         return None
     try:
-        parsed = datetime.fromisoformat(str(value))
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    value_text = str(value).strip()
+    if not value_text or value_text.lower() in {"nan", "nat", "none"}:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value_text)
     except ValueError:
         return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _job_time_text(value: Any) -> str:
+    parsed = _parse_job_datetime(value)
+    if parsed is None:
+        return "-"
+    return parsed.astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+
+
+def _job_duration_seconds(status: dict[str, Any]) -> float | None:
+    started_at = _parse_job_datetime(status.get("started_at"))
+    if started_at is None:
+        return None
+    finished_at = _parse_job_datetime(status.get("finished_at"))
+    if finished_at is None:
+        finished_at = datetime.now(timezone.utc)
+    return (finished_at - started_at).total_seconds()
+
+
+def _job_duration_text(status: dict[str, Any]) -> str:
+    duration_seconds = _job_duration_seconds(status)
+    if duration_seconds is None:
+        return "-"
+    return _format_duration(duration_seconds)
+
+
+def _job_timing_caption(status: dict[str, Any]) -> str:
+    return (
+        f"Status: {status.get('status', '')} / "
+        f"PID: {status.get('pid', '')} / "
+        f"Started: {_job_time_text(status.get('started_at'))} / "
+        f"Finished: {_job_time_text(status.get('finished_at'))} / "
+        f"Duration: {_job_duration_text(status)} / "
+        f"Updated: {_job_time_text(status.get('updated_at'))}"
+    )
+
+
+def _job_timing_frame(status: dict[str, Any]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "Created": _job_time_text(status.get("created_at")),
+                "Started": _job_time_text(status.get("started_at")),
+                "Finished": _job_time_text(status.get("finished_at")),
+                "Duration": _job_duration_text(status),
+                "Updated": _job_time_text(status.get("updated_at")),
+            }
+        ]
+    )
 
 
 def _job_progress_text(status: dict[str, Any]) -> str:
@@ -796,8 +985,11 @@ def _simulation_job_summary_frame(statuses: list[dict[str, Any]]) -> pd.DataFram
                 "状態(Status)": status.get("status", ""),
                 "進捗(Progress)": f"{status.get('completed_runs', 0)}/{status.get('total_runs', 0)}",
                 "条件数(Conditions)": status.get("total_conditions", 0),
-                "更新時刻(Updated)": status.get("updated_at", ""),
-                "完了時刻(Finished)": status.get("finished_at", ""),
+                "作成時刻(Created)": _job_time_text(status.get("created_at")),
+                "開始時刻(Started)": _job_time_text(status.get("started_at")),
+                "終了時刻(Finished)": _job_time_text(status.get("finished_at")),
+                "所要時間(Duration)": _job_duration_text(status),
+                "更新時刻(Updated)": _job_time_text(status.get("updated_at")),
             }
         )
     return pd.DataFrame(rows)
@@ -827,7 +1019,7 @@ def _render_simulation_job_monitor() -> None:
         with st.container(border=True):
             st.write(f"**{job_id}**")
             st.progress(_progress_ratio(completed, total), text=_job_progress_text(status))
-            st.caption(f"状態(Status): {status.get('status', '')} / PID: {status.get('pid', '')} / 更新(Updated): {status.get('updated_at', '')}")
+            st.caption(_job_timing_caption(status))
             results = status.get("results") or []
             if results:
                 st.dataframe(pd.DataFrame(results[-20:]), width="stretch", hide_index=True)
@@ -844,6 +1036,7 @@ def _render_simulation_job_monitor() -> None:
                 None,
             )
             if selected_status is not None:
+                st.dataframe(_job_timing_frame(selected_status), width="stretch", hide_index=True)
                 if selected_status.get("error"):
                     st.error(str(selected_status["error"]).splitlines()[0])
                 results = selected_status.get("results") or []
@@ -930,8 +1123,11 @@ def _graph_creation_job_summary_frame(statuses: list[dict[str, Any]]) -> pd.Data
                 "進捗(Progress)": f"{status.get('completed_commands', 0)}/{status.get('total_commands', 0)}",
                 "対象run(Target runs)": status.get("selected_run_count", 0),
                 "作成/更新画像(Generated/updated figures)": status.get("generated_or_updated_figures", 0),
-                "更新時刻(Updated)": status.get("updated_at", ""),
-                "完了時刻(Finished)": status.get("finished_at", ""),
+                "作成時刻(Created)": _job_time_text(status.get("created_at")),
+                "開始時刻(Started)": _job_time_text(status.get("started_at")),
+                "終了時刻(Finished)": _job_time_text(status.get("finished_at")),
+                "所要時間(Duration)": _job_duration_text(status),
+                "更新時刻(Updated)": _job_time_text(status.get("updated_at")),
             }
         )
     return pd.DataFrame(rows)
@@ -961,7 +1157,7 @@ def _render_graph_creation_job_monitor() -> None:
         with st.container(border=True):
             st.write(f"**{job_id}**")
             st.progress(_progress_ratio(completed, total), text=_graph_job_progress_text(status))
-            st.caption(f"状態(Status): {status.get('status', '')} / PID: {status.get('pid', '')} / 更新(Updated): {status.get('updated_at', '')}")
+            st.caption(_job_timing_caption(status))
             results = status.get("results") or []
             if results:
                 st.dataframe(_command_result_frame(results), width="stretch", hide_index=True)
@@ -979,6 +1175,7 @@ def _render_graph_creation_job_monitor() -> None:
                 None,
             )
             if selected_status is not None:
+                st.dataframe(_job_timing_frame(selected_status), width="stretch", hide_index=True)
                 if selected_status.get("error"):
                     st.error(str(selected_status["error"]).splitlines()[0])
                 results = selected_status.get("results") or []
@@ -1007,7 +1204,11 @@ def _simulation_review_frame(request: SimulationRequest) -> pd.DataFrame:
         start_times = fixed_start_times_for_request(request)
         start_timing_detail = ",".join(str(value) for value in start_times)
     else:
-        start_timing_detail = f"0..{request.start_step_count * request.start_step}, step={request.start_step}"
+        start_timing_detail = (
+            f"0..{request.start_step_count * request.start_step} ms, "
+            f"step={request.start_step} ms, candidates={request.start_step_count + 1}, "
+            f"sample={request.device_count} unique values"
+        )
 
     rows = [
         ("run数(Runs)", request.num_runs),
@@ -1029,6 +1230,7 @@ def _simulation_review_frame(request: SimulationRequest) -> pd.DataFrame:
         ("実際に使うワーカー数(Effective max workers)", effective_workers),
     ]
     if request.start_timing_mode == "random":
+        rows.insert(11, ("ランダム抽出方式(Random sampling)", "一様・重複なし(Uniform without replacement)"))
         rows.insert(11, ("開始時刻ステップ数(Start step count)", request.start_step_count))
         rows.insert(11, ("開始時刻ステップ[ms](Start step [ms])", request.start_step))
     if request.simulation_mode == "per_measurement":
@@ -1537,6 +1739,7 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
             return
 
         st.session_state["pending_simulation_requests"] = pending_requests
+        st.session_state["pending_simulation_base_request"] = pending_request
         st.session_state.pop("pending_simulation_request", None)
         st.session_state.pop("last_simulation_results", None)
 
@@ -1564,6 +1767,7 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
 
         if cancel_confirmed:
             st.session_state.pop("pending_simulation_requests", None)
+            st.session_state.pop("pending_simulation_base_request", None)
             st.session_state.pop("pending_simulation_request", None)
             st.session_state.pop("last_simulation_results", None)
             st.rerun()
@@ -1576,9 +1780,15 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
                 return
             st.session_state["last_started_simulation_job_id"] = job_id
             st.session_state.pop("pending_simulation_requests", None)
+            base_request = st.session_state.pop("pending_simulation_base_request", None)
             st.session_state.pop("pending_simulation_request", None)
             _bump_cache_token("runs")
-            _save_last_simulation_request(pending_requests[-1])
+            if not isinstance(base_request, SimulationRequest):
+                base_request = replace(
+                    pending_requests[-1],
+                    tags=_manual_tags_tuple(pending_requests[-1].tags),
+                )
+            _save_last_simulation_request(base_request)
             st.success(
                 f"シミュレーションジョブを開始しました(Started simulation job): {job_id}"
             )
@@ -1735,6 +1945,10 @@ def _estimated_figure_count(command_name: str, records: list[RunRecord]) -> tupl
         if COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG.show_combined_method_plot and has_combined_target:
             count += 1
         return count, "結合関数ごとの図 + 条件に合えば手法比較1枚(per coupling function plus optional combined plot)"
+    if command_name == "compare-per-by-coupling-strength":
+        target_functions = set(PER_BY_COUPLING_STRENGTH_PLOT_CONFIG.target_coupling_functions)
+        count = len(coupling_functions) if not target_functions else len(coupling_functions.intersection(target_functions))
+        return count, "1 figure per coupling function"
     if command_name == "plot-aggregated-phase-gap-error":
         allowed_pairs = {
             pair
@@ -1771,6 +1985,17 @@ def _estimated_figure_frame(commands: list[str], records: list[RunRecord]) -> pd
             }
         )
     return pd.DataFrame(rows)
+
+
+def _plot_config_value(
+    config: Any,
+    field_name: str,
+    saved_values: dict[str, Any] | None = None,
+    default: Any = None,
+) -> Any:
+    if saved_values is not None and field_name in saved_values:
+        return saved_values[field_name]
+    return getattr(config, field_name, default)
 
 
 def _nullable_float_plot_input(label: str, current_value: float | int | None, key: str) -> float | None:
@@ -1835,6 +2060,7 @@ def _add_range_plot_inputs(
     max_field: str,
     min_label: str,
     max_label: str,
+    saved_values: dict[str, Any] | None = None,
 ) -> None:
     if not hasattr(config, min_field) or not hasattr(config, max_field):
         return
@@ -1843,18 +2069,23 @@ def _add_range_plot_inputs(
     with col_min:
         values[min_field] = _nullable_float_plot_input(
             min_label,
-            getattr(config, min_field),
+            _plot_config_value(config, min_field, saved_values),
             f"{prefix}_{min_field}",
         )
     with col_max:
         values[max_field] = _nullable_float_plot_input(
             max_label,
-            getattr(config, max_field),
+            _plot_config_value(config, max_field, saved_values),
             f"{prefix}_{max_field}",
         )
 
 
-def _add_common_plot_size_inputs(values: dict[str, Any], config: Any, prefix: str) -> None:
+def _add_common_plot_size_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
     if not all(hasattr(config, field_name) for field_name in ["figure_width", "figure_height", "save_dpi"]):
         return
     st.markdown("**画像サイズ(Image size)**")
@@ -1862,7 +2093,7 @@ def _add_common_plot_size_inputs(values: dict[str, Any], config: Any, prefix: st
     with col_width:
         values["figure_width"] = _float_plot_input(
             "幅[inch](Width [inch])",
-            getattr(config, "figure_width"),
+            _plot_config_value(config, "figure_width", saved_values),
             f"{prefix}_figure_width",
             min_value=1.0,
             step=0.5,
@@ -1870,7 +2101,7 @@ def _add_common_plot_size_inputs(values: dict[str, Any], config: Any, prefix: st
     with col_height:
         values["figure_height"] = _float_plot_input(
             "高さ[inch](Height [inch])",
-            getattr(config, "figure_height"),
+            _plot_config_value(config, "figure_height", saved_values),
             f"{prefix}_figure_height",
             min_value=1.0,
             step=0.5,
@@ -1878,13 +2109,78 @@ def _add_common_plot_size_inputs(values: dict[str, Any], config: Any, prefix: st
     with col_dpi:
         values["save_dpi"] = _int_plot_input(
             "保存DPI(Save DPI)",
-            getattr(config, "save_dpi"),
+            _plot_config_value(config, "save_dpi", saved_values),
             f"{prefix}_save_dpi",
             min_value=1,
         )
 
 
-def _add_standard_xy_plot_inputs(values: dict[str, Any], config: Any, prefix: str) -> None:
+def _add_common_plot_text_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    display_fields = [field_name for field_name in ["show_title", "show_legend"] if hasattr(config, field_name)]
+    font_fields = [
+        field_name
+        for field_name in ["font_size_label", "font_size_title", "font_size_legend", "font_size_ticks"]
+        if hasattr(config, field_name)
+    ]
+    if not display_fields and not font_fields:
+        return
+
+    st.markdown("**表示とフォント(Display and fonts)**")
+    if display_fields:
+        display_columns = st.columns(len(display_fields))
+        for column, field_name in zip(display_columns, display_fields):
+            label = {
+                "show_title": "タイトル表示(Show title)",
+                "show_legend": "凡例表示(Show legend)",
+            }.get(field_name, field_name)
+            with column:
+                values[field_name] = bool(
+                    st.checkbox(
+                        label,
+                        value=bool(_plot_config_value(config, field_name, saved_values, False)),
+                        key=f"{prefix}_{field_name}",
+                    )
+                )
+
+    if font_fields:
+        font_columns = st.columns(min(4, len(font_fields)))
+        labels = {
+            "font_size_label": "軸ラベル(Label font)",
+            "font_size_title": "タイトル(Title font)",
+            "font_size_legend": "凡例(Legend font)",
+            "font_size_ticks": "目盛(Tick font)",
+        }
+        for index, field_name in enumerate(font_fields):
+            with font_columns[index % len(font_columns)]:
+                values[field_name] = _int_plot_input(
+                    labels.get(field_name, field_name),
+                    _plot_config_value(config, field_name, saved_values),
+                    f"{prefix}_{field_name}",
+                    min_value=1,
+                )
+
+
+def _add_common_plot_presentation_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    _add_common_plot_size_inputs(values, config, prefix, saved_values)
+    _add_common_plot_text_inputs(values, config, prefix, saved_values)
+
+
+def _add_standard_xy_plot_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
     _add_range_plot_inputs(
         values,
         config,
@@ -1894,6 +2190,7 @@ def _add_standard_xy_plot_inputs(values: dict[str, Any], config: Any, prefix: st
         max_field="xlim_max",
         min_label="x軸下限(X min)",
         max_label="x軸上限(X max)",
+        saved_values=saved_values,
     )
     _add_range_plot_inputs(
         values,
@@ -1904,10 +2201,16 @@ def _add_standard_xy_plot_inputs(values: dict[str, Any], config: Any, prefix: st
         max_field="ylim_max",
         min_label="y軸下限(Y min)",
         max_label="y軸上限(Y max)",
+        saved_values=saved_values,
     )
 
 
-def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) -> dict[str, Any]:
+def _collect_plot_parameter_values(
+    command_name: str,
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     values: dict[str, Any] = {}
 
     if command_name == "plot-phase-diff":
@@ -1920,9 +2223,10 @@ def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) 
             max_field="xlim_max",
             min_label="x軸下限(X min)",
             max_label="x軸上限(X max)",
+            saved_values=saved_values,
         )
         y_mode_options = ["minus_pi_to_pi", "0_to_2pi"]
-        current_mode = getattr(config, "y_range_mode", "minus_pi_to_pi")
+        current_mode = _plot_config_value(config, "y_range_mode", saved_values, "minus_pi_to_pi")
         values["y_range_mode"] = st.selectbox(
             "y軸範囲モード(Y-axis range mode)",
             options=y_mode_options,
@@ -1933,7 +2237,7 @@ def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) 
             }.get(value, value),
             key=f"{prefix}_y_range_mode",
         )
-        _add_common_plot_size_inputs(values, config, prefix)
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
 
     if command_name == "plot-per":
@@ -1946,6 +2250,7 @@ def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) 
             max_field="xlim_max",
             min_label="x軸下限(X min)",
             max_label="x軸上限(X max)",
+            saved_values=saved_values,
         )
         _add_range_plot_inputs(
             values,
@@ -1956,6 +2261,7 @@ def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) 
             max_field="per_ylim_max",
             min_label="PER y軸下限(PER Y min)",
             max_label="PER y軸上限(PER Y max)",
+            saved_values=saved_values,
         )
         _add_range_plot_inputs(
             values,
@@ -1966,39 +2272,40 @@ def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) 
             max_field="per_change_ylim_max",
             min_label="PER変化量 y軸下限(PER-change Y min)",
             max_label="PER変化量 y軸上限(PER-change Y max)",
+            saved_values=saved_values,
         )
         st.markdown("**PER計算(PER calculation)**")
         col_window, col_change = st.columns(2)
         with col_window:
             values["per_window_width_cycles"] = _int_plot_input(
                 "PER計算窓幅[cycle](PER window width [cycles])",
-                getattr(config, "per_window_width_cycles"),
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
                 f"{prefix}_per_window_width_cycles",
                 min_value=1,
             )
         with col_change:
             values["per_change_width_cycles"] = _int_plot_input(
                 "PER変化量幅[cycle](PER-change width [cycles])",
-                getattr(config, "per_change_width_cycles"),
+                _plot_config_value(config, "per_change_width_cycles", saved_values),
                 f"{prefix}_per_change_width_cycles",
                 min_value=1,
             )
-        _add_common_plot_size_inputs(values, config, prefix)
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
 
     if command_name == "plot-per-aligned":
-        _add_standard_xy_plot_inputs(values, config, prefix)
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
         st.markdown("**PER整列(PER alignment)**")
         col_window, col_mode, col_cycle = st.columns(3)
         with col_window:
             values["per_window_width_cycles"] = _int_plot_input(
                 "PER計算窓幅[cycle](PER window width [cycles])",
-                getattr(config, "per_window_width_cycles"),
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
                 f"{prefix}_per_window_width_cycles",
                 min_value=1,
             )
         base_mode_options = ["fixed", "best_per", "largest_improvement", "first_available"]
-        current_mode = getattr(config, "base_cycle_mode", "fixed")
+        current_mode = _plot_config_value(config, "base_cycle_mode", saved_values, "fixed")
         with col_mode:
             values["base_cycle_mode"] = st.selectbox(
                 "基準周期の決め方(Base-cycle mode)",
@@ -2016,61 +2323,84 @@ def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) 
             if values["base_cycle_mode"] == "fixed":
                 values["fixed_base_cycle"] = _int_plot_input(
                     "固定基準周期(Fixed base cycle)",
-                    getattr(config, "fixed_base_cycle"),
+                    _plot_config_value(config, "fixed_base_cycle", saved_values),
                     f"{prefix}_fixed_base_cycle",
                     min_value=0,
                 )
             elif values["base_cycle_mode"] == "largest_improvement":
                 values["per_change_width_cycles"] = _int_plot_input(
                     "改善判定幅[cycle](Improvement width [cycles])",
-                    getattr(config, "per_change_width_cycles"),
+                    _plot_config_value(config, "per_change_width_cycles", saved_values),
                     f"{prefix}_per_change_width_cycles",
                     min_value=1,
                 )
-        _add_common_plot_size_inputs(values, config, prefix)
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
 
     if command_name == "compare-per":
-        _add_standard_xy_plot_inputs(values, config, prefix)
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
         st.markdown("**PER比較(PER comparison)**")
         col_cycle, col_window = st.columns(2)
         with col_cycle:
             values["target_cycle"] = _int_plot_input(
                 "比較対象周期(Target cycle)",
-                getattr(config, "target_cycle"),
+                _plot_config_value(config, "target_cycle", saved_values),
                 f"{prefix}_target_cycle",
                 min_value=0,
             )
         with col_window:
             values["per_window_width_cycles"] = _int_plot_input(
                 "PER計算窓幅[cycle](PER window width [cycles])",
-                getattr(config, "per_window_width_cycles"),
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
                 f"{prefix}_per_window_width_cycles",
                 min_value=1,
             )
-        _add_common_plot_size_inputs(values, config, prefix)
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "compare-per-by-coupling-strength":
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+        st.markdown("**PER vs K**")
+        col_time, col_window = st.columns(2)
+        with col_time:
+            values["target_time_ms"] = _float_plot_input(
+                "PER timing [ms]",
+                _plot_config_value(config, "target_time_ms", saved_values),
+                f"{prefix}_target_time_ms",
+                min_value=0.0,
+                step=1000.0,
+            )
+        with col_window:
+            values["per_window_width_cycles"] = _int_plot_input(
+                "PER window width [cycles]",
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
+                f"{prefix}_per_window_width_cycles",
+                min_value=1,
+            )
+        st.caption("PER vs K uses the PER value at the cycle containing the specified timing.")
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
 
     if command_name == "plot-aggregated-phase-gap-error-overlay":
-        _add_standard_xy_plot_inputs(values, config, prefix)
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
         st.markdown("**収束表示(Convergence marker)**")
         col_window, col_threshold = st.columns(2)
         with col_window:
             values["convergence_window_cycles"] = _int_plot_input(
                 "収束判定窓幅[cycle](Convergence window [cycles])",
-                getattr(config, "convergence_window_cycles"),
+                _plot_config_value(config, "convergence_window_cycles", saved_values),
                 f"{prefix}_convergence_window_cycles",
                 min_value=1,
             )
         with col_threshold:
             values["convergence_threshold"] = _float_plot_input(
                 "収束しきい値(Convergence threshold)",
-                getattr(config, "convergence_threshold"),
+                _plot_config_value(config, "convergence_threshold", saved_values),
                 f"{prefix}_convergence_threshold",
                 min_value=0.0,
                 step=0.001,
             )
-        _add_common_plot_size_inputs(values, config, prefix)
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
 
     if command_name == "plot-convergence-summary":
@@ -2083,6 +2413,7 @@ def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) 
             max_field="xlim_max",
             min_label="x軸下限(X min)",
             max_label="x軸上限(X max)",
+            saved_values=saved_values,
         )
         _add_range_plot_inputs(
             values,
@@ -2093,6 +2424,7 @@ def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) 
             max_field="ylim_left_max",
             min_label="左y軸下限(Left Y min)",
             max_label="左y軸上限(Left Y max)",
+            saved_values=saved_values,
         )
         _add_range_plot_inputs(
             values,
@@ -2103,47 +2435,77 @@ def _collect_plot_parameter_values(command_name: str, config: Any, prefix: str) 
             max_field="ylim_right_max",
             min_label="右y軸下限(Right Y min)",
             max_label="右y軸上限(Right Y max)",
+            saved_values=saved_values,
         )
         st.markdown("**収束判定(Convergence detection)**")
         col_window, col_threshold = st.columns(2)
         with col_window:
             values["convergence_window_cycles"] = _int_plot_input(
                 "収束判定窓幅[cycle](Convergence window [cycles])",
-                getattr(config, "convergence_window_cycles"),
+                _plot_config_value(config, "convergence_window_cycles", saved_values),
                 f"{prefix}_convergence_window_cycles",
                 min_value=1,
             )
         with col_threshold:
             values["convergence_threshold"] = _float_plot_input(
                 "収束しきい値(Convergence threshold)",
-                getattr(config, "convergence_threshold"),
+                _plot_config_value(config, "convergence_threshold", saved_values),
                 f"{prefix}_convergence_threshold",
                 min_value=0.0,
                 step=0.001,
             )
-        _add_common_plot_size_inputs(values, config, prefix)
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
 
-    _add_standard_xy_plot_inputs(values, config, prefix)
-    _add_common_plot_size_inputs(values, config, prefix)
+    _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+    _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
     return values
 
 
 def _render_plot_parameter_controls(selected_graph_commands: list[str]) -> dict[str, dict[str, Any]]:
     st.subheader("グラフパラメーター(Graph parameters)")
+    saved_overrides = _load_last_graph_plot_overrides()
     if not selected_graph_commands:
         st.info("画像種類を選ぶと、変更できるグラフパラメーターが表示されます(Select graph types to edit plot parameters).")
+        if saved_overrides and st.button(
+            "保存済みグラフパラメーターをリセット(Reset saved graph parameters)",
+            key="reset_graph_plot_overrides_empty",
+        ):
+            _clear_last_graph_plot_overrides()
+            st.rerun()
         return {}
 
+    selected_config_names = [
+        config_pair[0]
+        for command_name in selected_graph_commands
+        if (config_pair := PLOT_CONFIG_BY_GRAPH_COMMAND.get(command_name)) is not None
+    ]
+    has_saved_for_selection = any(config_name in saved_overrides for config_name in selected_config_names)
     use_web_parameters = st.checkbox(
         "Web上の値でグラフ設定を上書き(Override graph settings from Web)",
-        value=False,
+        value=has_saved_for_selection,
+        key="graph_plot_use_web_parameters",
     )
+    if saved_overrides:
+        st.caption(
+            "最後に使ったグラフパラメーターを読み込めます。グラフ作成を開始すると、その時の値が次回用に保存されます"
+            "(Last used graph parameters can be reused and are saved when graph creation starts)."
+        )
+        if st.button(
+            "保存済みグラフパラメーターをリセット(Reset saved graph parameters)",
+            key="reset_graph_plot_overrides",
+        ):
+            _clear_last_graph_plot_overrides()
+            st.rerun()
+
     if not use_web_parameters:
-        st.caption("チェックを入れると、作成時だけ軸範囲などをWeb入力値で上書きします(Enable this to override plot settings only for this creation run).")
+        st.caption("チェックを入れると、軸範囲などをWeb入力値で上書きします(Enable this to override plot settings from Web values).")
         return {}
 
-    st.caption("各範囲で自動(Auto)を選ぶと、その軸はMatplotlibの自動範囲になります(Auto lets Matplotlib choose that axis range).")
+    st.caption(
+        "各範囲で自動(Auto)を選ぶと、その軸はMatplotlibの自動範囲になります。グラフ作成開始時にこの値を保存します"
+        "(Auto lets Matplotlib choose that axis range; values are saved when graph creation starts)."
+    )
     overrides: dict[str, dict[str, Any]] = {}
     for command_name in selected_graph_commands:
         config_pair = PLOT_CONFIG_BY_GRAPH_COMMAND.get(command_name)
@@ -2155,10 +2517,44 @@ def _render_plot_parameter_controls(selected_graph_commands: list[str]) -> dict[
                 command_name,
                 config,
                 f"plot_override_{command_name}",
+                saved_overrides.get(config_name),
             )
             if values:
                 overrides[config_name] = values
     return overrides
+
+
+def _render_single_plot_parameter_controls(command_name: str) -> dict[str, dict[str, Any]]:
+    config_pair = PLOT_CONFIG_BY_GRAPH_COMMAND.get(command_name)
+    if config_pair is None:
+        return {}
+
+    config_name, config = config_pair
+    saved_overrides = _load_last_graph_plot_overrides()
+    saved_values = saved_overrides.get(config_name)
+
+    st.subheader("グラフ設定(Graph settings)")
+    if saved_values is not None:
+        st.caption(
+            "最後に使った設定を初期値として読み込んでいます。グラフ作成を開始すると、この画面の値を次回用に保存します"
+            "(Last used settings are loaded and saved again when graph creation starts)."
+        )
+        if st.button(
+            "保存済みグラフ設定をリセット(Reset saved graph settings)",
+            key=f"reset_graph_plot_overrides_{command_name}",
+        ):
+            _clear_last_graph_plot_overrides()
+            st.rerun()
+    else:
+        st.caption("現在の設定値を使ってグラフを作成します(Current values are used for graph creation).")
+
+    values = _collect_plot_parameter_values(
+        command_name,
+        config,
+        f"plot_override_{command_name}",
+        saved_values,
+    )
+    return {config_name: values} if values else {}
 
 
 def _invalid_plot_override_ranges(plot_overrides: dict[str, dict[str, Any]]) -> list[str]:
@@ -2333,8 +2729,39 @@ def _style_graph_command_frame(df: pd.DataFrame) -> pd.io.formats.style.Styler:
     return display_df.style.apply(style_row, axis=1)
 
 
-def _command_result_frame(results: list[dict[str, str]]) -> pd.DataFrame:
-    return pd.DataFrame(results).rename(columns=COMMAND_RESULT_COLUMN_LABELS)
+def _duration_value_text(value: Any) -> str:
+    if value in (None, ""):
+        return "-"
+    try:
+        duration_seconds = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return _format_duration(duration_seconds)
+
+
+def _command_result_frame(results: list[dict[str, Any]]) -> pd.DataFrame:
+    frame = pd.DataFrame(results)
+    if frame.empty:
+        return frame
+
+    for column in ("started_at", "finished_at"):
+        if column in frame.columns:
+            frame[column] = frame[column].map(_job_time_text)
+    if "duration_seconds" in frame.columns:
+        frame["duration"] = frame["duration_seconds"].map(_duration_value_text)
+        frame = frame.drop(columns=["duration_seconds"])
+
+    preferred_columns = [
+        "command",
+        "status",
+        "started_at",
+        "finished_at",
+        "duration",
+        "message",
+    ]
+    ordered_columns = [column for column in preferred_columns if column in frame.columns]
+    ordered_columns.extend(column for column in frame.columns if column not in set(ordered_columns))
+    return frame[ordered_columns].rename(columns=COMMAND_RESULT_COLUMN_LABELS)
 
 
 def _format_duration(seconds: float | None) -> str:
@@ -2458,6 +2885,224 @@ def _run_simulation_request_with_progress(request: SimulationRequest) -> list[di
     return _run_simulation_requests_with_progress([request])
 
 
+def _render_graph_target_selection(
+    records: list[RunRecord],
+    web_config: dict[str, Any],
+    *,
+    key_prefix: str,
+) -> list[RunRecord]:
+    st.subheader("対象データ(Target data)")
+    filtered_target_records = _filter_controls(records, web_config, key_prefix=key_prefix)
+    target_selection_mode = st.radio(
+        "対象runの選び方(Target run selection)",
+        options=["filtered_all", "manual"],
+        horizontal=True,
+        key=f"{key_prefix}_selection_mode",
+        format_func=lambda value: {
+            "filtered_all": "フィルタ結果をすべて使う(Use all filtered runs)",
+            "manual": "個別に選択(Select individually)",
+        }[value],
+    )
+    if target_selection_mode == "filtered_all":
+        st.caption("個別runリストは表示せず、フィルタ後のrunをすべて対象にします(The individual run list is skipped for speed).")
+        return filtered_target_records
+
+    search_text = st.text_input(
+        "run検索(Run search)",
+        key=f"{key_prefix}_run_search",
+        help="run IDまたはパスの一部で候補を絞ります(Filter candidates by run ID or path).",
+    )
+    candidate_records = filtered_target_records
+    if search_text.strip():
+        keywords = [keyword.lower() for keyword in search_text.split() if keyword.strip()]
+        candidate_records = [
+            record
+            for record in filtered_target_records
+            if all(keyword in f"{record.run_id} {record.path}".lower() for keyword in keywords)
+        ]
+
+    max_candidates = st.number_input(
+        "選択候補の最大表示数(Max displayed candidates)",
+        min_value=1,
+        value=500,
+        key=f"{key_prefix}_max_candidates",
+    )
+    displayed_candidates = candidate_records[: int(max_candidates)]
+    record_by_key = {record.record_key: record for record in displayed_candidates}
+    selected_target_keys = st.multiselect(
+        "画像作成に使うrun(Target runs)",
+        options=list(record_by_key),
+        default=[],
+        key=f"{key_prefix}_target_runs",
+        format_func=lambda key: f"{record_by_key[key].run_id} ({_display_project_path(record_by_key[key].path)})",
+    )
+    st.caption(
+        f"候補: {len(candidate_records)} 件中 {len(displayed_candidates)} 件を表示中"
+        f"(Showing {len(displayed_candidates)} of {len(candidate_records)} candidates)."
+    )
+    return [record_by_key[key] for key in selected_target_keys if key in record_by_key]
+
+
+def _records_missing_required_file(records: list[RunRecord], filename: str) -> list[RunRecord]:
+    return [record for record in records if filename not in set(record.available_files)]
+
+
+def _aggregated_outputs_exist(web_config: dict[str, Any]) -> bool:
+    for directory in web_config.get("paths", {}).get("aggregated_dirs", []):
+        aggregated_dir = resolve_project_path(directory)
+        if aggregated_dir.exists() and any(aggregated_dir.glob("*.csv")):
+            return True
+    return False
+
+
+def _preprocess_plan_for_graph(
+    command_name: str,
+    selected_records: list[RunRecord],
+    all_records: list[RunRecord],
+    web_config: dict[str, Any],
+    *,
+    force_preprocess: bool,
+) -> tuple[list[str], pd.DataFrame]:
+    requirements = GRAPH_PREPROCESS_REQUIREMENTS.get(command_name, tuple())
+    selected_record_keys = {record.record_key for record in selected_records}
+    all_record_keys = {record.record_key for record in all_records}
+    uses_subset = selected_record_keys != all_record_keys
+
+    command_reasons: dict[str, str] = {}
+    if force_preprocess:
+        for command in requirements:
+            command_reasons[command] = "強制実行(Forced by option)"
+    else:
+        missing_cycle = _records_missing_required_file(selected_records, "calculated_Cycle_data.csv")
+        missing_phase_gap = _records_missing_required_file(selected_records, "phase_gap_error.csv")
+
+        if "calculate-cycle-data" in requirements and missing_cycle:
+            command_reasons["calculate-cycle-data"] = f"calculated_Cycle_data.csv が不足: {len(missing_cycle)} run"
+
+        if "calculate-phase-gap-error" in requirements and missing_phase_gap:
+            if missing_cycle:
+                command_reasons["calculate-cycle-data"] = f"calculated_Cycle_data.csv が不足: {len(missing_cycle)} run"
+            command_reasons["calculate-phase-gap-error"] = f"phase_gap_error.csv が不足: {len(missing_phase_gap)} run"
+
+        if "aggregate-phase-gap-error" in requirements:
+            aggregate_needed = uses_subset or not _aggregated_outputs_exist(web_config)
+            if aggregate_needed:
+                if missing_cycle:
+                    command_reasons["calculate-cycle-data"] = f"calculated_Cycle_data.csv が不足: {len(missing_cycle)} run"
+                if missing_phase_gap:
+                    command_reasons["calculate-phase-gap-error"] = f"phase_gap_error.csv が不足: {len(missing_phase_gap)} run"
+                command_reasons["aggregate-phase-gap-error"] = (
+                    "対象runが全体の一部です(Subset target)"
+                    if uses_subset
+                    else "集約CSVがありません(Aggregated CSV is missing)"
+                )
+
+    ordered_commands = [command for command in PREPROCESS_COMMANDS if command in command_reasons]
+    rows = [
+        {
+            "前処理(Preprocess)": PREPROCESS_COMMANDS[command]["label"],
+            "実行理由(Reason)": command_reasons[command],
+            "出力(Output)": PREPROCESS_COMMANDS[command]["output"],
+        }
+        for command in ordered_commands
+    ]
+    return ordered_commands, pd.DataFrame(rows)
+
+
+def _commands_for_graph_creation(
+    command_name: str,
+    preprocess_commands: list[str],
+) -> list[str]:
+    commands = [*preprocess_commands]
+    if command_name not in commands:
+        commands.append(command_name)
+    return commands
+
+
+def _render_graph_type_creation_page(command_name: str, web_config: dict[str, Any], records: list[RunRecord]) -> None:
+    command_info = GRAPH_CREATION_COMMANDS[command_name]
+    st.header(command_info["label"])
+    st.caption(_graph_command_description(command_info))
+    st.caption(f"出力(Output): {command_info['output']}")
+
+    plot_overrides = _render_single_plot_parameter_controls(command_name)
+    invalid_plot_ranges = _invalid_plot_override_ranges(plot_overrides)
+    for message in invalid_plot_ranges:
+        st.error(message)
+
+    selected_target_records = _render_graph_target_selection(
+        records,
+        web_config,
+        key_prefix=f"graph_creation_target_{command_name}",
+    )
+    col_target_count, col_total_count = st.columns(2)
+    col_target_count.metric("対象run数(Target runs)", len(selected_target_records))
+    col_total_count.metric("全run数(All runs)", len(records))
+
+    estimated_df = _estimated_figure_frame([command_name], selected_target_records)
+    estimated_total = int(estimated_df["予測枚数(Estimated figures)"].sum()) if "予測枚数(Estimated figures)" in estimated_df.columns and not estimated_df.empty else 0
+    if estimated_total == 0 and not estimated_df.empty:
+        estimated_total = int(estimated_df.iloc[:, 1].sum())
+    st.metric("作成・更新される画像の予測枚数(Estimated generated/updated figures)", estimated_total)
+    st.dataframe(estimated_df, width="stretch", hide_index=True)
+
+    force_preprocess = st.checkbox(
+        "前処理を強制実行する(Force preprocessing)",
+        value=False,
+        help="OFFの場合は、必要なデータが無い時だけ前処理を実行します(When off, preprocessing runs only if required data is missing).",
+        key=f"force_preprocess_{command_name}",
+    )
+    preprocess_commands, preprocess_df = _preprocess_plan_for_graph(
+        command_name,
+        selected_target_records,
+        records,
+        web_config,
+        force_preprocess=force_preprocess,
+    )
+    if preprocess_commands:
+        st.info("このグラフ作成では前処理を先に実行します(Preprocessing will run before graph creation).")
+        st.dataframe(preprocess_df, width="stretch", hide_index=True)
+    else:
+        st.caption("必要な前処理はありません(No preprocessing is required).")
+
+    if not st.button(
+        "この画像データを作成(Create this image data)",
+        disabled=not selected_target_records or bool(invalid_plot_ranges),
+        type="primary",
+        key=f"create_graph_{command_name}",
+    ):
+        return
+
+    commands_to_run = _commands_for_graph_creation(command_name, preprocess_commands)
+    base_env_overrides: dict[str, str] = {}
+    if plot_overrides:
+        base_env_overrides["RESEARCH_PROGRAM_PLOT_OVERRIDES"] = json.dumps(plot_overrides, ensure_ascii=False)
+    if "compare-per" in commands_to_run or "compare-per-by-coupling-strength" in commands_to_run:
+        base_env_overrides["RESEARCH_PROGRAM_FORCE_RECALCULATE"] = "1"
+
+    try:
+        job_id, job_path = _start_graph_creation_job(
+            commands_to_run=commands_to_run,
+            selected_graph_commands=[command_name],
+            selected_target_records=selected_target_records,
+            all_run_count=len(records),
+            env_overrides=base_env_overrides,
+            web_config=web_config,
+        )
+    except Exception as exc:
+        st.error(f"グラフ作成ジョブを開始できませんでした(Could not start graph job): {exc}")
+        return
+
+    if plot_overrides:
+        _save_last_graph_plot_overrides(plot_overrides)
+    _bump_cache_token("figures")
+    if preprocess_commands:
+        _bump_cache_token("runs")
+    st.success(f"グラフ作成ジョブを開始しました(Started graph creation job): {job_id}")
+    st.caption(f"ジョブ状態ファイル(Job status file): {_display_project_path(job_path)}")
+    st.rerun()
+
+
 def _render_graph_creation_tab(web_config: dict[str, Any], records: list[RunRecord]) -> None:
     _render_graph_creation_job_monitor()
 
@@ -2578,6 +3223,8 @@ def _render_graph_creation_tab(web_config: dict[str, Any], records: list[RunReco
             plot_overrides,
             ensure_ascii=False,
         )
+    if "compare-per" in commands_to_run or "compare-per-by-coupling-strength" in commands_to_run:
+        base_env_overrides["RESEARCH_PROGRAM_FORCE_RECALCULATE"] = "1"
 
     try:
         job_id, job_path = _start_graph_creation_job(
@@ -2592,6 +3239,8 @@ def _render_graph_creation_tab(web_config: dict[str, Any], records: list[RunReco
         st.error(f"グラフ作成ジョブを開始できませんでした(Could not start graph job): {exc}")
         return
 
+    if plot_overrides:
+        _save_last_graph_plot_overrides(plot_overrides)
     _bump_cache_token("figures")
     if run_preprocess:
         _bump_cache_token("runs")
@@ -2852,7 +3501,61 @@ def _cleanup_result_to_frame(result: CleanupResult) -> pd.DataFrame:
     )
 
 
-def _render_maintenance_tab() -> None:
+def _render_none_run_cleanup(records: list[RunRecord]) -> None:
+    st.subheader("NONE runのみ削除(Delete NONE runs only)")
+    st.warning(
+        "metadata.csv の coupling_function が NONE のrunディレクトリだけを削除します。"
+        "タグにNONEと書かれているだけのrunは削除しません"
+        "(Deletes only run directories whose metadata coupling_function is NONE)."
+    )
+
+    none_records = [
+        record
+        for record in records
+        if str(record.metadata.get("coupling_function") or "").strip().upper() == "NONE"
+    ]
+    st.metric("削除対象run数(Target NONE runs)", len(none_records))
+
+    preview_rows = [
+        {
+            "run ID(Run ID)": record.run_id,
+            "パス(Path)": _display_project_path(record.path),
+            "結合強度(Coupling strength)": record.metadata.get("coupling_strength"),
+            "タグ(Tags)": ";".join(record.tags),
+        }
+        for record in none_records
+    ]
+    st.dataframe(pd.DataFrame(preview_rows), width="stretch", hide_index=True)
+
+    confirmation = st.text_input(
+        "削除を有効にするには DELETE NONE と入力(Type DELETE NONE to enable deletion)",
+        key="delete_none_runs_confirmation",
+    )
+    delete_disabled = confirmation != "DELETE NONE" or not none_records
+    if st.button(
+        "NONE runだけを削除(Delete NONE runs only)",
+        disabled=delete_disabled,
+        type="primary",
+        key="delete_none_runs_button",
+    ):
+        with st.spinner("NONE runを削除しています(Deleting NONE runs)..."):
+            result = cleanup_run_directories(
+                (record.path for record in none_records),
+                dry_run=False,
+                calculate_size=False,
+            )
+        st.success(
+            f"NONE runを {result.deleted_count} 件削除しました"
+            f"(Deleted {result.deleted_count} NONE run(s))."
+        )
+        _bump_cache_token("runs")
+        st.cache_data.clear()
+        st.rerun()
+
+
+def _render_maintenance_tab(records: list[RunRecord]) -> None:
+    _render_none_run_cleanup(records)
+    st.divider()
     st.subheader("実験結果の削除(Delete Experiment Outputs)")
     st.warning("生成された実験結果を削除します。実機の元データはデフォルトでは選択されません(This deletes generated experiment outputs. Raw real-device data is not selected by default).")
 
@@ -2913,14 +3616,40 @@ def main() -> None:
         "maintenance": "管理(Maintenance)",
         "contract": "データ形式(Data format)",
     }
-    page = st.sidebar.radio(
+    primary_page_options = {
+        "runs": page_options["runs"],
+        "simulation": page_options["simulation"],
+        "graph_creation": page_options["graph_creation"],
+        "figures": page_options["figures"],
+        "maintenance": page_options["maintenance"],
+        "contract": page_options["contract"],
+    }
+
+    primary_page = st.sidebar.radio(
         "ページ(Page)",
-        options=list(page_options),
-        format_func=lambda key: page_options[key],
+        options=list(primary_page_options),
+        format_func=lambda key: primary_page_options[key],
     )
 
+    if primary_page == "graph_creation":
+        graph_page_options = {
+            "graph_jobs": "ジョブ確認(Job status)",
+            **{
+                f"{GRAPH_CREATION_PAGE_PREFIX}{command_name}": command_info["label"]
+                for command_name, command_info in GRAPH_CREATION_COMMANDS.items()
+            },
+        }
+        st.sidebar.markdown("### グラフ作成(Graph creation)")
+        page = st.sidebar.radio(
+            "種類(Type)",
+            options=list(graph_page_options),
+            format_func=lambda key: graph_page_options[key],
+        )
+    else:
+        page = primary_page
+
     records: list[RunRecord] | None = None
-    if page in {"runs", "graph_creation"}:
+    if page in {"runs", "maintenance"} or page.startswith(GRAPH_CREATION_PAGE_PREFIX):
         refresh_runs_clicked = st.sidebar.button("run一覧を更新(Refresh runs)")
         rebuild_runs_clicked = st.sidebar.button(
             "runインデックス再構築(Rebuild run index)",
@@ -2941,13 +3670,17 @@ def main() -> None:
         _render_runs_tab(records, web_config)
     elif page == "simulation":
         _render_simulation_tab(web_config)
-    elif page == "graph_creation":
+    elif page == "graph_jobs":
+        _render_graph_creation_job_monitor()
+    elif page.startswith(GRAPH_CREATION_PAGE_PREFIX):
         assert records is not None
-        _render_graph_creation_tab(web_config, records)
+        command_name = page.removeprefix(GRAPH_CREATION_PAGE_PREFIX)
+        _render_graph_type_creation_page(command_name, web_config, records)
     elif page == "figures":
         _render_figures_tab(web_config)
     elif page == "maintenance":
-        _render_maintenance_tab()
+        assert records is not None
+        _render_maintenance_tab(records)
     elif page == "contract":
         _render_contract_tab(contract)
 

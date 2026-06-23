@@ -51,6 +51,71 @@ unit = "percent"
 description = "Awake/listening percentage in one cycle."
 
 [[files.metadata.columns]]
+name = "start_timing_mode"
+type = "string"
+required = false
+description = "Start-timing mode: random or fixed."
+
+[[files.metadata.columns]]
+name = "random_sampling_method"
+type = "string"
+required = false
+description = "Random start sampling method. uniform_without_replacement samples unique candidates with equal probability."
+
+[[files.metadata.columns]]
+name = "random_seed"
+type = "integer"
+required = false
+description = "Seed used by the random start generator for this simulation request."
+
+[[files.metadata.columns]]
+name = "random_run_index"
+type = "integer"
+required = false
+description = "Zero-based run index in the random sequence generated from random_seed."
+
+[[files.metadata.columns]]
+name = "random_start_min"
+type = "integer"
+required = false
+unit = "ms"
+description = "Minimum candidate start time for random mode; inclusive."
+
+[[files.metadata.columns]]
+name = "random_start_max"
+type = "integer"
+required = false
+unit = "ms"
+description = "Maximum candidate start time for random mode; inclusive."
+
+[[files.metadata.columns]]
+name = "start_step"
+type = "integer"
+required = false
+unit = "ms"
+description = "Spacing between candidate start times in random mode."
+
+[[files.metadata.columns]]
+name = "start_step_count"
+type = "integer"
+required = false
+description = "Number of steps from random_start_min to random_start_max."
+
+[[files.metadata.columns]]
+name = "random_start_candidate_count"
+type = "integer"
+required = false
+description = "Number of candidate start times; start_step_count + 1."
+
+[[files.metadata.columns]]
+name = "selected_start_times"
+type = "list[integer]"
+required = false
+separator = ";"
+unit = "ms"
+description = "Actual start times selected for devices in this run."
+
+[[files.metadata.columns]]
 name = "simulation_mode"
 type = "string"
 required = false

@@ -102,6 +102,41 @@ def _copy_selected_runs_to_temp(run_paths: list[str], temp_runs_dir: Path) -> No
         shutil.copytree(run_path, temp_runs_dir / run_dir_name)
 
 
+def _path_is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _default_runs_dir(env_overrides: dict[str, str]) -> Path:
+    runs_dir = env_overrides.get("RESEARCH_PROGRAM_RUNS_DIR") or os.environ.get("RESEARCH_PROGRAM_RUNS_DIR") or "data/runs"
+    return resolve_project_path(runs_dir).resolve()
+
+
+def _single_selected_runs_root(selected_run_paths: list[str]) -> Path | None:
+    roots: set[Path] = set()
+    for run_path_text in selected_run_paths:
+        try:
+            roots.add(Path(run_path_text).resolve().parent)
+        except OSError:
+            return None
+    if len(roots) != 1:
+        return None
+    return next(iter(roots))
+
+
+def _needs_selected_run_workspace(
+    selected_run_paths: list[str],
+    all_run_count: int,
+    default_runs_dir: Path,
+) -> bool:
+    if len(selected_run_paths) != all_run_count:
+        return True
+    return any(not _path_is_relative_to(Path(path_text).resolve(), default_runs_dir) for path_text in selected_run_paths)
+
+
 def _figure_snapshot(figure_dirs: list[str], extensions: list[str]) -> dict[str, tuple[int, int]]:
     return {
         str(asset.path.resolve()): (asset.path.stat().st_mtime_ns, asset.size_bytes)
@@ -149,6 +184,7 @@ def create_graph_creation_job(
         "total_commands": len(commands),
         "completed_commands": 0,
         "current_command": "",
+        "current_command_started_at": None,
         "selected_run_count": len(selected_run_paths),
         "all_run_count": all_run_count,
         "env_overrides": env_overrides,
@@ -195,20 +231,29 @@ def run_graph_creation_job_file(job_path: str | Path) -> int:
     figure_dirs = [str(item) for item in payload.get("figure_dirs", [])]
     figure_extensions = [str(item) for item in payload.get("figure_extensions", [])]
     env_overrides = {str(key): str(value) for key, value in dict(payload.get("env_overrides") or {}).items()}
-    uses_subset = len(selected_run_paths) != all_run_count
+    default_runs_dir = _default_runs_dir(env_overrides)
+    selected_runs_root = _single_selected_runs_root(selected_run_paths)
+    uses_subset = _needs_selected_run_workspace(selected_run_paths, all_run_count, default_runs_dir)
+    can_use_selected_root_directly = (
+        selected_runs_root is not None
+        and len(selected_run_paths) == all_run_count
+        and selected_runs_root != default_runs_dir
+    )
     work_dir = path.with_suffix(".work")
     log_path = path.with_suffix(".log")
-    results: list[dict[str, str]] = []
+    results: list[dict[str, Any]] = []
     failed_count = 0
 
+    started_at = payload.get("started_at") or _now_iso()
     payload.update(
         {
             "status": "running",
             "pid": os.getpid(),
-            "started_at": payload.get("started_at") or _now_iso(),
-            "updated_at": _now_iso(),
+            "started_at": started_at,
+            "updated_at": started_at,
             "completed_commands": 0,
             "current_command": "",
+            "current_command_started_at": None,
             "error": "",
             "results": [],
         }
@@ -218,6 +263,10 @@ def run_graph_creation_job_file(job_path: str | Path) -> int:
 
     try:
         command_env = dict(env_overrides)
+        if can_use_selected_root_directly:
+            command_env["RESEARCH_PROGRAM_RUNS_DIR"] = str(selected_runs_root)
+            uses_subset = False
+
         if uses_subset:
             payload["current_command"] = "対象runを準備中(Preparing selected runs)"
             payload["updated_at"] = _now_iso()
@@ -237,15 +286,20 @@ def run_graph_creation_job_file(job_path: str | Path) -> int:
             )
 
         for index, command_name in enumerate(commands, start=1):
+            command_started_at = _now_iso()
+            command_started_time = time.perf_counter()
             payload.update(
                 {
                     "current_command": command_name,
+                    "current_command_started_at": command_started_at,
                     "completed_commands": index - 1,
-                    "updated_at": _now_iso(),
+                    "updated_at": command_started_at,
                 }
             )
             _atomic_write_json(path, payload)
             ok, output = _run_research_program_command(command_name, command_env)
+            command_finished_at = _now_iso()
+            duration_seconds = time.perf_counter() - command_started_time
             status_text = "完了(Done)" if ok else "失敗(Failed)"
             if not ok:
                 failed_count += 1
@@ -253,6 +307,9 @@ def run_graph_creation_job_file(job_path: str | Path) -> int:
             result = {
                 "command": command_name,
                 "status": status_text,
+                "started_at": command_started_at,
+                "finished_at": command_finished_at,
+                "duration_seconds": round(duration_seconds, 3),
                 "message": message,
             }
             results.append(result)
@@ -262,19 +319,22 @@ def run_graph_creation_job_file(job_path: str | Path) -> int:
                 {
                     "completed_commands": index,
                     "current_command": command_name,
-                    "updated_at": _now_iso(),
+                    "current_command_started_at": command_started_at,
+                    "updated_at": command_finished_at,
                     "results": results,
                 }
             )
             _atomic_write_json(path, payload)
 
         changed_count = _changed_figure_count(figure_dirs, figure_extensions, before_snapshot)
+        finished_at = _now_iso()
         payload.update(
             {
                 "status": "completed_with_errors" if failed_count else "completed",
                 "current_command": "",
-                "updated_at": _now_iso(),
-                "finished_at": _now_iso(),
+                "current_command_started_at": None,
+                "updated_at": finished_at,
+                "finished_at": finished_at,
                 "generated_or_updated_figures": changed_count,
                 "results": results,
             }
@@ -282,11 +342,13 @@ def run_graph_creation_job_file(job_path: str | Path) -> int:
         _atomic_write_json(path, payload)
         return 1 if failed_count else 0
     except Exception as exc:
+        finished_at = _now_iso()
         payload.update(
             {
                 "status": "failed",
-                "updated_at": _now_iso(),
-                "finished_at": _now_iso(),
+                "current_command_started_at": None,
+                "updated_at": finished_at,
+                "finished_at": finished_at,
                 "error": f"{exc}\n{traceback.format_exc()}",
                 "results": results,
             }

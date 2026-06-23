@@ -27,6 +27,7 @@ from research_program.simulation.scheduler import (
 
 
 DEVICE_COUNT_TAG_PATTERN = re.compile(r"\d+dai")
+DEVICE_COUNT_LABEL_TAG_PATTERN = re.compile(r"device_count_\d+")
 START_TIMING_TAGS = {"start_random", "start_fixed"}
 SIMULATION_MODE_TAGS = {"mode_standard", "mode_per_measurement"}
 StartTimingMode = Literal["random", "fixed"]
@@ -130,6 +131,8 @@ def normalize_simulation_tags(
             continue
         if DEVICE_COUNT_TAG_PATTERN.fullmatch(tag):
             continue
+        if DEVICE_COUNT_LABEL_TAG_PATTERN.fullmatch(tag):
+            continue
         if tag in START_TIMING_TAGS:
             continue
         if tag in SIMULATION_MODE_TAGS:
@@ -139,8 +142,8 @@ def normalize_simulation_tags(
         normalized_tags.append(tag)
         seen.add(tag)
 
-    device_count_tag = f"{device_count}dai"
-    normalized_tags.append(device_count_tag)
+    normalized_tags.append(f"device_count_{device_count}")
+    normalized_tags.append(f"{device_count}dai")
     normalized_tags.append(f"start_{start_timing_mode}")
     normalized_tags.append(f"mode_{simulation_mode}")
     return tuple(normalized_tags)
@@ -290,6 +293,14 @@ def run_simulation_request(
         cycle_time=request.cycle_time,
         listening_rate=request.listening_rate,
         tags=list(tags),
+        start_timing_mode=request.start_timing_mode,
+        random_sampling_method=(
+            "uniform_without_replacement"
+            if request.start_timing_mode == "random"
+            else ""
+        ),
+        start_step=request.start_step if request.start_timing_mode == "random" else None,
+        start_step_count=request.start_step_count if request.start_timing_mode == "random" else None,
         simulation_mode=request.simulation_mode,
         carrier_sense_duration_ms=request.carrier_sense_duration_ms,
         transmission_time_ms=transmission_time_ms,

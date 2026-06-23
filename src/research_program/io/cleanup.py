@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import shutil
+from typing import Iterable
 
 from research_program.config.paths import PROJECT_ROOT, resolve_project_path
 
@@ -89,6 +90,41 @@ def cleanup_experiment_outputs(
         deleted_count=len(items),
         deleted_bytes=sum(item.size_bytes for item in items),
         items=items,
+    )
+
+
+def cleanup_run_directories(
+    run_paths: Iterable[str | Path],
+    dry_run: bool = True,
+    calculate_size: bool = True,
+) -> CleanupResult:
+    items: list[CleanupItem] = []
+    seen_paths: set[Path] = set()
+    for run_path in run_paths:
+        resolved = resolve_project_path(run_path).resolve()
+        _assert_safe_target(resolved)
+        if resolved in seen_paths or not resolved.is_dir():
+            continue
+        seen_paths.add(resolved)
+        items.append(
+            CleanupItem(
+                path=resolved,
+                is_dir=True,
+                size_bytes=_path_size(resolved) if calculate_size else 0,
+            )
+        )
+
+    items.sort(key=lambda item: str(item.path).lower())
+    if not dry_run:
+        for item in items:
+            _delete_item(item.path)
+
+    return CleanupResult(
+        target_names=("filtered_runs",),
+        dry_run=dry_run,
+        deleted_count=len(items),
+        deleted_bytes=sum(item.size_bytes for item in items),
+        items=tuple(items),
     )
 
 

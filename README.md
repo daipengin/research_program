@@ -79,6 +79,8 @@ data/runs/<run_id>/
 - `random`: 各runで、指定範囲内からデバイス数分の開始時刻をランダムに選びます。runごとに同じ開始時刻セットが重ならないようにします。
 - `fixed`: 全runで同じ開始時刻を使います。Web UIでは、一定間隔プリセットまたは手入力を選べます。
 
+ランダム開始では、候補集合 `0, start_step, 2 * start_step, ..., start_step_count * start_step` から、デバイス数ぶんを一様・重複なしで抽出して昇順に並べます。新しく作成するrunの `metadata.csv` には、`random_sampling_method`、`random_seed`、`random_run_index`、候補範囲、候補数、`selected_start_times` を保存します。これにより、どの候補集合から何が選ばれたかをrun単位で確認できます。
+
 PER測定モード:
 
 - `simulation_mode = "per_measurement"` にすると、送信は瞬間ではなくLoRa送信時間ぶんの占有区間として扱います。
@@ -109,6 +111,8 @@ payload_symbol_count =
 T_payload = payload_symbol_count * T_sym
 T_airtime_ms = (T_preamble + T_payload) * 1000
 ```
+
+PER測定モードでは、他ノードの受信・位相更新は送信開始時刻ではなく `transmission_end_time` で行います。周期データ、PER、位相差、位相ギャップ誤差も `transmission_end_time` を検知時刻として使います。古いログなどで `transmission_end_time` が無い場合は `time` を使います。
 
 CLIから実行する場合:
 
@@ -173,6 +177,7 @@ uv run research-program plot-phase-gap-error
 uv run research-program plot-per
 uv run research-program plot-per-aligned
 uv run research-program compare-per
+uv run research-program compare-per-by-coupling-strength
 uv run research-program plot-aggregated-phase-gap-error
 uv run research-program plot-aggregated-phase-gap-error-overlay
 uv run research-program plot-convergence-summary
@@ -189,7 +194,7 @@ uv run research-program plot-convergence-summary
 - 集約統計を重ね描きした位相ギャップ誤差グラフ
 - 収束傾向の比較グラフ
 
-Web UIの `Runs` ページでは、条件に合うrun数を確認し、その条件に合うrunだけを使ってグラフを作成できます。`Graph creation` ページでは、上記の画像データをWeb上から選択して作成できます。対象runをパラメーターやタグで絞り込み、既定ではフィルタ後のrunを全て対象にするため、大量のrunを個別選択リストへ展開しません。個別選択が必要な場合だけ、run IDやパスで候補を絞ってから選択できます。必要に応じて、周期データ、位相ギャップ誤差、集約統計の前処理も同時に実行できます。グラフ作成はバックグラウンドジョブとして開始され、ジョブ状態は `outputs/reports/graph_creation_jobs/` に保存されます。ページをリロードした後でも `Graph creation` ページの `Running graph jobs` から、完了コマンド数、経過時間、残り時間、終了予測時刻を確認できます。`Graph parameters` では、選択したグラフ種類ごとにx軸・y軸範囲、PER計算窓幅、基準周期、収束判定、画像サイズなどをWeb上から変更できます。ここで変更した値は、そのグラフ作成時だけ一時的に使われます。`Figures` ページでは、作成済みの画像やPDFを一覧表示し、PDFはプレビュー時とダウンロード時にPNG/JPEG/WebPへラスター化して扱えます。
+Web UIの `Runs` ページでは、条件に合うrun数を確認し、その条件に合うrunだけを使ってグラフを作成できます。`Graph creation` ページでは、上記の画像データをWeb上から選択して作成できます。対象runをパラメーターやタグで絞り込み、既定ではフィルタ後のrunを全て対象にするため、大量のrunを個別選択リストへ展開しません。個別選択が必要な場合だけ、run IDやパスで候補を絞ってから選択できます。必要に応じて、周期データ、位相ギャップ誤差、集約統計の前処理も同時に実行できます。グラフ作成はバックグラウンドジョブとして開始され、ジョブ状態は `outputs/reports/graph_creation_jobs/` に保存されます。ページをリロードした後でも `Graph creation` ページの `Running graph jobs` から、完了コマンド数、経過時間、残り時間、終了予測時刻を確認できます。`Graph parameters` では、選択したグラフ種類ごとにx軸・y軸範囲、PER計算窓幅、基準周期、収束判定、画像サイズなどをWeb上から変更できます。ここで変更してグラフ作成に使った値は `outputs/reports/last_graph_plot_overrides.json` に保存され、次回以降の初期値として再利用されます。`Figures` ページでは、作成済みの画像やPDFを一覧表示し、PDFはプレビュー時とダウンロード時にPNG/JPEG/WebPへラスター化して扱えます。
 
 ## Web UI
 
@@ -225,6 +230,8 @@ Web UIの高速化:
 ## 実験結果の削除
 
 Web UIの `Maintenance` タブから、実験で作成したデータや画像を削除できます。
+
+`NONE runのみ削除` では、`metadata.csv` の `coupling_function` が `NONE` のrunだけを一覧確認して削除できます。タグ文字列では判定せず、実際のメタデータ値を使います。削除には `DELETE NONE` の入力が必要です。
 
 デフォルトの削除対象:
 
@@ -275,6 +282,7 @@ uv run research-program plot-phase-gap-error
 uv run research-program plot-per
 uv run research-program plot-per-aligned
 uv run research-program compare-per
+uv run research-program compare-per-by-coupling-strength
 uv run research-program plot-aggregated-phase-gap-error
 uv run research-program plot-aggregated-phase-gap-error-overlay
 uv run research-program plot-convergence-summary

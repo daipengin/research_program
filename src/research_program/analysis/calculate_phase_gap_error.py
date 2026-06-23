@@ -11,6 +11,12 @@ import numpy as np
 import pandas as pd
 
 from research_program.analysis.calculate_cycle_data import ensure_cycle_data_for_run
+from research_program.io.send_log import (
+    DETECTION_TIME_COLUMN,
+    add_detection_time_column,
+    detection_time_values,
+    normalize_send_time_columns,
+)
 
 
 RESULTS_DIR = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", "data/runs"))
@@ -72,12 +78,7 @@ def normalize_oscillator_id_column(send_df: pd.DataFrame, tags: list[str]) -> pd
 
 
 def normalize_time_column(send_df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
-    send_df = send_df.copy()
-
-    if "sec" in tags:
-        send_df["time"] = send_df["time"] * 1000.0
-
-    return send_df
+    return add_detection_time_column(normalize_send_time_columns(send_df, tags))
 
 
 def compute_cycle_interval_lengths(cycle_starts: np.ndarray) -> np.ndarray:
@@ -110,10 +111,10 @@ def assign_cycles_from_reference_windows(
     cycle_index は1始まり。
     """
     df = send_df.copy()
-    times = df["time"].to_numpy(dtype=np.float64)
+    times = detection_time_values(df)
 
     cycle_index = np.searchsorted(cycle_starts, times, side="right")
-    valid = cycle_index > 0
+    valid = np.isfinite(times) & (cycle_index > 0)
 
     df = df.loc[valid].copy()
     df["cycle_index"] = cycle_index[valid].astype(np.int64)
@@ -153,7 +154,7 @@ def compute_mean_abs_gap_error_per_cycle(
             )
             continue
 
-        cycle_df = indexed_df.loc[indexed_df["cycle_index"] == cycle_idx, ["time", "oscillator_id"]].copy()
+        cycle_df = indexed_df.loc[indexed_df["cycle_index"] == cycle_idx, [DETECTION_TIME_COLUMN, "oscillator_id"]].copy()
 
         if cycle_df.empty:
             rows.append(
@@ -166,7 +167,7 @@ def compute_mean_abs_gap_error_per_cycle(
 
         # 同一サイクル内で同じ振動子が複数回送信している場合は，
         # 最初の1回だけ採用する。
-        cycle_df = cycle_df.sort_values(["time", "oscillator_id"]).drop_duplicates(subset=["oscillator_id"], keep="first")
+        cycle_df = cycle_df.sort_values([DETECTION_TIME_COLUMN, "oscillator_id"]).drop_duplicates(subset=["oscillator_id"], keep="first")
 
         if len(cycle_df) < 2:
             rows.append(
@@ -177,7 +178,7 @@ def compute_mean_abs_gap_error_per_cycle(
             )
             continue
 
-        times = cycle_df["time"].to_numpy(dtype=np.float64)
+        times = cycle_df[DETECTION_TIME_COLUMN].to_numpy(dtype=np.float64)
         phases = 2.0 * math.pi * ((times - cycle_start) / cycle_length)
         phases = np.mod(phases, 2.0 * math.pi)
         phases.sort()

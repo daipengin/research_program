@@ -1,6 +1,6 @@
 [paths]
 data_format_config = "configs/data_format/run_v1.toml"
-runs_dirs = ["data/runs"]
+runs_dirs = ["data/runs", "data/run"]
 aggregated_dirs = ["data/aggregated"]
 figure_dirs = [
   "outputs/figures",

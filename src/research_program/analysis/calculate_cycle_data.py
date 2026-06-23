@@ -8,6 +8,12 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from research_program.io.send_log import (
+    DETECTION_TIME_COLUMN,
+    add_detection_time_column,
+    normalize_send_time_columns,
+)
+
 
 RESULTS_DIR = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", "data/runs"))
 REFERENCE_GAP_RATIO = 1.3
@@ -55,12 +61,7 @@ def normalize_oscillator_id_column(send_df: pd.DataFrame, tags: list[str]) -> pd
 
 
 def normalize_time_column(send_df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
-    send_df = send_df.copy()
-
-    if "sec" in tags:
-        send_df["time"] = send_df["time"] * 1000.0
-
-    return send_df
+    return add_detection_time_column(normalize_send_time_columns(send_df, tags))
 
 def extract_fixed_reference_id(tags: list[str]) -> Optional[int]:
     for tag in tags:
@@ -73,7 +74,7 @@ def extract_fixed_reference_id(tags: list[str]) -> Optional[int]:
 
 
 def choose_reference_id(send_df: pd.DataFrame,tags: list[str]) -> int:
-    first_row = send_df.sort_values(["time", "oscillator_id"]).iloc[0]
+    first_row = send_df.sort_values([DETECTION_TIME_COLUMN, "oscillator_id"]).iloc[0]
 
     num = extract_fixed_reference_id(tags)
 
@@ -88,7 +89,7 @@ def choose_reference_id(send_df: pd.DataFrame,tags: list[str]) -> int:
 def group_send_times_by_id(send_df: pd.DataFrame) -> dict[int, np.ndarray]:
     grouped: dict[int, np.ndarray] = {}
     for osc_id, group in send_df.groupby("oscillator_id"):
-        grouped[int(osc_id)] = np.sort(group["time"].to_numpy(dtype=np.float64))
+        grouped[int(osc_id)] = np.sort(group[DETECTION_TIME_COLUMN].to_numpy(dtype=np.float64))
     return grouped
 
 

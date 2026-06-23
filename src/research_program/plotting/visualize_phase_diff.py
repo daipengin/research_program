@@ -12,6 +12,11 @@ import pandas as pd
 
 from research_program.config.plot_config import VISUALIZE_PHASE_DIFF_CONFIG
 from research_program.analysis.calculate_cycle_data import ensure_cycle_data_for_run
+from research_program.io.send_log import (
+    DETECTION_TIME_COLUMN,
+    add_detection_time_column,
+    normalize_send_time_columns,
+)
 
 
 CFG = VISUALIZE_PHASE_DIFF_CONFIG
@@ -44,6 +49,18 @@ def read_send_log(send_log_path: Path) -> pd.DataFrame:
             "time": "float64",
             "oscillator_id": "string",
             "send_count": "int64",
+        },
+    )
+    return df.sort_values(["time", "oscillator_id"]).reset_index(drop=True)
+
+
+def read_carrier_sense_log(carrier_sense_log_path: Path) -> pd.DataFrame:
+    df = pd.read_csv(
+        carrier_sense_log_path,
+        dtype={
+            "time": "float64",
+            "oscillator_id": "string",
+            "action": "string",
         },
     )
     return df.sort_values(["time", "oscillator_id"]).reset_index(drop=True)
@@ -91,18 +108,40 @@ def normalize_oscillator_id_column(send_df: pd.DataFrame, tags: list[str]) -> pd
 
 
 def normalize_time_column(send_df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
-    send_df = send_df.copy()
+    return add_detection_time_column(normalize_send_time_columns(send_df, tags))
 
-    if "sec" in tags:
-        send_df["time"] = send_df["time"] * 1000.0
 
-    return send_df
+def build_phase_event_log(run_dir: Path, send_df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
+    event_df = normalize_time_column(send_df, tags)
+    carrier_sense_path = run_dir / "carrier_sense_log.csv"
+
+    if not carrier_sense_path.exists():
+        return event_df
+
+    carrier_df = read_carrier_sense_log(carrier_sense_path)
+    if carrier_df.empty or "action" not in carrier_df.columns:
+        return event_df
+
+    skipped_df = carrier_df[carrier_df["action"] == "skip_busy"].copy()
+    if skipped_df.empty:
+        return event_df
+
+    skipped_df = normalize_oscillator_id_column(skipped_df, tags)
+    skipped_df = normalize_time_column(skipped_df, tags)
+    skipped_df = skipped_df[["time", "oscillator_id", DETECTION_TIME_COLUMN]]
+
+    event_df = event_df[["time", "oscillator_id", DETECTION_TIME_COLUMN]]
+    return (
+        pd.concat([event_df, skipped_df], ignore_index=True)
+        .sort_values([DETECTION_TIME_COLUMN, "oscillator_id"])
+        .reset_index(drop=True)
+    )
 
 
 def group_send_times_by_id(send_df: pd.DataFrame) -> dict[int, np.ndarray]:
     grouped = {}
     for osc_id, group in send_df.groupby("oscillator_id"):
-        grouped[int(osc_id)] = np.sort(group["time"].to_numpy(dtype=np.float64))
+        grouped[int(osc_id)] = np.sort(group[DETECTION_TIME_COLUMN].to_numpy(dtype=np.float64))
     return grouped
 
 
@@ -262,12 +301,12 @@ def process_run(run_dir: Path, graphs_dir: Path) -> Optional[str]:
 
     cycle_time, tags = read_metadata(metadata_path)
     send_df = normalize_oscillator_id_column(send_df, tags)
-    send_df = normalize_time_column(send_df, tags)
+    phase_event_df = build_phase_event_log(run_dir, send_df, tags)
 
     reference_id, cycle_starts, is_original_cycle = read_calculated_cycle_data(cycle_data_path)
 
     reference_id, series = build_phase_diff_series(
-        send_df=send_df,
+        send_df=phase_event_df,
         cycle_time=cycle_time,
         reference_id=reference_id,
         cycle_starts=cycle_starts,

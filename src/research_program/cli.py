@@ -28,6 +28,7 @@ MODULE_COMMANDS = {
     "calculate-phase-gap-error": "research_program.analysis.calculate_phase_gap_error",
     "aggregate-phase-gap-error": "research_program.analysis.aggregate_phase_gap_error_stats",
     "compare-per": "research_program.analysis.compare_per_by_devices_and_interval",
+    "compare-per-by-coupling-strength": "research_program.plotting.plot_per_by_coupling_strength",
     "plot-phase-diff": "research_program.plotting.visualize_phase_diff",
     "plot-phase-gap-error": "research_program.plotting.plot_phase_gap_error",
     "plot-per": "research_program.plotting.plot_PER",
