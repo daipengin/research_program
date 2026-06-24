@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
@@ -7,8 +8,11 @@ from itertools import product
 import json
 import math
 import os
+import platform
+import re
 from pathlib import Path
 import shutil
+import socket
 import sys
 import subprocess
 import tempfile
@@ -344,6 +348,11 @@ GRAPH_CREATION_COMMANDS = {
 }
 
 GRAPH_CREATION_PAGE_PREFIX = "graph_create::"
+STYLE_ONLY_REDRAW_GRAPH_COMMANDS = {"compare-per", "compare-per-by-coupling-strength"}
+STYLE_ONLY_SOURCE_FIELDS_BY_GRAPH_COMMAND: dict[str, tuple[str, ...]] = {
+    "compare-per": ("target_cycle", "per_window_width_cycles"),
+    "compare-per-by-coupling-strength": ("target_time_ms", "per_window_width_cycles"),
+}
 
 GRAPH_PREPROCESS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "plot-phase-diff": ("calculate-cycle-data",),
@@ -739,6 +748,8 @@ def _simulation_request_to_dict(request: SimulationRequest) -> dict[str, Any]:
         "lora_explicit_header": request.lora_explicit_header,
         "lora_crc_enabled": request.lora_crc_enabled,
         "lora_low_data_rate_optimize": request.lora_low_data_rate_optimize,
+        "save_asleep_log": request.save_asleep_log,
+        "save_carrier_sense_log": request.save_carrier_sense_log,
     }
 
 
@@ -772,6 +783,8 @@ def _simulation_request_from_dict(data: dict[str, Any], fallback: SimulationRequ
         lora_explicit_header=bool(data.get("lora_explicit_header", fallback.lora_explicit_header)),
         lora_crc_enabled=bool(data.get("lora_crc_enabled", fallback.lora_crc_enabled)),
         lora_low_data_rate_optimize=data.get("lora_low_data_rate_optimize", fallback.lora_low_data_rate_optimize),
+        save_asleep_log=bool(data.get("save_asleep_log", fallback.save_asleep_log)),
+        save_carrier_sense_log=bool(data.get("save_carrier_sense_log", fallback.save_carrier_sense_log)),
     )
 
 
@@ -1226,6 +1239,8 @@ def _simulation_review_frame(request: SimulationRequest) -> pd.DataFrame:
         ("手動タグ(Manual tags)", ";".join(request.tags)),
         ("実際に使うタグ(Effective tags)", ";".join(effective_tags)),
         ("出力先(Output runs dir)", _display_project_path(request.output_root)),
+        ("asleep_log.csvを保存(Save asleep_log.csv)", request.save_asleep_log),
+        ("carrier_sense_log.csvを保存(Save carrier_sense_log.csv)", request.save_carrier_sense_log),
         ("指定ワーカー数(Requested max workers)", requested_workers),
         ("実際に使うワーカー数(Effective max workers)", effective_workers),
     ]
@@ -1500,7 +1515,7 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
                 "キャリアセンス時間[ms](Carrier-sense duration [ms])",
                 min_value=0.0,
                 value=float(defaults.carrier_sense_duration_ms),
-                help="0にすると送信前の待機時間を自動で使います(0 uses the pre-send awake duration automatically).",
+                help="0は0msとして扱い、送信前のキャリアセンス区間を見ません(0 is used as 0 ms and does not look back before transmission).",
             )
             lora_col_left, lora_col_right = st.columns(2)
             with lora_col_left:
@@ -1599,6 +1614,20 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
             help="台数タグはデバイス数から自動で付与されます(Device-count tag is added automatically).",
         )
         output_root = st.text_input("run出力ディレクトリ(Output runs dir)", value=str(defaults.output_root.relative_to(PROJECT_ROOT)))
+        st.subheader("追加ログ出力(Optional CSV logs)")
+        log_col_left, log_col_right = st.columns(2)
+        with log_col_left:
+            save_carrier_sense_log = st.checkbox(
+                "carrier_sense_log.csvを保存(Save carrier_sense_log.csv)",
+                value=defaults.save_carrier_sense_log,
+                help="キャリアセンス結果の詳細ログです。位相差グラフでskip_busyを表示したい場合に使います(Carrier-sense details; useful when phase-difference graphs should include skip_busy events).",
+            )
+        with log_col_right:
+            save_asleep_log = st.checkbox(
+                "asleep_log.csvを保存(Save asleep_log.csv)",
+                value=defaults.save_asleep_log,
+                help="各振動子の睡眠遷移と次回覚醒時刻のデバッグ用ログです(Debug log for asleep transitions and next awake times).",
+            )
 
         sweep_enabled = st.checkbox(
             "パラメータ範囲を一括実行(Sweep parameter ranges)",
@@ -1714,6 +1743,8 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
             lora_explicit_header=bool(lora_explicit_header),
             lora_crc_enabled=bool(lora_crc_enabled),
             lora_low_data_rate_optimize=lora_low_data_rate_optimize,
+            save_asleep_log=bool(save_asleep_log),
+            save_carrier_sense_log=bool(save_carrier_sense_log),
         )
         try:
             sweep_values_by_field = {
@@ -2017,7 +2048,14 @@ def _nullable_float_plot_input(label: str, current_value: float | int | None, ke
     )
 
 
-def _int_plot_input(label: str, current_value: int | None, key: str, min_value: int = 0) -> int:
+def _int_plot_input(
+    label: str,
+    current_value: int | None,
+    key: str,
+    min_value: int = 0,
+    *,
+    disabled: bool = False,
+) -> int:
     default_value = min_value if current_value is None else int(current_value)
     return int(
         st.number_input(
@@ -2026,6 +2064,7 @@ def _int_plot_input(label: str, current_value: int | None, key: str, min_value: 
             min_value=min_value,
             step=1,
             key=key,
+            disabled=disabled,
         )
     )
 
@@ -2165,14 +2204,140 @@ def _add_common_plot_text_inputs(
                 )
 
 
+def _add_axis_label_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    label_fields = [
+        (field_name, label)
+        for field_name, label in [("x_label", "X label"), ("y_label", "Y label")]
+        if hasattr(config, field_name)
+    ]
+    if not label_fields:
+        return
+
+    st.markdown("**Axis labels**")
+    columns = st.columns(len(label_fields))
+    for column, (field_name, label) in zip(columns, label_fields):
+        with column:
+            values[field_name] = st.text_input(
+                label,
+                value=str(_plot_config_value(config, field_name, saved_values, "")),
+                key=f"{prefix}_{field_name}",
+            )
+
+
+def _add_plot_style_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    style_fields = [
+        ("scatter_size", "Scatter size", 0.1, 1.0),
+        ("marker_size", "Marker size", 0.1, 0.5),
+        ("line_width", "Line width", 0.0, 0.1),
+        ("error_bar_capsize", "Error-bar cap size", 0.0, 0.5),
+        ("min_per_marker_size", "Min PER marker size", 0.1, 0.5),
+    ]
+    available_fields = [
+        (field_name, label, min_value, step)
+        for field_name, label, min_value, step in style_fields
+        if hasattr(config, field_name)
+    ]
+    if not available_fields:
+        return
+
+    st.markdown("**Plot style**")
+    columns = st.columns(min(3, len(available_fields)))
+    for index, (field_name, label, min_value, step) in enumerate(available_fields):
+        with columns[index % len(columns)]:
+            values[field_name] = _float_plot_input(
+                label,
+                _plot_config_value(config, field_name, saved_values),
+                f"{prefix}_{field_name}",
+                min_value=min_value,
+                step=step,
+            )
+
+
 def _add_common_plot_presentation_inputs(
     values: dict[str, Any],
     config: Any,
     prefix: str,
     saved_values: dict[str, Any] | None = None,
 ) -> None:
+    _add_axis_label_inputs(values, config, prefix, saved_values)
     _add_common_plot_size_inputs(values, config, prefix, saved_values)
     _add_common_plot_text_inputs(values, config, prefix, saved_values)
+    _add_plot_style_inputs(values, config, prefix, saved_values)
+
+
+def _add_min_per_annotation_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    if not hasattr(config, "show_min_per_annotation"):
+        return
+
+    st.markdown("**minPER表示(Min PER display)**")
+    col_show_min, col_min_font = st.columns(2)
+    with col_show_min:
+        values["show_min_per_annotation"] = bool(
+            st.checkbox(
+                "minPERを表示(Show min PER)",
+                value=bool(_plot_config_value(config, "show_min_per_annotation", saved_values, True)),
+                key=f"{prefix}_show_min_per_annotation",
+            )
+        )
+    with col_min_font:
+        values["min_per_annotation_font_size"] = _int_plot_input(
+            "minPER表示フォント(Min PER font)",
+            _plot_config_value(config, "min_per_annotation_font_size", saved_values),
+            f"{prefix}_min_per_annotation_font_size",
+            min_value=1,
+            disabled=not values["show_min_per_annotation"],
+        )
+
+
+def _add_error_bar_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    if not hasattr(config, "show_error_bars"):
+        return
+
+    st.markdown("**Whiskers / error bars**")
+    col_show, col_mode = st.columns(2)
+    with col_show:
+        values["show_error_bars"] = bool(
+            st.checkbox(
+                "Show whiskers",
+                value=bool(_plot_config_value(config, "show_error_bars", saved_values, True)),
+                key=f"{prefix}_show_error_bars",
+            )
+        )
+    if hasattr(config, "error_bar_mode"):
+        mode_options = ["std", "min_max"]
+        current_mode = _plot_config_value(config, "error_bar_mode", saved_values, "std")
+        with col_mode:
+            values["error_bar_mode"] = st.selectbox(
+                "Whisker type",
+                options=mode_options,
+                index=mode_options.index(current_mode) if current_mode in mode_options else 0,
+                format_func=lambda value: {
+                    "std": "Standard deviation",
+                    "min_max": "Min-Max range",
+                }.get(value, value),
+                key=f"{prefix}_error_bar_mode",
+                disabled=not values["show_error_bars"],
+            )
 
 
 def _add_standard_xy_plot_inputs(
@@ -2236,6 +2401,13 @@ def _collect_plot_parameter_values(
                 "0_to_2pi": "0 から 2pi(0 to 2pi)",
             }.get(value, value),
             key=f"{prefix}_y_range_mode",
+        )
+        values["include_skipped_send_times"] = bool(
+            st.checkbox(
+                "スキップした送信予定時刻を含める(Include skipped scheduled send times)",
+                value=bool(_plot_config_value(config, "include_skipped_send_times", saved_values, False)),
+                key=f"{prefix}_include_skipped_send_times",
+            )
         )
         _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
@@ -2377,6 +2549,8 @@ def _collect_plot_parameter_values(
                 f"{prefix}_per_window_width_cycles",
                 min_value=1,
             )
+        _add_min_per_annotation_inputs(values, config, prefix, saved_values)
+        _add_error_bar_inputs(values, config, prefix, saved_values)
         st.caption("PER vs K uses the PER value at the cycle containing the specified timing.")
         _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
@@ -2557,6 +2731,56 @@ def _render_single_plot_parameter_controls(command_name: str) -> dict[str, dict[
     return {config_name: values} if values else {}
 
 
+def _render_style_only_plot_parameter_controls(command_name: str) -> dict[str, dict[str, Any]]:
+    config_pair = PLOT_CONFIG_BY_GRAPH_COMMAND.get(command_name)
+    if config_pair is None:
+        return {}
+
+    config_name, config = config_pair
+    saved_overrides = _load_last_graph_plot_overrides()
+    saved_values = saved_overrides.get(config_name)
+    values: dict[str, Any] = {}
+
+    for field_name in STYLE_ONLY_SOURCE_FIELDS_BY_GRAPH_COMMAND.get(command_name, tuple()):
+        if hasattr(config, field_name):
+            values[field_name] = _plot_config_value(config, field_name, saved_values)
+
+    source_values = {
+        field_name: values[field_name]
+        for field_name in STYLE_ONLY_SOURCE_FIELDS_BY_GRAPH_COMMAND.get(command_name, tuple())
+        if field_name in values
+    }
+    if source_values:
+        source_text = ", ".join(f"{field_name}={value}" for field_name, value in source_values.items())
+        st.caption(f"Existing CSV lookup uses: {source_text}")
+
+    _add_standard_xy_plot_inputs(
+        values,
+        config,
+        f"redraw_plot_override_{command_name}",
+        saved_values,
+    )
+    _add_min_per_annotation_inputs(
+        values,
+        config,
+        f"redraw_plot_override_{command_name}",
+        saved_values,
+    )
+    _add_error_bar_inputs(
+        values,
+        config,
+        f"redraw_plot_override_{command_name}",
+        saved_values,
+    )
+    _add_common_plot_presentation_inputs(
+        values,
+        config,
+        f"redraw_plot_override_{command_name}",
+        saved_values,
+    )
+    return {config_name: values} if values else {}
+
+
 def _invalid_plot_override_ranges(plot_overrides: dict[str, dict[str, Any]]) -> list[str]:
     messages: list[str] = []
     command_by_config_name = {
@@ -2576,6 +2800,37 @@ def _invalid_plot_override_ranges(plot_overrides: dict[str, dict[str, Any]]) -> 
                     f"{graph_label}: {range_label} は下限を上限より小さくしてください(Min must be smaller than max)."
                 )
     return messages
+
+
+def _style_only_redraw_supported(commands: list[str]) -> bool:
+    return bool(commands) and set(commands).issubset(STYLE_ONLY_REDRAW_GRAPH_COMMANDS)
+
+
+def _render_style_only_redraw_option(commands: list[str], key: str) -> bool:
+    if not _style_only_redraw_supported(commands):
+        return False
+    return bool(
+        st.checkbox(
+            "見た目だけ再描画(既存CSVを使う / Style-only redraw from existing CSV)",
+            value=False,
+            key=key,
+            help=(
+                "既に作成済みの集計CSVから再描画し、runの再集計と前処理を行いません。"
+                "軸ラベル、フォント、画像サイズ、マーカーサイズなどだけを変える時に使ってください。"
+                "PER timing や window など計算条件を変える場合はOFFにしてください。"
+            ),
+        )
+    )
+
+
+def _target_records_for_style_mode(
+    selected_records: list[RunRecord],
+    all_records: list[RunRecord],
+    style_only_redraw: bool,
+) -> list[RunRecord]:
+    if selected_records or not style_only_redraw:
+        return selected_records
+    return all_records
 
 
 def _figure_snapshot(web_config: dict[str, Any]) -> dict[Path, tuple[int, int]]:
@@ -2684,6 +2939,347 @@ def _style_figure_display_frame(df: pd.DataFrame) -> pd.io.formats.style.Styler:
         return [style for _ in row]
 
     return display_df.style.apply(style_row, axis=1)
+
+
+FIGURE_PARAMETER_FIELDS = [
+    ("coupling_function", "結合関数(Coupling function)"),
+    ("coupling_strength", "結合強度(Coupling strength)"),
+    ("strength_ratio", "強度倍率(Strength ratio)"),
+    ("cycle_time", "周期時間[ms](Cycle time [ms])"),
+    ("listening_rate", "待機率[%](Listening rate [%])"),
+    ("device_count", "デバイス数(Device count)"),
+    ("start_timing_mode", "開始タイミング(Start timing)"),
+    ("simulation_mode", "シミュレーションモード(Simulation mode)"),
+    ("save_asleep_log", "asleep_log保存(Save asleep_log)"),
+    ("save_carrier_sense_log", "carrier_sense_log保存(Save carrier_sense_log)"),
+    ("carrier_sense_duration_ms", "キャリアセンス時間[ms](Carrier-sense [ms])"),
+    ("transmission_time_ms", "送信時間[ms](Transmission time [ms])"),
+    ("lora_payload_bytes", "LoRa payload [bytes]"),
+    ("lora_spreading_factor", "LoRa SF"),
+    ("lora_bandwidth_hz", "LoRa bandwidth [Hz]"),
+]
+
+
+def _is_missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _metadata_value(record: RunRecord, field_name: str) -> Any:
+    if field_name == "device_count":
+        value = record.metadata.get(field_name)
+        if not _is_missing_value(value):
+            return value
+        return next(
+            (int(tag[:-3]) for tag in record.tags if tag.endswith("dai") and tag[:-3].isdigit()),
+            None,
+        )
+    return record.metadata.get(field_name)
+
+
+def _format_scalar_value(value: Any) -> str:
+    if _is_missing_value(value):
+        return "-"
+    if isinstance(value, float):
+        return f"{value:g}"
+    if isinstance(value, (list, tuple)):
+        return ";".join(str(item) for item in value)
+    return str(value)
+
+
+def _format_value_summary(values: list[Any]) -> str:
+    clean_values = [value for value in values if not _is_missing_value(value)]
+    if not clean_values:
+        return "-"
+
+    numeric_values: list[float] = []
+    numeric = True
+    for value in clean_values:
+        if isinstance(value, bool):
+            numeric = False
+            break
+        try:
+            numeric_values.append(float(value))
+        except (TypeError, ValueError):
+            numeric = False
+            break
+
+    if numeric and numeric_values:
+        unique_numbers = sorted(set(numeric_values))
+        if len(unique_numbers) == 1:
+            return f"{unique_numbers[0]:g}"
+        return f"{min(numeric_values):g} - {max(numeric_values):g} ({len(unique_numbers)} values)"
+
+    unique_texts = list(dict.fromkeys(_format_scalar_value(value) for value in clean_values))
+    if len(unique_texts) <= 6:
+        return ", ".join(unique_texts)
+    return f"{len(unique_texts)} values: {', '.join(unique_texts[:6])}, ..."
+
+
+def _selected_start_times(record: RunRecord) -> list[float]:
+    raw_value = record.metadata.get("selected_start_times")
+    if isinstance(raw_value, list):
+        values = raw_value
+    elif _is_missing_value(raw_value):
+        values = []
+    else:
+        values = [item.strip() for item in str(raw_value).replace(",", ";").split(";") if item.strip()]
+
+    result: list[float] = []
+    for value in values:
+        try:
+            result.append(float(value))
+        except (TypeError, ValueError):
+            pass
+    return result
+
+
+def _format_number_range(values: list[float], unit: str = "") -> str:
+    if not values:
+        return "-"
+    suffix = f" {unit}" if unit else ""
+    if min(values) == max(values):
+        return f"{min(values):g}{suffix}"
+    return f"{min(values):g} - {max(values):g}{suffix}"
+
+
+def _numeric_metadata_values(records: list[RunRecord], field_name: str) -> list[float]:
+    values: list[float] = []
+    for record in records:
+        value = _metadata_value(record, field_name)
+        if _is_missing_value(value):
+            continue
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            pass
+    return values
+
+
+def _metadata_number_equals(record: RunRecord, field_name: str, expected: float) -> bool:
+    value = _metadata_value(record, field_name)
+    if _is_missing_value(value):
+        return False
+    try:
+        return float(value) == float(expected)
+    except (TypeError, ValueError):
+        return False
+
+
+def _phase_values_from_start_times(records: list[RunRecord]) -> list[float]:
+    phases: list[float] = []
+    for record in records:
+        cycle_time = _metadata_value(record, "cycle_time")
+        try:
+            cycle_time_float = float(cycle_time)
+        except (TypeError, ValueError):
+            continue
+        if cycle_time_float <= 0:
+            continue
+        for start_time in _selected_start_times(record):
+            phases.append(float((start_time % cycle_time_float) / cycle_time_float * 2.0 * math.pi))
+    return phases
+
+
+def _candidate_phase_range(records: list[RunRecord]) -> str:
+    phase_values: list[float] = []
+    for record in records:
+        start_min = _metadata_value(record, "random_start_min")
+        start_max = _metadata_value(record, "random_start_max")
+        cycle_time = _metadata_value(record, "cycle_time")
+        try:
+            start_min_float = float(start_min)
+            start_max_float = float(start_max)
+            cycle_time_float = float(cycle_time)
+        except (TypeError, ValueError):
+            continue
+        if cycle_time_float <= 0:
+            continue
+        phase_values.extend(
+            [
+                float((start_min_float % cycle_time_float) / cycle_time_float * 2.0 * math.pi),
+                float((start_max_float % cycle_time_float) / cycle_time_float * 2.0 * math.pi),
+            ]
+        )
+    return _format_number_range(phase_values, "rad")
+
+
+def _initial_phase_summary_rows(records: list[RunRecord]) -> list[dict[str, str]]:
+    selected_start_values = [
+        start_time
+        for record in records
+        for start_time in _selected_start_times(record)
+    ]
+    selected_phase_values = _phase_values_from_start_times(records)
+    random_min_values = _numeric_metadata_values(records, "random_start_min")
+    random_max_values = _numeric_metadata_values(records, "random_start_max")
+    candidate_range_values = []
+    if random_min_values:
+        candidate_range_values.append(min(random_min_values))
+    if random_max_values:
+        candidate_range_values.append(max(random_max_values))
+
+    selected_patterns = {
+        tuple(_selected_start_times(record))
+        for record in records
+        if _selected_start_times(record)
+    }
+    rows = [
+        {
+            "項目(Item)": "初期位相の選択方法(Start timing mode)",
+            "値(Value)": _format_value_summary([_metadata_value(record, "start_timing_mode") for record in records]),
+        },
+        {
+            "項目(Item)": "候補開始時刻範囲[ms](Candidate start range [ms])",
+            "値(Value)": _format_number_range(candidate_range_values, "ms"),
+        },
+        {
+            "項目(Item)": "候補位相範囲[rad](Candidate phase range [rad])",
+            "値(Value)": _candidate_phase_range(records),
+        },
+        {
+            "項目(Item)": "候補刻み[ms](Candidate step [ms])",
+            "値(Value)": _format_value_summary([_metadata_value(record, "start_step") for record in records]),
+        },
+        {
+            "項目(Item)": "候補数(Candidate count)",
+            "値(Value)": _format_value_summary([_metadata_value(record, "random_start_candidate_count") for record in records]),
+        },
+        {
+            "項目(Item)": "選択済み開始時刻範囲[ms](Selected start range [ms])",
+            "値(Value)": _format_number_range(selected_start_values, "ms"),
+        },
+        {
+            "項目(Item)": "選択済み位相範囲[rad](Selected phase range [rad])",
+            "値(Value)": _format_number_range(selected_phase_values, "rad"),
+        },
+        {
+            "項目(Item)": "初期位相パターン数(Selected pattern count)",
+            "値(Value)": str(len(selected_patterns)) if selected_patterns else "-",
+        },
+    ]
+    return rows
+
+
+def _run_lookup_keys(record: RunRecord) -> set[str]:
+    return {record.run_id, record.path.name, str(record.metadata.get("run_id") or "")} - {""}
+
+
+def _single_run_id_candidates(asset: FigureAsset) -> list[str]:
+    stem = asset.path.stem
+    candidates = [stem]
+    for suffix in ["_ratio", "_change", "_aligned"]:
+        if stem.endswith(suffix):
+            candidates.append(stem[: -len(suffix)])
+    return list(dict.fromkeys(candidates))
+
+
+def _aggregate_filename_filter(asset: FigureAsset, records: list[RunRecord]) -> tuple[list[RunRecord], str]:
+    graph_dir = _figure_output_dir(asset)
+    stem = asset.path.stem
+    if graph_dir == "aggregated_stats_graphs":
+        match = re.fullmatch(r"(.+)_(\d+)", stem)
+        if match is not None:
+            coupling_function, coupling_strength_text = match.groups()
+            coupling_strength = int(coupling_strength_text)
+            matched = [
+                record for record in records
+                if str(_metadata_value(record, "coupling_function")) == coupling_function
+                and _metadata_number_equals(record, "coupling_strength", float(coupling_strength))
+            ]
+            return matched, f"{coupling_function}, K={coupling_strength} のrunから推定"
+
+    if graph_dir == "per_by_coupling_strength_graphs" and "_per_by_k_" in stem:
+        coupling_function = stem.split("_per_by_k_", 1)[0]
+        matched = [
+            record for record in records
+            if str(_metadata_value(record, "coupling_function")) == coupling_function
+        ]
+        return matched, f"{coupling_function} のrunから推定"
+
+    if graph_dir == "compare_per_graphs" and stem.startswith("combined_methods_cycle_"):
+        return records, "複数手法の比較グラフとして、読み込み済みrun全体の範囲として表示"
+
+    if graph_dir == "compare_per_graphs":
+        match = re.fullmatch(r"(.+)_cycle_\d+", stem)
+        if match is not None:
+            coupling_function = match.group(1)
+            matched = [
+                record for record in records
+                if str(_metadata_value(record, "coupling_function")) == coupling_function
+            ]
+            return matched, f"{coupling_function} のrunから推定"
+
+    return records, "画像ファイル名から条件を特定できないため、読み込み済みrun全体の範囲として表示"
+
+
+def _records_for_figure(asset: FigureAsset, records: list[RunRecord]) -> tuple[list[RunRecord], str]:
+    scope_key = _figure_scope_key(asset)
+    graph_dir = _figure_output_dir(asset)
+    if scope_key == "single":
+        candidates = set(_single_run_id_candidates(asset))
+        matched = [
+            record
+            for record in records
+            if candidates.intersection(_run_lookup_keys(record))
+        ]
+        if matched:
+            return matched[:1], f"ファイル名からrun IDを推定: {next(iter(candidates))}"
+        return [], "ファイル名に対応するrunが見つかりませんでした"
+
+    if graph_dir in {
+        "aggregated_stats_graphs",
+        "per_by_coupling_strength_graphs",
+        "compare_per_graphs",
+    }:
+        return _aggregate_filename_filter(asset, records)
+
+    return records, "複数runを使うグラフとして、読み込み済みrun全体の範囲として表示"
+
+
+def _figure_parameter_summary_frame(records: list[RunRecord]) -> pd.DataFrame:
+    rows = [
+        {"項目(Item)": "対象run数(Target runs)", "値(Value)": str(len(records))},
+    ]
+    rows.extend(
+        {
+            "項目(Item)": label,
+            "値(Value)": _format_value_summary([_metadata_value(record, field_name) for record in records]),
+        }
+        for field_name, label in FIGURE_PARAMETER_FIELDS
+    )
+    return pd.DataFrame(rows)
+
+
+def _render_figure_parameter_summary(asset: FigureAsset, records: list[RunRecord]) -> None:
+    matched_records, note = _records_for_figure(asset, records)
+    st.subheader("実験パラメーター(Experiment parameters)")
+    st.caption(note)
+    if not matched_records:
+        st.warning("この画像に対応するrun metadataを見つけられませんでした(Could not find matching run metadata for this figure).")
+        return
+
+    st.dataframe(_figure_parameter_summary_frame(matched_records), width="stretch", hide_index=True)
+    st.subheader("初期位相/開始時刻(Initial phase / start timing)")
+    st.dataframe(pd.DataFrame(_initial_phase_summary_rows(matched_records)), width="stretch", hide_index=True)
+
+    if len(matched_records) <= 20:
+        with st.expander("対象run一覧(Target runs)", expanded=False):
+            run_rows = [
+                {
+                    "run_id": record.run_id,
+                    "path": str(record.path),
+                    "selected_start_times": _format_scalar_value(_selected_start_times(record)),
+                }
+                for record in matched_records
+            ]
+            st.dataframe(pd.DataFrame(run_rows), width="stretch", hide_index=True)
 
 
 def _graph_command_output_dir(command_info: dict[str, str]) -> str:
@@ -3030,6 +3626,8 @@ def _render_graph_type_creation_page(command_name: str, web_config: dict[str, An
     for message in invalid_plot_ranges:
         st.error(message)
 
+    style_only_redraw = False
+
     selected_target_records = _render_graph_target_selection(
         records,
         web_config,
@@ -3039,7 +3637,8 @@ def _render_graph_type_creation_page(command_name: str, web_config: dict[str, An
     col_target_count.metric("対象run数(Target runs)", len(selected_target_records))
     col_total_count.metric("全run数(All runs)", len(records))
 
-    estimated_df = _estimated_figure_frame([command_name], selected_target_records)
+    estimate_records = _target_records_for_style_mode(selected_target_records, records, style_only_redraw)
+    estimated_df = _estimated_figure_frame([command_name], estimate_records)
     estimated_total = int(estimated_df["予測枚数(Estimated figures)"].sum()) if "予測枚数(Estimated figures)" in estimated_df.columns and not estimated_df.empty else 0
     if estimated_total == 0 and not estimated_df.empty:
         estimated_total = int(estimated_df.iloc[:, 1].sum())
@@ -3051,6 +3650,7 @@ def _render_graph_type_creation_page(command_name: str, web_config: dict[str, An
         value=False,
         help="OFFの場合は、必要なデータが無い時だけ前処理を実行します(When off, preprocessing runs only if required data is missing).",
         key=f"force_preprocess_{command_name}",
+        disabled=style_only_redraw,
     )
     preprocess_commands, preprocess_df = _preprocess_plan_for_graph(
         command_name,
@@ -3059,6 +3659,9 @@ def _render_graph_type_creation_page(command_name: str, web_config: dict[str, An
         web_config,
         force_preprocess=force_preprocess,
     )
+    if style_only_redraw:
+        preprocess_commands = []
+        preprocess_df = pd.DataFrame()
     if preprocess_commands:
         st.info("このグラフ作成では前処理を先に実行します(Preprocessing will run before graph creation).")
         st.dataframe(preprocess_df, width="stretch", hide_index=True)
@@ -3067,7 +3670,7 @@ def _render_graph_type_creation_page(command_name: str, web_config: dict[str, An
 
     if not st.button(
         "この画像データを作成(Create this image data)",
-        disabled=not selected_target_records or bool(invalid_plot_ranges),
+        disabled=(not style_only_redraw and not selected_target_records) or bool(invalid_plot_ranges),
         type="primary",
         key=f"create_graph_{command_name}",
     ):
@@ -3077,14 +3680,17 @@ def _render_graph_type_creation_page(command_name: str, web_config: dict[str, An
     base_env_overrides: dict[str, str] = {}
     if plot_overrides:
         base_env_overrides["RESEARCH_PROGRAM_PLOT_OVERRIDES"] = json.dumps(plot_overrides, ensure_ascii=False)
-    if "compare-per" in commands_to_run or "compare-per-by-coupling-strength" in commands_to_run:
+    if style_only_redraw:
+        base_env_overrides["RESEARCH_PROGRAM_STYLE_ONLY_REDRAW"] = "1"
+    elif "compare-per" in commands_to_run or "compare-per-by-coupling-strength" in commands_to_run:
         base_env_overrides["RESEARCH_PROGRAM_FORCE_RECALCULATE"] = "1"
 
+    job_target_records = _target_records_for_style_mode(selected_target_records, records, style_only_redraw)
     try:
         job_id, job_path = _start_graph_creation_job(
             commands_to_run=commands_to_run,
             selected_graph_commands=[command_name],
-            selected_target_records=selected_target_records,
+            selected_target_records=job_target_records,
             all_run_count=len(records),
             env_overrides=base_env_overrides,
             web_config=web_config,
@@ -3132,6 +3738,8 @@ def _render_graph_creation_tab(web_config: dict[str, Any], records: list[RunReco
     invalid_plot_ranges = _invalid_plot_override_ranges(plot_overrides)
     for message in invalid_plot_ranges:
         st.error(message)
+
+    style_only_redraw = False
 
     st.subheader("対象データ(Target data)")
     filtered_target_records = _filter_controls(records, web_config, key_prefix="graph_creation_target")
@@ -3189,7 +3797,8 @@ def _render_graph_creation_tab(web_config: dict[str, Any], records: list[RunReco
     col_target_count.metric("対象run数(Target runs)", len(selected_target_records))
     col_total_count.metric("全run数(All runs)", len(records))
 
-    estimated_df = _estimated_figure_frame(selected_graph_commands, selected_target_records)
+    estimate_records = _target_records_for_style_mode(selected_target_records, records, style_only_redraw)
+    estimated_df = _estimated_figure_frame(selected_graph_commands, estimate_records)
     estimated_total = int(estimated_df["予測枚数(Estimated figures)"].sum()) if not estimated_df.empty else 0
     st.metric("作成・更新される画像の予測枚数(Estimated generated/updated figures)", estimated_total)
     st.dataframe(estimated_df, width="stretch", hide_index=True)
@@ -3197,24 +3806,34 @@ def _render_graph_creation_tab(web_config: dict[str, Any], records: list[RunReco
 
     run_preprocess = st.checkbox(
         "必要な前処理も実行(Run preprocessing)",
-        value=True,
+        value=not style_only_redraw,
+        disabled=style_only_redraw,
     )
 
     if not st.button(
         "選択した画像データを作成(Create selected image data)",
-        disabled=not selected_graph_commands or not selected_target_records or bool(invalid_plot_ranges),
+        disabled=(
+            not selected_graph_commands
+            or (not style_only_redraw and not selected_target_records)
+            or bool(invalid_plot_ranges)
+        ),
         type="primary",
     ):
         return
 
     commands_to_run = list(selected_graph_commands)
-    if run_preprocess:
+    if run_preprocess and not style_only_redraw:
         commands_to_run = [*PREPROCESS_COMMANDS, *commands_to_run]
 
     all_record_keys = {record.record_key for record in records}
     selected_record_keys = {record.record_key for record in selected_target_records}
     uses_subset = selected_record_keys != all_record_keys
-    if uses_subset and _aggregate_graph_command_selected(selected_graph_commands) and "aggregate-phase-gap-error" not in commands_to_run:
+    if (
+        not style_only_redraw
+        and uses_subset
+        and _aggregate_graph_command_selected(selected_graph_commands)
+        and "aggregate-phase-gap-error" not in commands_to_run
+    ):
         commands_to_run = ["aggregate-phase-gap-error", *commands_to_run]
 
     base_env_overrides: dict[str, str] = {}
@@ -3223,14 +3842,17 @@ def _render_graph_creation_tab(web_config: dict[str, Any], records: list[RunReco
             plot_overrides,
             ensure_ascii=False,
         )
-    if "compare-per" in commands_to_run or "compare-per-by-coupling-strength" in commands_to_run:
+    if style_only_redraw:
+        base_env_overrides["RESEARCH_PROGRAM_STYLE_ONLY_REDRAW"] = "1"
+    elif "compare-per" in commands_to_run or "compare-per-by-coupling-strength" in commands_to_run:
         base_env_overrides["RESEARCH_PROGRAM_FORCE_RECALCULATE"] = "1"
 
+    job_target_records = _target_records_for_style_mode(selected_target_records, records, style_only_redraw)
     try:
         job_id, job_path = _start_graph_creation_job(
             commands_to_run=commands_to_run,
             selected_graph_commands=list(selected_graph_commands),
-            selected_target_records=selected_target_records,
+            selected_target_records=job_target_records,
             all_run_count=len(records),
             env_overrides=base_env_overrides,
             web_config=web_config,
@@ -3307,6 +3929,138 @@ def _render_pdf_preview(pdf_path: Path, max_pages: int = 5, dpi: int = 120) -> N
         )
 
 
+def _graph_assets_for_command(
+    web_config: dict[str, Any],
+    command_name: str,
+    refresh_token: int = 0,
+) -> list[FigureAsset]:
+    command_info = GRAPH_CREATION_COMMANDS.get(command_name)
+    if command_info is None:
+        return []
+    output_dir = _graph_command_output_dir(command_info)
+    if not output_dir:
+        return []
+    return [
+        asset
+        for asset in _discover_figures_for_web(web_config, refresh_token)
+        if _figure_output_dir(asset) == output_dir
+    ]
+
+
+def _render_figure_asset_preview(asset: FigureAsset, key_prefix: str) -> None:
+    if asset.is_raster or asset.extension == ".svg":
+        st.image(str(asset.path), width="stretch")
+    elif asset.extension == ".pdf":
+        max_pages = st.number_input(
+            "PDFプレビューページ数(PDF preview pages)",
+            min_value=1,
+            max_value=20,
+            value=1,
+            key=f"{key_prefix}_pdf_preview_pages",
+        )
+        _render_pdf_preview(asset.path, max_pages=int(max_pages))
+    else:
+        st.write(asset.name)
+
+
+def _select_redraw_preview_asset(
+    assets: list[FigureAsset],
+    changed_paths: list[str],
+) -> FigureAsset | None:
+    if not assets:
+        return None
+
+    changed_path_set = {str(Path(path).resolve()) for path in changed_paths}
+    default_index = 0
+    for index, asset in enumerate(assets):
+        if str(asset.path.resolve()) in changed_path_set:
+            default_index = index
+            break
+
+    return st.selectbox(
+        "プレビューする画像(Preview figure)",
+        assets,
+        index=default_index,
+        format_func=lambda asset: f"{asset.name} ({asset.extension}, {_format_bytes(asset.size_bytes)})",
+        key="graph_redraw_preview_asset",
+    )
+
+
+def _render_graph_redraw_page(web_config: dict[str, Any]) -> None:
+    st.header("グラフ再描画(Graph redraw)")
+    st.caption("既存の集計CSVから再描画します。runの再集計や前処理は行いません。")
+
+    command_name = st.selectbox(
+        "再描画するグラフ(Graph to redraw)",
+        options=sorted(STYLE_ONLY_REDRAW_GRAPH_COMMANDS),
+        format_func=lambda command: GRAPH_CREATION_COMMANDS[command]["label"],
+        key="graph_redraw_command",
+    )
+
+    left_col, right_col = st.columns([0.9, 1.1])
+    with left_col:
+        plot_overrides = _render_style_only_plot_parameter_controls(command_name)
+        invalid_plot_ranges = _invalid_plot_override_ranges(plot_overrides)
+        for message in invalid_plot_ranges:
+            st.error(message)
+
+        redraw_clicked = st.button(
+            "再描画してプレビュー(Redraw and preview)",
+            type="primary",
+            disabled=bool(invalid_plot_ranges),
+            key="run_graph_redraw",
+        )
+
+        if redraw_clicked:
+            env_overrides: dict[str, str] = {"RESEARCH_PROGRAM_STYLE_ONLY_REDRAW": "1"}
+            if plot_overrides:
+                env_overrides["RESEARCH_PROGRAM_PLOT_OVERRIDES"] = json.dumps(
+                    plot_overrides,
+                    ensure_ascii=False,
+                )
+            before_snapshot = _figure_snapshot(web_config)
+            try:
+                with st.spinner("再描画中(Redrawing)..."):
+                    output = _run_research_program_command_with_env(command_name, env_overrides)
+            except RuntimeError as exc:
+                st.error("再描画に失敗しました(Redraw failed).")
+                st.code(str(exc))
+            else:
+                if plot_overrides:
+                    _save_last_graph_plot_overrides(plot_overrides)
+                _bump_cache_token("figures")
+                changed_assets = _changed_figure_assets(web_config, before_snapshot)
+                changed_paths = [str(asset.path.resolve()) for asset in changed_assets]
+                st.session_state["last_graph_redraw"] = {
+                    "command": command_name,
+                    "output": output,
+                    "changed_paths": changed_paths,
+                }
+                st.success("再描画しました(Redrawn).")
+                with st.expander("実行ログ(Command output)", expanded=False):
+                    st.code(output)
+
+    last_redraw = st.session_state.get("last_graph_redraw")
+    changed_paths = []
+    if isinstance(last_redraw, dict) and last_redraw.get("command") == command_name:
+        changed_paths = [str(path) for path in last_redraw.get("changed_paths", [])]
+
+    assets = _graph_assets_for_command(web_config, command_name, _cache_token("figures"))
+    assets = sorted(assets, key=lambda asset: asset.path.stat().st_mtime_ns, reverse=True)
+
+    with right_col:
+        st.subheader("プレビュー(Preview)")
+        if not assets:
+            st.info("このグラフの出力画像がまだありません。画像作成ページで一度作成してください。")
+            return
+
+        selected_asset = _select_redraw_preview_asset(assets, changed_paths)
+        if selected_asset is None:
+            return
+        st.caption(_display_project_path(selected_asset.path))
+        _render_figure_asset_preview(selected_asset, "graph_redraw")
+
+
 def _convert_raster_page_bytes(page_bytes: bytes, output_format: str) -> tuple[bytes, str]:
     image_format = "JPEG" if output_format in {"jpg", "jpeg"} else output_format.upper()
     mime = "image/jpeg" if image_format == "JPEG" else f"image/{output_format}"
@@ -3346,7 +4100,7 @@ def _rasterize_pdf_for_download(
     return zip_buffer.getvalue(), "application/zip", f"{pdf_path.stem}_{output_format}_pages.zip"
 
 
-def _render_figures_tab(web_config: dict[str, Any]) -> None:
+def _render_figures_tab(web_config: dict[str, Any], contract: RunDataContract) -> None:
     figure_config = web_config.get("figures", {})
     if st.button("画像一覧を更新(Refresh figures)"):
         _bump_cache_token("figures")
@@ -3429,6 +4183,14 @@ def _render_figures_tab(web_config: dict[str, Any]) -> None:
         _render_pdf_preview(selected_asset.path, max_pages=int(max_pages))
     else:
         st.write(selected_asset.name)
+
+    records = _discover_records(
+        web_config,
+        contract,
+        _cache_token("runs"),
+        force_rescan=False,
+    )
+    _render_figure_parameter_summary(selected_asset, records)
 
     if selected_asset.extension == ".pdf":
         download_options = figure_config.get("raster_download_formats", ["png", "jpeg", "webp"])
@@ -3600,6 +4362,427 @@ def _render_maintenance_tab(records: list[RunRecord]) -> None:
         st.rerun()
 
 
+def _format_bytes(value: Any) -> str:
+    if value is None or value == "":
+        return ""
+    try:
+        size = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if size < 0:
+        return ""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    unit_index = 0
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+    if unit_index == 0:
+        return f"{int(size)} {units[unit_index]}"
+    return f"{size:.2f} {units[unit_index]}"
+
+
+def _run_system_command(args: list[str], timeout_seconds: float = 3.0) -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+    output = "\n".join(part.strip() for part in [completed.stdout, completed.stderr] if part.strip())
+    return completed.returncode == 0, output
+
+
+def _run_powershell_json(command: str) -> Any:
+    executable = shutil.which("powershell") or shutil.which("pwsh")
+    if executable is None:
+        return None
+    wrapped_command = (
+        "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+        f"{command} | ConvertTo-Json -Depth 5"
+    )
+    ok, output = _run_system_command(
+        [executable, "-NoProfile", "-Command", wrapped_command],
+        timeout_seconds=5.0,
+    )
+    if not ok or not output:
+        return None
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        return None
+
+
+def _collect_cpu_info() -> dict[str, Any]:
+    info: dict[str, Any] = {
+        "name": platform.processor() or "",
+        "physical_cores": None,
+        "logical_cores": os.cpu_count(),
+        "sockets": None,
+        "max_clock_mhz": None,
+    }
+
+    try:
+        import psutil  # type: ignore[import-not-found]
+
+        info["physical_cores"] = psutil.cpu_count(logical=False)
+        info["logical_cores"] = psutil.cpu_count(logical=True)
+        freq = psutil.cpu_freq()
+        if freq is not None:
+            info["max_clock_mhz"] = round(float(freq.max), 1) if freq.max else None
+    except Exception:
+        pass
+
+    if platform.system() == "Windows":
+        cpu_data = _run_powershell_json(
+            "Get-CimInstance Win32_Processor | "
+            "Select-Object Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed"
+        )
+        items = cpu_data if isinstance(cpu_data, list) else ([cpu_data] if isinstance(cpu_data, dict) else [])
+        if items:
+            names = [str(item.get("Name", "")).strip() for item in items if str(item.get("Name", "")).strip()]
+            info["name"] = "; ".join(dict.fromkeys(names)) or info["name"]
+            info["physical_cores"] = sum(int(item.get("NumberOfCores") or 0) for item in items) or info["physical_cores"]
+            info["logical_cores"] = (
+                sum(int(item.get("NumberOfLogicalProcessors") or 0) for item in items) or info["logical_cores"]
+            )
+            info["max_clock_mhz"] = max((int(item.get("MaxClockSpeed") or 0) for item in items), default=0) or info["max_clock_mhz"]
+            info["sockets"] = len(items)
+    elif platform.system() == "Linux":
+        cpuinfo_path = Path("/proc/cpuinfo")
+        if cpuinfo_path.exists():
+            text = cpuinfo_path.read_text(encoding="utf-8", errors="replace")
+            model_names = [
+                line.split(":", 1)[1].strip()
+                for line in text.splitlines()
+                if line.lower().startswith("model name") and ":" in line
+            ]
+            if model_names:
+                info["name"] = model_names[0]
+            physical_pairs: set[tuple[str, str]] = set()
+            current_physical = ""
+            current_core = ""
+            for line in text.splitlines():
+                if not line.strip():
+                    if current_physical and current_core:
+                        physical_pairs.add((current_physical, current_core))
+                    current_physical = ""
+                    current_core = ""
+                elif line.lower().startswith("physical id") and ":" in line:
+                    current_physical = line.split(":", 1)[1].strip()
+                elif line.lower().startswith("core id") and ":" in line:
+                    current_core = line.split(":", 1)[1].strip()
+            if current_physical and current_core:
+                physical_pairs.add((current_physical, current_core))
+            if physical_pairs:
+                info["physical_cores"] = len(physical_pairs)
+    elif platform.system() == "Darwin":
+        for key, field_name in [
+            ("machdep.cpu.brand_string", "name"),
+            ("hw.physicalcpu", "physical_cores"),
+            ("hw.logicalcpu", "logical_cores"),
+        ]:
+            ok, output = _run_system_command(["sysctl", "-n", key])
+            if ok and output:
+                info[field_name] = int(output) if field_name.endswith("cores") else output
+
+    return info
+
+
+def _collect_memory_info() -> dict[str, Any]:
+    try:
+        import psutil  # type: ignore[import-not-found]
+
+        memory = psutil.virtual_memory()
+        return {
+            "total_bytes": int(memory.total),
+            "available_bytes": int(memory.available),
+            "used_bytes": int(memory.used),
+            "percent": float(memory.percent),
+            "source": "psutil",
+        }
+    except Exception:
+        pass
+
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+
+            class MemoryStatusEx(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = MemoryStatusEx()
+            status.dwLength = ctypes.sizeof(MemoryStatusEx)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                used = int(status.ullTotalPhys - status.ullAvailPhys)
+                return {
+                    "total_bytes": int(status.ullTotalPhys),
+                    "available_bytes": int(status.ullAvailPhys),
+                    "used_bytes": used,
+                    "percent": round((used / status.ullTotalPhys) * 100, 1) if status.ullTotalPhys else None,
+                    "source": "GlobalMemoryStatusEx",
+                }
+        except Exception:
+            pass
+
+    meminfo_path = Path("/proc/meminfo")
+    if meminfo_path.exists():
+        values: dict[str, int] = {}
+        for line in meminfo_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if ":" not in line:
+                continue
+            key, raw_value = line.split(":", 1)
+            parts = raw_value.strip().split()
+            if parts and parts[0].isdigit():
+                values[key] = int(parts[0]) * 1024
+        total = values.get("MemTotal")
+        available = values.get("MemAvailable")
+        if total is not None:
+            used = total - available if available is not None else None
+            return {
+                "total_bytes": total,
+                "available_bytes": available,
+                "used_bytes": used,
+                "percent": round((used / total) * 100, 1) if used is not None and total else None,
+                "source": "/proc/meminfo",
+            }
+
+    if platform.system() == "Darwin":
+        ok, output = _run_system_command(["sysctl", "-n", "hw.memsize"])
+        if ok and output.strip().isdigit():
+            return {
+                "total_bytes": int(output.strip()),
+                "available_bytes": None,
+                "used_bytes": None,
+                "percent": None,
+                "source": "sysctl",
+            }
+
+    return {
+        "total_bytes": None,
+        "available_bytes": None,
+        "used_bytes": None,
+        "percent": None,
+        "source": "unavailable",
+    }
+
+
+def _collect_nvidia_gpu_info() -> tuple[list[dict[str, Any]], str]:
+    executable = shutil.which("nvidia-smi")
+    if executable is None:
+        return [], ""
+
+    query_fields = [
+        "index",
+        "name",
+        "driver_version",
+        "memory.total",
+        "utilization.gpu",
+        "temperature.gpu",
+        "power.draw",
+        "power.limit",
+        "clocks.current.graphics",
+        "clocks.max.graphics",
+        "clocks.current.memory",
+        "clocks.max.memory",
+    ]
+    ok, output = _run_system_command(
+        [
+            executable,
+            f"--query-gpu={','.join(query_fields)}",
+            "--format=csv,noheader,nounits",
+        ],
+        timeout_seconds=5.0,
+    )
+    if not ok or not output:
+        return [], output
+
+    rows: list[dict[str, Any]] = []
+    for parsed_row in csv.reader(output.splitlines()):
+        if len(parsed_row) < len(query_fields):
+            continue
+        values = [value.strip() for value in parsed_row]
+        rows.append(
+            {
+                "index": values[0],
+                "name": values[1],
+                "driver": values[2],
+                "memory_total": f"{values[3]} MB" if values[3] else "",
+                "gpu_utilization": f"{values[4]} %" if values[4] else "",
+                "temperature": f"{values[5]} C" if values[5] else "",
+                "power_draw": f"{values[6]} W" if values[6] else "",
+                "power_limit": f"{values[7]} W" if values[7] else "",
+                "graphics_clock": f"{values[8]} / {values[9]} MHz" if values[8] or values[9] else "",
+                "memory_clock": f"{values[10]} / {values[11]} MHz" if values[10] or values[11] else "",
+                "source": "nvidia-smi",
+            }
+        )
+    return rows, output
+
+
+def _collect_os_gpu_info() -> tuple[list[dict[str, Any]], str]:
+    if platform.system() == "Windows":
+        gpu_data = _run_powershell_json(
+            "Get-CimInstance Win32_VideoController | "
+            "Select-Object Name,AdapterRAM,DriverVersion,VideoProcessor,CurrentHorizontalResolution,CurrentVerticalResolution"
+        )
+        items = gpu_data if isinstance(gpu_data, list) else ([gpu_data] if isinstance(gpu_data, dict) else [])
+        rows: list[dict[str, Any]] = []
+        for index, item in enumerate(items):
+            rows.append(
+                {
+                    "index": index,
+                    "name": str(item.get("Name") or ""),
+                    "driver": str(item.get("DriverVersion") or ""),
+                    "memory_total": _format_bytes(item.get("AdapterRAM")),
+                    "processor": str(item.get("VideoProcessor") or ""),
+                    "resolution": (
+                        f"{item.get('CurrentHorizontalResolution')} x {item.get('CurrentVerticalResolution')}"
+                        if item.get("CurrentHorizontalResolution") and item.get("CurrentVerticalResolution")
+                        else ""
+                    ),
+                    "source": "Win32_VideoController",
+                }
+            )
+        return rows, ""
+
+    if platform.system() == "Linux" and shutil.which("lspci") is not None:
+        ok, output = _run_system_command(["lspci"], timeout_seconds=5.0)
+        if ok:
+            rows = [
+                {"index": index, "name": line, "source": "lspci"}
+                for index, line in enumerate(output.splitlines())
+                if any(marker in line.lower() for marker in ["vga", "3d controller", "display controller"])
+            ]
+            return rows, output
+
+    if platform.system() == "Darwin" and shutil.which("system_profiler") is not None:
+        ok, output = _run_system_command(["system_profiler", "SPDisplaysDataType"], timeout_seconds=8.0)
+        if ok:
+            names = [
+                line.split(":", 1)[1].strip()
+                for line in output.splitlines()
+                if "Chipset Model:" in line
+            ]
+            return [{"index": index, "name": name, "source": "system_profiler"} for index, name in enumerate(names)], output
+
+    return [], ""
+
+
+@st.cache_data(show_spinner=False, ttl=10)
+def _collect_server_specs(refresh_token: int = 0) -> dict[str, Any]:
+    cpu = _collect_cpu_info()
+    memory = _collect_memory_info()
+    nvidia_gpus, nvidia_raw_output = _collect_nvidia_gpu_info()
+    os_gpus, os_gpu_raw_output = _collect_os_gpu_info()
+    gpu_rows = nvidia_gpus or os_gpus
+    if nvidia_gpus:
+        gpu_note = "NVIDIA GPUはVRAM、使用率、温度、電力、現在/最大クロックを表示しています。"
+    elif gpu_rows:
+        gpu_note = "nvidia-smiが使えないため、OSが提供するGPUアダプタ情報を表示しています。使用率や演算性能は取得できません。"
+    else:
+        gpu_note = "GPU情報を取得できませんでした。nvidia-smi、OSのGPU情報、または仮想化環境の制限を確認してください。"
+
+    return {
+        "system": {
+            "hostname": socket.gethostname(),
+            "platform": platform.platform(),
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+            "python": sys.version.split()[0],
+            "executable": sys.executable,
+            "project_root": str(PROJECT_ROOT),
+            "process_id": os.getpid(),
+        },
+        "cpu": cpu,
+        "memory": memory,
+        "gpu_rows": gpu_rows,
+        "gpu_note": gpu_note,
+        "diagnostics": {
+            "nvidia_smi_output": nvidia_raw_output if not nvidia_gpus else "",
+            "os_gpu_output": os_gpu_raw_output if not os_gpus else "",
+            "refresh_token": refresh_token,
+        },
+    }
+
+
+def _render_server_tab() -> None:
+    st.header("サーバー環境(Server environment)")
+    if st.button("環境情報を再取得(Refresh server specs)"):
+        _bump_cache_token("server")
+        st.rerun()
+
+    specs = _collect_server_specs(_cache_token("server"))
+    cpu = specs["cpu"]
+    memory = specs["memory"]
+    gpu_rows = specs["gpu_rows"]
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("論理CPU(Logical cores)", cpu.get("logical_cores") or "不明")
+    metric_cols[1].metric("物理CPU(Physical cores)", cpu.get("physical_cores") or "不明")
+    metric_cols[2].metric("メモリ(Memory)", _format_bytes(memory.get("total_bytes")) or "不明")
+    metric_cols[3].metric("GPU数(GPUs)", len(gpu_rows))
+
+    st.subheader("基本情報(System)")
+    system_rows = [{"項目(Item)": key, "値(Value)": value} for key, value in specs["system"].items()]
+    st.dataframe(pd.DataFrame(system_rows), width="stretch", hide_index=True)
+
+    st.subheader("CPU")
+    cpu_rows = [
+        {"項目(Item)": "CPU名(CPU name)", "値(Value)": cpu.get("name") or "不明"},
+        {"項目(Item)": "ソケット数(Sockets)", "値(Value)": cpu.get("sockets") or "不明"},
+        {"項目(Item)": "物理コア数(Physical cores)", "値(Value)": cpu.get("physical_cores") or "不明"},
+        {"項目(Item)": "論理コア数(Logical cores)", "値(Value)": cpu.get("logical_cores") or "不明"},
+        {"項目(Item)": "最大クロック[MHz](Max clock [MHz])", "値(Value)": cpu.get("max_clock_mhz") or "不明"},
+    ]
+    st.dataframe(pd.DataFrame(cpu_rows), width="stretch", hide_index=True)
+
+    st.subheader("メモリ(Memory)")
+    memory_rows = [
+        {"項目(Item)": "総容量(Total)", "値(Value)": _format_bytes(memory.get("total_bytes")) or "不明"},
+        {"項目(Item)": "使用中(Used)", "値(Value)": _format_bytes(memory.get("used_bytes")) or "不明"},
+        {"項目(Item)": "空き/利用可能(Available)", "値(Value)": _format_bytes(memory.get("available_bytes")) or "不明"},
+        {"項目(Item)": "使用率(Usage)", "値(Value)": f"{memory.get('percent')} %" if memory.get("percent") is not None else "不明"},
+        {"項目(Item)": "取得元(Source)", "値(Value)": memory.get("source") or "不明"},
+    ]
+    st.dataframe(pd.DataFrame(memory_rows), width="stretch", hide_index=True)
+
+    st.subheader("GPU")
+    st.caption(specs["gpu_note"])
+    if gpu_rows:
+        st.dataframe(pd.DataFrame(gpu_rows), width="stretch", hide_index=True)
+    else:
+        st.info("GPU情報は取得できませんでした(GPU information is unavailable).")
+
+    diagnostics = specs.get("diagnostics", {})
+    diagnostic_text = "\n\n".join(
+        text
+        for text in [
+            str(diagnostics.get("nvidia_smi_output") or "").strip(),
+            str(diagnostics.get("os_gpu_output") or "").strip(),
+        ]
+        if text
+    )
+    if diagnostic_text:
+        with st.expander("取得診断(Diagnostics)", expanded=False):
+            st.code(diagnostic_text)
+
+
 def main() -> None:
     st.set_page_config(
         page_title="研究プログラム(Research Program)",
@@ -3613,6 +4796,7 @@ def main() -> None:
         "simulation": "シミュレーション(Simulation)",
         "graph_creation": "グラフ作成(Graph creation)",
         "figures": "画像(Figures)",
+        "server": "サーバー環境(Server)",
         "maintenance": "管理(Maintenance)",
         "contract": "データ形式(Data format)",
     }
@@ -3621,6 +4805,7 @@ def main() -> None:
         "simulation": page_options["simulation"],
         "graph_creation": page_options["graph_creation"],
         "figures": page_options["figures"],
+        "server": page_options["server"],
         "maintenance": page_options["maintenance"],
         "contract": page_options["contract"],
     }
@@ -3634,6 +4819,7 @@ def main() -> None:
     if primary_page == "graph_creation":
         graph_page_options = {
             "graph_jobs": "ジョブ確認(Job status)",
+            "graph_redraw": "再描画(Redraw)",
             **{
                 f"{GRAPH_CREATION_PAGE_PREFIX}{command_name}": command_info["label"]
                 for command_name, command_info in GRAPH_CREATION_COMMANDS.items()
@@ -3672,12 +4858,16 @@ def main() -> None:
         _render_simulation_tab(web_config)
     elif page == "graph_jobs":
         _render_graph_creation_job_monitor()
+    elif page == "graph_redraw":
+        _render_graph_redraw_page(web_config)
     elif page.startswith(GRAPH_CREATION_PAGE_PREFIX):
         assert records is not None
         command_name = page.removeprefix(GRAPH_CREATION_PAGE_PREFIX)
         _render_graph_type_creation_page(command_name, web_config, records)
     elif page == "figures":
-        _render_figures_tab(web_config)
+        _render_figures_tab(web_config, contract)
+    elif page == "server":
+        _render_server_tab()
     elif page == "maintenance":
         assert records is not None
         _render_maintenance_tab(records)

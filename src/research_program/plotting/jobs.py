@@ -231,6 +231,7 @@ def run_graph_creation_job_file(job_path: str | Path) -> int:
     figure_dirs = [str(item) for item in payload.get("figure_dirs", [])]
     figure_extensions = [str(item) for item in payload.get("figure_extensions", [])]
     env_overrides = {str(key): str(value) for key, value in dict(payload.get("env_overrides") or {}).items()}
+    style_only_redraw = env_overrides.get("RESEARCH_PROGRAM_STYLE_ONLY_REDRAW") == "1"
     default_runs_dir = _default_runs_dir(env_overrides)
     selected_runs_root = _single_selected_runs_root(selected_run_paths)
     uses_subset = _needs_selected_run_workspace(selected_run_paths, all_run_count, default_runs_dir)
@@ -239,6 +240,9 @@ def run_graph_creation_job_file(job_path: str | Path) -> int:
         and len(selected_run_paths) == all_run_count
         and selected_runs_root != default_runs_dir
     )
+    if style_only_redraw:
+        uses_subset = False
+        can_use_selected_root_directly = False
     work_dir = path.with_suffix(".work")
     log_path = path.with_suffix(".log")
     results: list[dict[str, Any]] = []

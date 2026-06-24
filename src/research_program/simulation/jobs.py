@@ -77,6 +77,8 @@ def simulation_request_to_dict(request: SimulationRequest) -> dict[str, Any]:
         "lora_explicit_header": request.lora_explicit_header,
         "lora_crc_enabled": request.lora_crc_enabled,
         "lora_low_data_rate_optimize": request.lora_low_data_rate_optimize,
+        "save_asleep_log": request.save_asleep_log,
+        "save_carrier_sense_log": request.save_carrier_sense_log,
     }
 
 
@@ -110,6 +112,8 @@ def simulation_request_from_dict(data: dict[str, Any]) -> SimulationRequest:
         lora_explicit_header=bool(data.get("lora_explicit_header", True)),
         lora_crc_enabled=bool(data.get("lora_crc_enabled", True)),
         lora_low_data_rate_optimize=data.get("lora_low_data_rate_optimize"),
+        save_asleep_log=bool(data.get("save_asleep_log", False)),
+        save_carrier_sense_log=bool(data.get("save_carrier_sense_log", False)),
     )
 
 

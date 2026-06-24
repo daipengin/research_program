@@ -122,11 +122,23 @@ required = false
 description = "Simulation mode. standard keeps legacy point-send behavior; per_measurement enables carrier sense and LoRa airtime."
 
 [[files.metadata.columns]]
+name = "save_asleep_log"
+type = "string"
+required = false
+description = "Whether asleep_log.csv was saved for this run."
+
+[[files.metadata.columns]]
+name = "save_carrier_sense_log"
+type = "string"
+required = false
+description = "Whether carrier_sense_log.csv was saved for this run."
+
+[[files.metadata.columns]]
 name = "carrier_sense_duration_ms"
 type = "float"
 required = false
 unit = "ms"
-description = "Carrier-sense duration used before the scheduled send. 0 in config means auto, stored metadata contains the effective value."
+description = "Carrier-sense duration used before the scheduled send. 0 is used as 0 ms."
 
 [[files.metadata.columns]]
 name = "transmission_time_ms"

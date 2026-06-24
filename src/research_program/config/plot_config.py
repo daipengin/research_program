@@ -51,6 +51,7 @@ class VisualizePhaseDiffConfig:
     # "cycle_time" または "actual_interval"
 
     hide_filled_cycles: bool = False
+    include_skipped_send_times: bool = False
 
     # x軸範囲。None なら自動
     xlim_min: Optional[float] = None
@@ -534,6 +535,9 @@ class ComparePerByDevicesIntervalConfig:
     ylim_min: Optional[float] = 0
     ylim_max: Optional[float] = 10
 
+    x_label: str = "Number of devices"
+    y_label: str = "PER [%]"
+
     # フォント
     font_size_label: int = 30
     font_size_title: int = 16
@@ -600,6 +604,9 @@ class PerByCouplingStrengthPlotConfig:
     ylim_min: Optional[float] = 0
     ylim_max: Optional[float] = 100
 
+    x_label: str = "Coupling strength K"
+    y_label: str = "PER [%]"
+
     font_size_label: int = 30
     font_size_title: int = 16
     font_size_ticks: int = 25
@@ -616,7 +623,12 @@ class PerByCouplingStrengthPlotConfig:
     line_width: float = 1.5
 
     show_error_bars: bool = True
+    error_bar_mode: str = "std"
     error_bar_capsize: float = 4.0
+
+    show_min_per_annotation: bool = True
+    min_per_annotation_font_size: int = 16
+    min_per_marker_size: float = 12.0
 
     use_existing_csv_if_available: bool = False
 

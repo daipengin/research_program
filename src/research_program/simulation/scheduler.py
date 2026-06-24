@@ -51,22 +51,18 @@ class RunConfig:
     lora_explicit_header: bool = True
     lora_crc_enabled: bool = True
     lora_low_data_rate_optimize: Optional[bool] = None
+    save_asleep_log: bool = False
+    save_carrier_sense_log: bool = False
 
 
 def per_measurement_enabled(config: RunConfig) -> bool:
     return config.simulation_mode == "per_measurement"
 
 
-def default_carrier_sense_duration_ms(config: RunConfig) -> float:
-    return float(config.cycle_time * (config.listening_rate / 2) / 100)
-
-
 def effective_carrier_sense_duration_ms(config: RunConfig) -> float:
     if not per_measurement_enabled(config):
         return 0.0
-    if config.carrier_sense_duration_ms > 0:
-        return float(config.carrier_sense_duration_ms)
-    return default_carrier_sense_duration_ms(config)
+    return float(config.carrier_sense_duration_ms)
 
 
 def effective_transmission_time_ms(config: RunConfig) -> float:
@@ -82,11 +78,15 @@ class BufferedCsvEventLogger:
         asleep_log_path: str | Path,
         carrier_sense_log_path: str | Path,
         metadata_log_path: str | Path,
+        save_asleep_log: bool = False,
+        save_carrier_sense_log: bool = False,
     ) -> None:
         self.send_log_path = Path(send_log_path)
         self.asleep_log_path = Path(asleep_log_path)
         self.carrier_sense_log_path = Path(carrier_sense_log_path)
         self.metadata_log_path = Path(metadata_log_path)
+        self.save_asleep_log = save_asleep_log
+        self.save_carrier_sense_log = save_carrier_sense_log
 
         self.send_rows: List[List[Any]] = []
         self.asleep_rows: List[List[Any]] = []
@@ -111,6 +111,8 @@ class BufferedCsvEventLogger:
         )
 
     def log_asleep(self, current_time: float, next_time: float, oscillator_id: int) -> None:
+        if not self.save_asleep_log:
+            return
         self.asleep_rows.append([current_time, next_time, oscillator_id])
 
     def log_carrier_sense(
@@ -124,6 +126,8 @@ class BufferedCsvEventLogger:
         blocking_transmission_start: Optional[float],
         blocking_transmission_end: Optional[float],
     ) -> None:
+        if not self.save_carrier_sense_log:
+            return
         self.carrier_sense_rows.append(
             [
                 time_,
@@ -139,8 +143,6 @@ class BufferedCsvEventLogger:
 
     def flush_logs(self) -> None:
         self.send_log_path.parent.mkdir(parents=True, exist_ok=True)
-        self.asleep_log_path.parent.mkdir(parents=True, exist_ok=True)
-        self.carrier_sense_log_path.parent.mkdir(parents=True, exist_ok=True)
         self.metadata_log_path.parent.mkdir(parents=True, exist_ok=True)
 
         with self.send_log_path.open("w", newline="", encoding="utf-8") as f:
@@ -156,26 +158,30 @@ class BufferedCsvEventLogger:
             )
             writer.writerows(self.send_rows)
 
-        with self.asleep_log_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["current_time", "next_time", "oscillator_id"])
-            writer.writerows(self.asleep_rows)
+        if self.save_asleep_log:
+            self.asleep_log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.asleep_log_path.open("w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["current_time", "next_time", "oscillator_id"])
+                writer.writerows(self.asleep_rows)
 
-        with self.carrier_sense_log_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(
-                [
-                    "time",
-                    "oscillator_id",
-                    "action",
-                    "carrier_sense_start",
-                    "carrier_sense_end",
-                    "blocking_oscillator_id",
-                    "blocking_transmission_start",
-                    "blocking_transmission_end",
-                ]
-            )
-            writer.writerows(self.carrier_sense_rows)
+        if self.save_carrier_sense_log:
+            self.carrier_sense_log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.carrier_sense_log_path.open("w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    [
+                        "time",
+                        "oscillator_id",
+                        "action",
+                        "carrier_sense_start",
+                        "carrier_sense_end",
+                        "blocking_oscillator_id",
+                        "blocking_transmission_start",
+                        "blocking_transmission_end",
+                    ]
+                )
+                writer.writerows(self.carrier_sense_rows)
 
     def flush_metadata(self, config: RunConfig) -> None:
         ranges_as_text = "|".join(
@@ -218,6 +224,8 @@ class BufferedCsvEventLogger:
                     "random_start_candidate_count",
                     "selected_start_times",
                     "simulation_mode",
+                    "save_asleep_log",
+                    "save_carrier_sense_log",
                     "carrier_sense_duration_ms",
                     "transmission_time_ms",
                     "lora_payload_bytes",
@@ -251,6 +259,8 @@ class BufferedCsvEventLogger:
                     random_start_candidate_count,
                     selected_start_times_as_text,
                     config.simulation_mode,
+                    config.save_asleep_log,
+                    config.save_carrier_sense_log,
                     effective_carrier_sense_duration_ms(config),
                     config.transmission_time_ms,
                     config.lora_payload_bytes,
@@ -421,6 +431,9 @@ class EventScheduler:
             if interval[1] > carrier_sense_start
         ]
 
+        if carrier_sense_start >= carrier_sense_end:
+            return None
+
         for transmission_start, transmission_end, sender_id in self._transmission_intervals:
             if sender_id == source_id:
                 continue
@@ -475,7 +488,13 @@ class EventScheduler:
                 )
 
             if blocking_transmission is not None:
-                next_type, next_time = oscillator.on_skip_send(current_time)
+                would_be_transmission_end = (
+                    float(current_time) + effective_transmission_time_ms(self.config)
+                )
+                next_type, next_time = oscillator.on_skip_send(
+                    current_time,
+                    phase_reference_time=would_be_transmission_end,
+                )
                 blocking_start, blocking_end, blocking_source_id = blocking_transmission
 
                 if self.logger is not None:
@@ -493,7 +512,14 @@ class EventScheduler:
                 self.schedule_event(next_time, source_id, session_id, next_type)
                 return
 
-            next_type, next_time = oscillator.on_send(current_time)
+            phase_reference_time = float(current_time)
+            if per_measurement_enabled(self.config):
+                phase_reference_time += effective_transmission_time_ms(self.config)
+
+            next_type, next_time = oscillator.on_send(
+                current_time,
+                phase_reference_time=phase_reference_time,
+            )
             _, transmission_end = self._record_transmission_interval(
                 source_id=source_id,
                 current_time=float(current_time),
@@ -569,6 +595,8 @@ def run_simulation_case(
         asleep_log_path=output_dir / "asleep_log.csv",
         carrier_sense_log_path=output_dir / "carrier_sense_log.csv",
         metadata_log_path=output_dir / "metadata.csv",
+        save_asleep_log=config.save_asleep_log,
+        save_carrier_sense_log=config.save_carrier_sense_log,
     )
 
     scheduler = EventScheduler(config=config, logger=logger, verbose=verbose)

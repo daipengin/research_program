@@ -28,6 +28,8 @@ lora_preamble_symbols = 8
 lora_explicit_header = true
 lora_crc_enabled = true
 lora_low_data_rate_optimize = "auto"
+save_asleep_log = false
+save_carrier_sense_log = false
 tags = ["auto", "generated", "web"]
 max_workers = 0
 

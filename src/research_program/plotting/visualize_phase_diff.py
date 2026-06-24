@@ -113,6 +113,9 @@ def normalize_time_column(send_df: pd.DataFrame, tags: list[str]) -> pd.DataFram
 
 def build_phase_event_log(run_dir: Path, send_df: pd.DataFrame, tags: list[str]) -> pd.DataFrame:
     event_df = normalize_time_column(send_df, tags)
+    if not CFG.include_skipped_send_times:
+        return event_df
+
     carrier_sense_path = run_dir / "carrier_sense_log.csv"
 
     if not carrier_sense_path.exists():

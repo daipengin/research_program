@@ -42,7 +42,7 @@ data/runs/<run_id>/
   phase_gap_error.csv
 ```
 
-`metadata.csv` と `send_log.csv` は必須です。`calculated_Cycle_data.csv` と `phase_gap_error.csv` は後処理で作成される派生データです。
+`metadata.csv` と `send_log.csv` は必須です。シミュレーション時のデフォルト出力もこの2つです。`asleep_log.csv` と `carrier_sense_log.csv` は設定で有効にした場合だけ保存します。`calculated_Cycle_data.csv` と `phase_gap_error.csv` は後処理で作成される派生データです。
 
 ## シミュレータ
 
@@ -62,13 +62,15 @@ data/runs/<run_id>/
 - `fixed_start_times`: 固定開始時刻を手入力する場合の開始時刻リスト
 - `fixed_start_interval`, `fixed_start_offset`: 固定開始時刻を一定間隔プリセットで作る場合の間隔とオフセット
 - `simulation_mode`: シミュレーションモード。`standard` または `per_measurement`
-- `carrier_sense_duration_ms`: PER測定時のキャリアセンス時間。`0` にすると送信前の待機時間を自動で使います。
+- `carrier_sense_duration_ms`: PER測定時のキャリアセンス時間。`0` は0msとして扱い、送信前のキャリアセンス区間を見ません。
 - `lora_payload_bytes`: LoRa送信時間計算に使うペイロード長
 - `lora_spreading_factor`: LoRa送信時間計算に使うSF
 - `lora_bandwidth_hz`: LoRa送信時間計算に使う帯域幅
 - `lora_coding_rate_denominator`: LoRa符号化率の分母。`5` は `4/5`、`8` は `4/8`
 - `lora_preamble_symbols`: LoRaプリアンブル長
 - `lora_explicit_header`, `lora_crc_enabled`, `lora_low_data_rate_optimize`: LoRa送信時間計算に使うヘッダー、CRC、LDRO設定
+- `save_asleep_log`: `asleep_log.csv` を保存するか。デフォルトは `false` です。
+- `save_carrier_sense_log`: `carrier_sense_log.csv` を保存するか。デフォルトは `false` です。
 - `num_runs`: 同じ条件で作成するrun数
 - `seed`: 乱数シード
 - `max_workers`: 並列実行数。`0` にすると実行数とCPU数から自動で最大値を使います。
@@ -84,8 +86,8 @@ data/runs/<run_id>/
 PER測定モード:
 
 - `simulation_mode = "per_measurement"` にすると、送信は瞬間ではなくLoRa送信時間ぶんの占有区間として扱います。
-- 送信予定時刻の直前にキャリアセンス区間を見て、他デバイスの送信区間と重なっていた場合、そのサイクルでは送信しません。
-- 実際に送ったものだけが `send_log.csv` に入り、スキップは `carrier_sense_log.csv` に `skip_busy` として記録されます。
+- 送信予定時刻の直前に `carrier_sense_duration_ms` で指定したキャリアセンス区間を見て、他デバイスの送信区間と重なっていた場合、そのサイクルでは送信しません。`carrier_sense_duration_ms = 0` の場合、この区間は0msなのでスキップ判定は行いません。
+- 実際に送ったものだけが `send_log.csv` に入ります。`save_carrier_sense_log = true` の場合、スキップは `carrier_sense_log.csv` に `skip_busy` として記録されます。
 - 送信時間はLoRa airtime式から計算し、実効値は `metadata.csv` の `transmission_time_ms` に保存されます。
 
 結合関数:
@@ -112,7 +114,7 @@ T_payload = payload_symbol_count * T_sym
 T_airtime_ms = (T_preamble + T_payload) * 1000
 ```
 
-PER測定モードでは、他ノードの受信・位相更新は送信開始時刻ではなく `transmission_end_time` で行います。周期データ、PER、位相差、位相ギャップ誤差も `transmission_end_time` を検知時刻として使います。古いログなどで `transmission_end_time` が無い場合は `time` を使います。
+PER測定モードでは、他ノードの受信・位相更新は送信開始時刻ではなく `transmission_end_time` で行います。キャリアセンスで送信をスキップした場合も、振動子内部の位相補正では、送れていた場合の `transmission_end_time` に相当する時刻を自分側の基準時刻として使います。周期データ、PER、位相差、位相ギャップ誤差も `transmission_end_time` を検知時刻として使います。古いログなどで `transmission_end_time` が無い場合は `time` を使います。
 
 CLIから実行する場合:
 
@@ -194,6 +196,8 @@ uv run research-program plot-convergence-summary
 - 集約統計を重ね描きした位相ギャップ誤差グラフ
 - 収束傾向の比較グラフ
 
+位相差グラフはデフォルトでは `send_log.csv` の実送信時刻だけを使います。キャリアセンスでスキップした送信予定時刻も含めたい場合は、グラフ設定の `include_skipped_send_times` を有効にします。その場合は `carrier_sense_log.csv` も保存しておく必要があります。
+
 Web UIの `Runs` ページでは、条件に合うrun数を確認し、その条件に合うrunだけを使ってグラフを作成できます。`Graph creation` ページでは、上記の画像データをWeb上から選択して作成できます。対象runをパラメーターやタグで絞り込み、既定ではフィルタ後のrunを全て対象にするため、大量のrunを個別選択リストへ展開しません。個別選択が必要な場合だけ、run IDやパスで候補を絞ってから選択できます。必要に応じて、周期データ、位相ギャップ誤差、集約統計の前処理も同時に実行できます。グラフ作成はバックグラウンドジョブとして開始され、ジョブ状態は `outputs/reports/graph_creation_jobs/` に保存されます。ページをリロードした後でも `Graph creation` ページの `Running graph jobs` から、完了コマンド数、経過時間、残り時間、終了予測時刻を確認できます。`Graph parameters` では、選択したグラフ種類ごとにx軸・y軸範囲、PER計算窓幅、基準周期、収束判定、画像サイズなどをWeb上から変更できます。ここで変更してグラフ作成に使った値は `outputs/reports/last_graph_plot_overrides.json` に保存され、次回以降の初期値として再利用されます。`Figures` ページでは、作成済みの画像やPDFを一覧表示し、PDFはプレビュー時とダウンロード時にPNG/JPEG/WebPへラスター化して扱えます。
 
 ## Web UI
@@ -216,7 +220,8 @@ Web UIでは次を行えます。
 - 画像作成に必要な前処理を実行
 - 画像作成の進行度と終了予測を表示。ページリロード後も進行中ジョブを確認
 - 作成済み画像やPDFの一覧表示
-- 結果画像のプレビューとダウンロード。PDFはラスター化して表示・ダウンロード
+- 結果画像のプレビューとダウンロード。PDFはラスター化して表示・ダウンロード。選択中の画像に対応する実験パラメーター、複数runの範囲、初期位相の候補範囲と選択範囲も表示
+- サーバー環境のCPUコア数、メモリ容量、GPU情報を確認
 - 実験結果データや画像の削除
 
 Web UIの高速化:

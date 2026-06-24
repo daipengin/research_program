@@ -79,6 +79,8 @@ class SimulationRequest:
     lora_explicit_header: bool = True
     lora_crc_enabled: bool = True
     lora_low_data_rate_optimize: bool | None = None
+    save_asleep_log: bool = False
+    save_carrier_sense_log: bool = False
 
 
 def request_from_config(config: dict[str, Any]) -> SimulationRequest:
@@ -110,6 +112,8 @@ def request_from_config(config: dict[str, Any]) -> SimulationRequest:
         lora_explicit_header=bool(simulation.get("lora_explicit_header", True)),
         lora_crc_enabled=bool(simulation.get("lora_crc_enabled", True)),
         lora_low_data_rate_optimize=_parse_optional_bool(simulation.get("lora_low_data_rate_optimize", None)),
+        save_asleep_log=bool(simulation.get("save_asleep_log", False)),
+        save_carrier_sense_log=bool(simulation.get("save_carrier_sense_log", False)),
         tags=tuple(str(tag) for tag in simulation.get("tags", [])),
         output_root=resolve_project_path(paths.get("output_runs_dir", "data/runs")),
         max_workers=int(simulation.get("max_workers", 0)),
@@ -205,9 +209,7 @@ def lora_airtime_ms_for_request(request: SimulationRequest) -> float:
 def effective_carrier_sense_duration_for_request(request: SimulationRequest) -> float:
     if request.simulation_mode != "per_measurement":
         return 0.0
-    if request.carrier_sense_duration_ms > 0:
-        return float(request.carrier_sense_duration_ms)
-    return float(request.cycle_time * (request.listening_rate / 2) / 100)
+    return float(request.carrier_sense_duration_ms)
 
 
 def _random_ranges_factory(request: SimulationRequest):
@@ -312,6 +314,8 @@ def run_simulation_request(
         lora_explicit_header=lora_config.explicit_header,
         lora_crc_enabled=lora_config.crc_enabled,
         lora_low_data_rate_optimize=resolve_low_data_rate_optimize(lora_config),
+        save_asleep_log=request.save_asleep_log,
+        save_carrier_sense_log=request.save_carrier_sense_log,
     )
 
     configs = build_run_configs(

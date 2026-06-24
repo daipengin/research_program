@@ -360,6 +360,87 @@ def _display_coupling_function(coupling_function: str) -> str:
     return "FrogChorus" if coupling_function == "FROGCHORUS" else coupling_function
 
 
+def minimum_per_row(df: pd.DataFrame) -> Optional[pd.Series]:
+    if df.empty or "per_percent_mean" not in df.columns:
+        return None
+
+    per_values = pd.to_numeric(df["per_percent_mean"], errors="coerce")
+    valid_per_values = per_values.dropna()
+    if valid_per_values.empty:
+        return None
+
+    return df.loc[valid_per_values.idxmin()]
+
+
+def format_minimum_per_summary(coupling_function: str, row: pd.Series) -> str:
+    display_name = _display_coupling_function(str(coupling_function))
+    coupling_strength = float(row["coupling_strength"])
+    per_percent = float(row["per_percent_mean"])
+    count = int(row["count"]) if "count" in row and not pd.isna(row["count"]) else 0
+    return f"min PER: method={display_name}, K={coupling_strength:g}, PER={per_percent:g}%, count={count}"
+
+
+def annotate_minimum_per(row: pd.Series) -> None:
+    if not CFG.show_min_per_annotation:
+        return
+
+    coupling_strength = float(row["coupling_strength"])
+    per_percent = float(row["per_percent_mean"])
+    label = f"min PER={per_percent:g}%\nK={coupling_strength:g}"
+
+    plt.plot(
+        [coupling_strength],
+        [per_percent],
+        linestyle="None",
+        marker="*",
+        markersize=CFG.min_per_marker_size,
+        color="tab:red",
+        zorder=5,
+    )
+    plt.annotate(
+        label,
+        xy=(coupling_strength, per_percent),
+        xytext=(8, 8),
+        textcoords="offset points",
+        fontsize=CFG.min_per_annotation_font_size,
+        ha="left",
+        va="bottom",
+        bbox={
+            "boxstyle": "round,pad=0.25",
+            "facecolor": "white",
+            "edgecolor": "0.4",
+            "alpha": 0.85,
+        },
+        arrowprops={
+            "arrowstyle": "->",
+            "linewidth": 0.8,
+            "color": "0.3",
+        },
+    )
+
+
+def error_bar_yerr(df: pd.DataFrame) -> np.ndarray | None:
+    if not CFG.show_error_bars:
+        return None
+
+    mode = str(getattr(CFG, "error_bar_mode", "std"))
+    if mode == "min_max":
+        required_columns = {"per_percent_mean", "per_percent_min", "per_percent_max"}
+        if not required_columns.issubset(df.columns):
+            return None
+        mean = df["per_percent_mean"].to_numpy(dtype=np.float64)
+        minimum = df["per_percent_min"].to_numpy(dtype=np.float64)
+        maximum = df["per_percent_max"].to_numpy(dtype=np.float64)
+        lower = np.clip(mean - minimum, 0.0, None)
+        upper = np.clip(maximum - mean, 0.0, None)
+        return np.vstack([lower, upper])
+
+    if mode == "std" and "per_percent_std" in df.columns:
+        return df["per_percent_std"].fillna(0.0).to_numpy(dtype=np.float64)
+
+    return None
+
+
 def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_paths: list[Path] = []
@@ -375,9 +456,7 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
 
         plt.figure(figsize=(CFG.figure_width, CFG.figure_height))
 
-        yerr = None
-        if CFG.show_error_bars and "per_percent_std" in sub.columns:
-            yerr = sub["per_percent_std"].fillna(0.0).to_numpy(dtype=np.float64)
+        yerr = error_bar_yerr(sub)
 
         if yerr is None:
             plt.plot(
@@ -400,14 +479,18 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
                 capsize=CFG.error_bar_capsize,
             )
 
+        min_row = minimum_per_row(sub)
+        if min_row is not None:
+            annotate_minimum_per(min_row)
+
         if CFG.xlim_min is not None or CFG.xlim_max is not None:
             plt.xlim(left=CFG.xlim_min, right=CFG.xlim_max)
 
         if CFG.ylim_min is not None or CFG.ylim_max is not None:
             plt.ylim(bottom=CFG.ylim_min, top=CFG.ylim_max)
 
-        plt.xlabel("Coupling strength K", fontsize=CFG.font_size_label)
-        plt.ylabel("PER [%]", fontsize=CFG.font_size_label)
+        plt.xlabel(CFG.x_label, fontsize=CFG.font_size_label)
+        plt.ylabel(CFG.y_label, fontsize=CFG.font_size_label)
 
         display_name = _display_coupling_function(str(coupling_function))
         if CFG.show_title:
@@ -433,17 +516,22 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
 def main() -> None:
     results_dir = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", CFG.results_dir))
     force_recalculate = os.environ.get("RESEARCH_PROGRAM_FORCE_RECALCULATE") == "1"
-
-    if not results_dir.exists():
-        raise FileNotFoundError(f"results folder not found: {results_dir}")
+    style_only_redraw = os.environ.get("RESEARCH_PROGRAM_STYLE_ONLY_REDRAW") == "1"
 
     CFG.graphs_dir.mkdir(parents=True, exist_ok=True)
     aggregated_csv_path = get_aggregated_csv_path(CFG.graphs_dir)
 
-    if CFG.use_existing_csv_if_available and aggregated_csv_path.exists() and not force_recalculate:
+    if style_only_redraw:
+        if not aggregated_csv_path.exists():
+            raise FileNotFoundError(f"style-only redraw needs existing csv: {aggregated_csv_path}")
+        agg_df = read_aggregated_csv(aggregated_csv_path)
+        print(f"loaded existing csv: {aggregated_csv_path}")
+    elif CFG.use_existing_csv_if_available and aggregated_csv_path.exists() and not force_recalculate:
         agg_df = read_aggregated_csv(aggregated_csv_path)
         print(f"loaded existing csv: {aggregated_csv_path}")
     else:
+        if not results_dir.exists():
+            raise FileNotFoundError(f"results folder not found: {results_dir}")
         raw_df = collect_all_results(results_dir)
         agg_df = aggregate_results(raw_df)
         csv_path = save_aggregated_csv(agg_df, CFG.graphs_dir)
@@ -456,6 +544,10 @@ def main() -> None:
 
     for path in plot_paths:
         print(f"saved: {path}")
+    for coupling_function, sub in agg_df.groupby("coupling_function"):
+        min_row = minimum_per_row(sub.sort_values("coupling_strength").reset_index(drop=True))
+        if min_row is not None:
+            print(format_minimum_per_summary(str(coupling_function), min_row))
 
 
 if __name__ == "__main__":

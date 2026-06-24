@@ -400,8 +400,8 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
         if CFG.ylim_min is not None or CFG.ylim_max is not None:
             plt.ylim(bottom=CFG.ylim_min, top=CFG.ylim_max)
 
-        plt.xlabel("Number of devices", fontsize=CFG.font_size_label)
-        plt.ylabel("PER [%]", fontsize=CFG.font_size_label)
+        plt.xlabel(CFG.x_label, fontsize=CFG.font_size_label)
+        plt.ylabel(CFG.y_label, fontsize=CFG.font_size_label)
 
         display_name = "FrogChorus" if coupling_function == "FROGCHORUS" else coupling_function
         if CFG.show_title:
@@ -506,8 +506,8 @@ def save_combined_method_plot(df: pd.DataFrame, output_dir: Path) -> Optional[Pa
     if CFG.ylim_min is not None or CFG.ylim_max is not None:
         plt.ylim(bottom=CFG.ylim_min, top=CFG.ylim_max)
 
-    plt.xlabel("Number of devices", fontsize=CFG.font_size_label)
-    plt.ylabel("PER [%]", fontsize=CFG.font_size_label)
+    plt.xlabel(CFG.x_label, fontsize=CFG.font_size_label)
+    plt.ylabel(CFG.y_label, fontsize=CFG.font_size_label)
 
     if CFG.show_title:
         plt.title(
@@ -532,17 +532,23 @@ def save_combined_method_plot(df: pd.DataFrame, output_dir: Path) -> Optional[Pa
 def main() -> None:
     results_dir = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", CFG.results_dir))
     force_recalculate = os.environ.get("RESEARCH_PROGRAM_FORCE_RECALCULATE") == "1"
-    if not results_dir.exists():
-        raise FileNotFoundError(f"results folder not found: {results_dir}")
+    style_only_redraw = os.environ.get("RESEARCH_PROGRAM_STYLE_ONLY_REDRAW") == "1"
 
     CFG.graphs_dir.mkdir(parents=True, exist_ok=True)
 
     aggregated_csv_path = get_aggregated_csv_path(CFG.graphs_dir)
 
-    if CFG.use_existing_csv_if_available and aggregated_csv_path.exists() and not force_recalculate:
+    if style_only_redraw:
+        if not aggregated_csv_path.exists():
+            raise FileNotFoundError(f"style-only redraw needs existing csv: {aggregated_csv_path}")
+        agg_df = read_aggregated_csv(aggregated_csv_path)
+        print(f"loaded existing csv: {aggregated_csv_path}")
+    elif CFG.use_existing_csv_if_available and aggregated_csv_path.exists() and not force_recalculate:
         agg_df = read_aggregated_csv(aggregated_csv_path)
         print(f"loaded existing csv: {aggregated_csv_path}")
     else:
+        if not results_dir.exists():
+            raise FileNotFoundError(f"results folder not found: {results_dir}")
         raw_df = collect_all_results(results_dir)
         agg_df = aggregate_results(raw_df)
 

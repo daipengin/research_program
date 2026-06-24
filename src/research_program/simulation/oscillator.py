@@ -32,20 +32,20 @@ class Oscillator:
         self.awake_count: int = 0
         self.receive_count: int = 0
 
-        self.last_event_time: Optional[int] = None
+        self.last_event_time: Optional[float] = None
         self.last_received_from: Optional[int] = None
-        self.last_send_time: Optional[int] = None
-        self.current_awake_start_time: Optional[int] = None
-        self.current_cycle_send_time: Optional[int] = None
+        self.last_send_time: Optional[float] = None
+        self.current_awake_start_time: Optional[float] = None
+        self.current_cycle_send_time: Optional[float] = None
 
         self.phase: float = 0.0
         self.phase_shift: float = 0.0
 
-        self.received_times_in_awake: List[int] = []
+        self.received_times_in_awake: List[float] = []
         self.is_awake_window: bool = False
 
 
-    def on_add(self, current_time: int) -> Tuple[object, int]:
+    def on_add(self, current_time: float) -> Tuple[object, float]:
         self.active = True
         self.last_event_time = current_time
 
@@ -57,7 +57,7 @@ class Oscillator:
         next_time = current_time +  self.cycle_time * (self.listening_rate/2)/100
         return (self.event_type_enum.SEND_Event, next_time)
 
-    def on_remove(self, current_time: int) -> None:
+    def on_remove(self, current_time: float) -> None:
         
         self.active = False
         self.last_event_time = current_time
@@ -65,25 +65,33 @@ class Oscillator:
         self.current_awake_start_time = None
         self.current_cycle_send_time = None
 
-    def on_send(self, current_time: int) -> Tuple[object, int]:
+    def on_send(
+        self,
+        current_time: float,
+        phase_reference_time: Optional[float] = None,
+    ) -> Tuple[object, float]:
         
 
         self.send_count += 1
         self.last_event_time = current_time
         self.last_send_time = current_time
-        self.current_cycle_send_time = current_time
+        self.current_cycle_send_time = current_time if phase_reference_time is None else phase_reference_time
 
         next_time = current_time +  self.cycle_time * (self.listening_rate/2)/100
         return (self.event_type_enum.ASLEEP_Event, next_time)
 
-    def on_skip_send(self, current_time: int) -> Tuple[object, int]:
+    def on_skip_send(
+        self,
+        current_time: float,
+        phase_reference_time: Optional[float] = None,
+    ) -> Tuple[object, float]:
         self.last_event_time = current_time
-        self.current_cycle_send_time = None
+        self.current_cycle_send_time = current_time if phase_reference_time is None else phase_reference_time
 
         next_time = current_time + self.cycle_time * (self.listening_rate / 2) / 100
         return (self.event_type_enum.ASLEEP_Event, next_time)
 
-    def on_receive(self, sender_id: int, sender_phase: float, current_time: int) -> None:
+    def on_receive(self, sender_id: int, sender_phase: float, current_time: float) -> None:
         
         self.receive_count += 1
         self.last_event_time = current_time
@@ -95,7 +103,7 @@ class Oscillator:
         
 
 
-    def on_asleep(self, current_time: int) -> Tuple[object, int]:
+    def on_asleep(self, current_time: float) -> Tuple[object, float]:
         
         self.sleep_count += 1
         self.last_event_time = current_time
@@ -124,7 +132,7 @@ class Oscillator:
         next_time = current_time + self.cycle_time * (100 - self.listening_rate)/100 + next_awake_delay
         return (self.event_type_enum.AWAKE_Event, next_time)
 
-    def on_awake(self, current_time: int) -> Tuple[object, int]:
+    def on_awake(self, current_time: float) -> Tuple[object, float]:
        
         self.awake_count += 1
         self.last_event_time = current_time
