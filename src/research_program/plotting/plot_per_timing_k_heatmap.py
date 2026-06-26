@@ -22,7 +22,10 @@ from research_program.plotting.plot_per_by_coupling_strength import (
     read_metadata,
     read_send_log,
 )
-from research_program.plotting.labels import coupling_strength_axis_label
+from research_program.plotting.labels import (
+    coupling_strength_axis_label,
+    coupling_strength_value_label,
+)
 
 
 CFG = PER_TIMING_K_HEATMAP_CONFIG
@@ -263,6 +266,61 @@ def per_level_marker_points(
     )
 
 
+def minimum_per_timing_point(
+    x_points: np.ndarray,
+    y_points: np.ndarray,
+) -> tuple[float, float] | None:
+    if x_points.size == 0 or y_points.size == 0:
+        return None
+    order = np.lexsort((x_points, y_points))
+    if order.size == 0:
+        return None
+    index = int(order[0])
+    return float(x_points[index]), float(y_points[index])
+
+
+def draw_minimum_per_timing_annotation(x_point: float, y_point: float) -> None:
+    if not getattr(CFG, "show_min_per_timing_annotation", True):
+        return
+
+    color = str(getattr(CFG, "min_per_timing_marker_color", "tab:red"))
+    plt.scatter(
+        [x_point],
+        [y_point],
+        s=float(getattr(CFG, "min_per_timing_marker_size", 120.0)),
+        marker="*",
+        color=color,
+        edgecolors="black",
+        linewidths=0.6,
+        label="minimum PER timing",
+        zorder=5,
+    )
+    plt.annotate(
+        (
+            "min timing\n"
+            f"{coupling_strength_value_label(x_point)}\n"
+            f"t={y_point:g} ms"
+        ),
+        xy=(x_point, y_point),
+        xytext=(8, 8),
+        textcoords="offset points",
+        fontsize=int(getattr(CFG, "min_per_timing_annotation_font_size", 14)),
+        ha="left",
+        va="bottom",
+        bbox={
+            "boxstyle": "round,pad=0.25",
+            "facecolor": "white",
+            "edgecolor": "0.4",
+            "alpha": 0.9,
+        },
+        arrowprops={
+            "arrowstyle": "->",
+            "linewidth": 0.8,
+            "color": "0.3",
+        },
+    )
+
+
 def draw_per_level_markers(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
     if not CFG.show_per_contour_line:
         return
@@ -283,6 +341,10 @@ def draw_per_level_markers(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
         label=f"min timing where PER<={level:g}%",
         zorder=3,
     )
+    min_point = minimum_per_timing_point(x_points, y_points)
+    if min_point is not None:
+        draw_minimum_per_timing_annotation(*min_point)
+
     if CFG.show_per_contour_label:
         plt.legend(fontsize=CFG.per_contour_label_font_size)
 

@@ -2229,6 +2229,7 @@ def _float_plot_input(
     *,
     min_value: float | None = None,
     step: float = 0.01,
+    disabled: bool = False,
 ) -> float:
     default_value = 0.0 if current_value is None else float(current_value)
     return float(
@@ -2238,6 +2239,7 @@ def _float_plot_input(
             min_value=min_value,
             step=step,
             key=key,
+            disabled=disabled,
         )
     )
 
@@ -2561,6 +2563,41 @@ def _add_per_level_marker_inputs(
             min_value=1,
             disabled=not values["show_per_contour_label"],
         )
+
+    if hasattr(config, "show_min_per_timing_annotation"):
+        st.markdown("**Minimum PER timing annotation**")
+        values["show_min_per_timing_annotation"] = bool(
+            st.checkbox(
+                "Show K and timing at minimum PER timing",
+                value=bool(_plot_config_value(config, "show_min_per_timing_annotation", saved_values, True)),
+                key=f"{prefix}_show_min_per_timing_annotation",
+            )
+        )
+        col_font, col_marker_size, col_marker_color = st.columns(3)
+        with col_font:
+            values["min_per_timing_annotation_font_size"] = _int_plot_input(
+                "Annotation font",
+                _plot_config_value(config, "min_per_timing_annotation_font_size", saved_values, 14),
+                f"{prefix}_min_per_timing_annotation_font_size",
+                min_value=1,
+                disabled=not values["show_min_per_timing_annotation"],
+            )
+        with col_marker_size:
+            values["min_per_timing_marker_size"] = _float_plot_input(
+                "Min marker size",
+                _plot_config_value(config, "min_per_timing_marker_size", saved_values, 120.0),
+                f"{prefix}_min_per_timing_marker_size",
+                min_value=1.0,
+                step=1.0,
+                disabled=not values["show_min_per_timing_annotation"],
+            )
+        with col_marker_color:
+            values["min_per_timing_marker_color"] = st.text_input(
+                "Min marker color",
+                value=str(_plot_config_value(config, "min_per_timing_marker_color", saved_values, "tab:red")),
+                key=f"{prefix}_min_per_timing_marker_color",
+                disabled=not values["show_min_per_timing_annotation"],
+            )
 
 
 def _add_standard_xy_plot_inputs(

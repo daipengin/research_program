@@ -684,6 +684,10 @@ class PerTimingCouplingStrengthHeatmapConfig:
     per_level_marker_style: str = "o"
     show_per_contour_label: bool = True
     per_contour_label_font_size: int = 18
+    show_min_per_timing_annotation: bool = True
+    min_per_timing_annotation_font_size: int = 14
+    min_per_timing_marker_size: float = 120.0
+    min_per_timing_marker_color: str = "tab:red"
 
     use_existing_csv_if_available: bool = False
 
