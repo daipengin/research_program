@@ -509,9 +509,83 @@ def _bump_cache_token(name: str) -> None:
     st.session_state[key] = int(st.session_state.get(key, 0)) + 1
 
 
+def _path_values(value: Any) -> list[str | Path]:
+    if isinstance(value, str | Path):
+        return [value]
+    if isinstance(value, list | tuple):
+        return [item for item in value if isinstance(item, str | Path)]
+    return []
+
+
+def _ensure_gitkeep(directory: Path) -> None:
+    try:
+        directory.resolve().relative_to(PROJECT_ROOT.resolve())
+    except ValueError:
+        return
+
+    gitkeep_path = directory / ".gitkeep"
+    if not gitkeep_path.exists():
+        gitkeep_path.write_text("", encoding="utf-8")
+
+
+def _ensure_server_directories(web_config: dict[str, Any]) -> None:
+    paths_config = web_config.get("paths", {})
+    directory_values: list[str | Path] = [
+        "data",
+        "data/runs",
+        "data/run",
+        "data/aggregated",
+        "data/archives",
+        "data/archives/temp",
+        "data/raw",
+        "data/raw/real",
+        "data/raw/simulation",
+        "outputs",
+        "outputs/figures",
+        "outputs/reports",
+        "outputs/reports/simulation_jobs",
+        "outputs/reports/graph_creation_jobs",
+    ]
+    gitkeep_directory_values: list[str | Path] = [
+        "data/runs",
+        "data/run",
+        "data/aggregated",
+        "data/archives",
+        "data/archives/temp",
+        "data/raw/real",
+        "data/raw/simulation",
+        "outputs/figures",
+        "outputs/reports",
+        "outputs/reports/simulation_jobs",
+        "outputs/reports/graph_creation_jobs",
+    ]
+    for key in ["runs_dirs", "aggregated_dirs", "figure_dirs"]:
+        configured_directories = _path_values(paths_config.get(key, []))
+        directory_values.extend(configured_directories)
+        gitkeep_directory_values.extend(configured_directories)
+
+    seen_paths: set[Path] = set()
+    for directory_value in directory_values:
+        directory = resolve_project_path(directory_value)
+        if directory in seen_paths:
+            continue
+        directory.mkdir(parents=True, exist_ok=True)
+        seen_paths.add(directory)
+
+    seen_gitkeep_paths: set[Path] = set()
+    for directory_value in gitkeep_directory_values:
+        directory = resolve_project_path(directory_value)
+        if directory in seen_gitkeep_paths:
+            continue
+        directory.mkdir(parents=True, exist_ok=True)
+        _ensure_gitkeep(directory)
+        seen_gitkeep_paths.add(directory)
+
+
 @st.cache_data(show_spinner=False)
 def _load_runtime(web_config_path: str | Path = DEFAULT_WEB_CONFIG) -> tuple[dict[str, Any], RunDataContract]:
     web_config = load_toml(web_config_path)
+    _ensure_server_directories(web_config)
     contract = load_data_contract(web_config["paths"]["data_format_config"])
     return web_config, contract
 
@@ -2373,6 +2447,76 @@ def _add_error_bar_inputs(
             )
 
 
+def _add_per_contour_line_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    if not hasattr(config, "show_per_contour_line"):
+        return
+
+    st.markdown("**PER contour line**")
+    values["show_per_contour_line"] = bool(
+        st.checkbox(
+            "Show PER=N contour line",
+            value=bool(_plot_config_value(config, "show_per_contour_line", saved_values, False)),
+            key=f"{prefix}_show_per_contour_line",
+        )
+    )
+
+    col_level, col_color, col_width, col_style = st.columns(4)
+    with col_level:
+        values["per_contour_level"] = _float_plot_input(
+            "PER level N [%]",
+            _plot_config_value(config, "per_contour_level", saved_values, 0.0),
+            f"{prefix}_per_contour_level",
+            min_value=0.0,
+            step=1.0,
+        )
+    with col_color:
+        values["per_contour_color"] = st.text_input(
+            "Line color",
+            value=str(_plot_config_value(config, "per_contour_color", saved_values, "white")),
+            key=f"{prefix}_per_contour_color",
+        )
+    with col_width:
+        values["per_contour_line_width"] = _float_plot_input(
+            "Line width",
+            _plot_config_value(config, "per_contour_line_width", saved_values, 2.0),
+            f"{prefix}_per_contour_line_width",
+            min_value=0.1,
+            step=0.1,
+        )
+    with col_style:
+        style_options = ["-", "--", "-.", ":"]
+        current_style = str(_plot_config_value(config, "per_contour_line_style", saved_values, "-"))
+        values["per_contour_line_style"] = st.selectbox(
+            "Line style",
+            options=style_options,
+            index=style_options.index(current_style) if current_style in style_options else 0,
+            key=f"{prefix}_per_contour_line_style",
+        )
+
+    col_label, col_label_font = st.columns(2)
+    with col_label:
+        values["show_per_contour_label"] = bool(
+            st.checkbox(
+                "Show line label",
+                value=bool(_plot_config_value(config, "show_per_contour_label", saved_values, True)),
+                key=f"{prefix}_show_per_contour_label",
+            )
+        )
+    with col_label_font:
+        values["per_contour_label_font_size"] = _int_plot_input(
+            "Line label font",
+            _plot_config_value(config, "per_contour_label_font_size", saved_values, 18),
+            f"{prefix}_per_contour_label_font_size",
+            min_value=1,
+            disabled=not values["show_per_contour_label"],
+        )
+
+
 def _add_standard_xy_plot_inputs(
     values: dict[str, Any],
     config: Any,
@@ -2639,6 +2783,7 @@ def _collect_plot_parameter_values(
             value=str(_plot_config_value(config, "colormap", saved_values, "viridis")),
             key=f"{prefix}_colormap",
         )
+        _add_per_contour_line_inputs(values, config, prefix, saved_values)
         st.caption("Each timing uses the PER value at the cycle containing that time, then averages runs by method, K, and timing.")
         _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
@@ -2848,6 +2993,13 @@ def _render_style_only_plot_parameter_controls(command_name: str) -> dict[str, d
         f"redraw_plot_override_{command_name}",
         saved_values,
     )
+    if command_name == "plot-per-timing-k-heatmap":
+        _add_per_contour_line_inputs(
+            values,
+            config,
+            f"redraw_plot_override_{command_name}",
+            saved_values,
+        )
     _add_min_per_annotation_inputs(
         values,
         config,

@@ -558,9 +558,12 @@ PERは0未満にならないようクリップする。
 | `plot-per-aligned` | 複数runのPER | `outputs/figures/per_aligned_graphs/*` | 基準cycleでそろえたPER比較。 |
 | `compare-per` | 複数runのPER | `outputs/figures/compare_per_graphs/*` | デバイス数・送信間隔ごとのPER比較。 |
 | `compare-per-by-coupling-strength` | 複数runのPER | `outputs/figures/per_by_coupling_strength_graphs/*` | 指定時刻のPERを結合強度ごとに比較。 |
+| `plot-per-timing-k-heatmap` | 複数runのPER | `outputs/figures/per_timing_k_heatmaps/*.pdf` | PER timingと結合強度KごとのPERヒートマップ。`show_per_contour_line = true` の場合、`per_contour_level` [%] のPER等高線を重ね描きする。 |
 | `plot-aggregated-phase-gap-error` | `data/aggregated/*.csv` | `outputs/figures/aggregated_stats_graphs/*.pdf` | 集約済み位相ギャップ誤差。 |
 | `plot-aggregated-phase-gap-error-overlay` | `data/aggregated/*.csv` | `outputs/figures/aggregated_stats_overlay_graphs/*` | 集約済み位相ギャップ誤差の重ね描き。 |
 | `plot-convergence-summary` | `data/aggregated/*.csv` | `outputs/figures/convergence_graphs/*` | 収束cycleと収束後変動の要約。 |
+
+`plot-per-timing-k-heatmap` のPER等高線オプションは、`PerTimingCouplingStrengthHeatmapConfig` で指定する。`show_per_contour_line` は等高線表示のON/OFF、`per_contour_level` は描画するPER値[%]、`per_contour_color` は線色、`per_contour_line_width` は線幅、`per_contour_line_style` は線種、`show_per_contour_label` は線ラベル表示、`per_contour_label_font_size` は線ラベルのフォントサイズである。例えばPER 0%の線を描く場合は `show_per_contour_line = true`, `per_contour_level = 0.0` を指定する。このオプションは表示だけを変更するため、同じtiming範囲・step・PER窓幅で作成済みの集計CSVがある場合は、Web UIの再描画または `RESEARCH_PROGRAM_STYLE_ONLY_REDRAW=1` で再集計せずに反映できる。
 
 位相差グラフはデフォルトでは `send_log.csv` の実送信時刻のみを使う。`VISUALIZE_PHASE_DIFF_CONFIG.include_skipped_send_times = true` の場合だけ、`carrier_sense_log.csv` の `action = skip_busy` 行を送信予定時刻として合成して位相差計算に含める。
 
@@ -595,6 +598,7 @@ uv run research-program --help
 | `aggregate-phase-gap-error` | 位相ギャップ誤差を集約する。 |
 | `compare-per` | デバイス数・送信間隔別PER比較を作成する。 |
 | `compare-per-by-coupling-strength` | 結合強度別PER比較を作成する。 |
+| `plot-per-timing-k-heatmap` | PER timingと結合強度KごとのPERヒートマップを作成する。必要に応じてPER=N%の等高線を重ね描きする。 |
 | `plot-phase-diff` | 位相差グラフを作成する。 |
 | `plot-phase-gap-error` | 位相ギャップ誤差グラフを作成する。 |
 | `plot-per` | PERグラフを作成する。 |
@@ -616,6 +620,8 @@ Windows用補助起動ファイル:
 ```text
 run_streamlit_app.bat
 ```
+
+Web UI起動時は、`data/`, `outputs/` と標準サブディレクトリを自動作成する。対象は `data/runs`, `data/run`, `data/aggregated`, `data/archives/temp`, `data/raw/real`, `data/raw/simulation`, `outputs/figures`, `outputs/reports`, `outputs/reports/simulation_jobs`, `outputs/reports/graph_creation_jobs` である。加えて、`configs/web/default.toml` の `runs_dirs`, `aggregated_dirs`, `figure_dirs` に指定されたディレクトリも存在しなければ作成する。Gitで空ディレクトリを保持する対象には `.gitkeep` も作成する。既存ディレクトリや既存ファイルは上書きしない。
 
 ### 13.1 ページ
 

@@ -675,6 +675,14 @@ class PerTimingCouplingStrengthHeatmapConfig:
     figure_height: float = 7.0
     save_dpi: int = 300
 
+    show_per_contour_line: bool = False
+    per_contour_level: float = 0.0
+    per_contour_color: str = "white"
+    per_contour_line_width: float = 2.0
+    per_contour_line_style: str = "-"
+    show_per_contour_label: bool = True
+    per_contour_label_font_size: int = 18
+
     use_existing_csv_if_available: bool = False
 
 

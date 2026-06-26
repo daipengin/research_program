@@ -238,6 +238,38 @@ def _pivot_heatmap(sub: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarra
     return x, y, z
 
 
+def draw_per_contour_line(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
+    if not CFG.show_per_contour_line:
+        return
+    if x.size < 2 or y.size < 2:
+        return
+
+    level = float(CFG.per_contour_level)
+    masked_z = np.ma.masked_invalid(z)
+    finite_values = masked_z.compressed()
+    if finite_values.size == 0:
+        return
+    if level < float(finite_values.min()) or level > float(finite_values.max()):
+        return
+
+    contour = plt.contour(
+        x,
+        y,
+        masked_z,
+        levels=[level],
+        colors=CFG.per_contour_color,
+        linewidths=CFG.per_contour_line_width,
+        linestyles=CFG.per_contour_line_style,
+    )
+    if CFG.show_per_contour_label:
+        plt.clabel(
+            contour,
+            fmt={level: f"PER={level:g}%"},
+            inline=True,
+            fontsize=CFG.per_contour_label_font_size,
+        )
+
+
 def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_paths: list[Path] = []
@@ -260,6 +292,7 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
             vmax=CFG.color_max,
             extent=[float(x.min()), float(x.max()), float(y.min()), float(y.max())],
         )
+        draw_per_contour_line(x, y, z)
 
         colorbar = plt.colorbar(mesh)
         colorbar.set_label(CFG.colorbar_label, fontsize=CFG.font_size_label)
