@@ -22,6 +22,7 @@ from research_program.plotting.plot_per_by_coupling_strength import (
     read_metadata,
     read_send_log,
 )
+from research_program.plotting.labels import coupling_strength_axis_label
 
 
 CFG = PER_TIMING_K_HEATMAP_CONFIG
@@ -238,36 +239,52 @@ def _pivot_heatmap(sub: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarra
     return x, y, z
 
 
-def draw_per_contour_line(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
+def per_level_marker_points(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    level: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    x_points: list[float] = []
+    y_points: list[float] = []
+
+    for column_index, coupling_strength in enumerate(x):
+        per_values = z[:, column_index]
+        matching_indices = np.flatnonzero(np.isfinite(per_values) & (per_values <= level))
+        if matching_indices.size == 0:
+            continue
+        first_index = int(matching_indices[0])
+        x_points.append(float(coupling_strength))
+        y_points.append(float(y[first_index]))
+
+    return (
+        np.array(x_points, dtype=np.float64),
+        np.array(y_points, dtype=np.float64),
+    )
+
+
+def draw_per_level_markers(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
     if not CFG.show_per_contour_line:
         return
-    if x.size < 2 or y.size < 2:
+    if x.size == 0 or y.size == 0:
         return
 
     level = float(CFG.per_contour_level)
-    masked_z = np.ma.masked_invalid(z)
-    finite_values = masked_z.compressed()
-    if finite_values.size == 0:
-        return
-    if level < float(finite_values.min()) or level > float(finite_values.max()):
+    x_points, y_points = per_level_marker_points(x, y, z, level)
+    if x_points.size == 0:
         return
 
-    contour = plt.contour(
-        x,
-        y,
-        masked_z,
-        levels=[level],
-        colors=CFG.per_contour_color,
-        linewidths=CFG.per_contour_line_width,
-        linestyles=CFG.per_contour_line_style,
+    plt.scatter(
+        x_points,
+        y_points,
+        s=float(getattr(CFG, "per_level_marker_size", 42.0)),
+        marker=str(getattr(CFG, "per_level_marker_style", "o")),
+        color=CFG.per_contour_color,
+        label=f"min timing where PER<={level:g}%",
+        zorder=3,
     )
     if CFG.show_per_contour_label:
-        plt.clabel(
-            contour,
-            fmt={level: f"PER={level:g}%"},
-            inline=True,
-            fontsize=CFG.per_contour_label_font_size,
-        )
+        plt.legend(fontsize=CFG.per_contour_label_font_size)
 
 
 def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
@@ -292,7 +309,7 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
             vmax=CFG.color_max,
             extent=[float(x.min()), float(x.max()), float(y.min()), float(y.max())],
         )
-        draw_per_contour_line(x, y, z)
+        draw_per_level_markers(x, y, z)
 
         colorbar = plt.colorbar(mesh)
         colorbar.set_label(CFG.colorbar_label, fontsize=CFG.font_size_label)
@@ -304,7 +321,7 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
         if CFG.ylim_min is not None or CFG.ylim_max is not None:
             plt.ylim(bottom=CFG.ylim_min, top=CFG.ylim_max)
 
-        plt.xlabel(CFG.x_label, fontsize=CFG.font_size_label)
+        plt.xlabel(coupling_strength_axis_label(CFG.x_label), fontsize=CFG.font_size_label)
         plt.ylabel(CFG.y_label, fontsize=CFG.font_size_label)
 
         if CFG.show_title:

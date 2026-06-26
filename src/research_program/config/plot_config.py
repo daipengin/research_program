@@ -604,7 +604,7 @@ class PerByCouplingStrengthPlotConfig:
     ylim_min: Optional[float] = 0
     ylim_max: Optional[float] = 100
 
-    x_label: str = "Coupling strength K"
+    x_label: str = "Coupling strength K (tick × -0.0001)"
     y_label: str = "PER [%]"
 
     font_size_label: int = 30
@@ -660,7 +660,7 @@ class PerTimingCouplingStrengthHeatmapConfig:
     color_min: Optional[float] = 0.0
     color_max: Optional[float] = 100.0
 
-    x_label: str = "Coupling strength K"
+    x_label: str = "Coupling strength K (tick × -0.0001)"
     y_label: str = "PER timing [ms]"
     colorbar_label: str = "PER [%]"
     colormap: str = "viridis"
@@ -680,6 +680,8 @@ class PerTimingCouplingStrengthHeatmapConfig:
     per_contour_color: str = "white"
     per_contour_line_width: float = 2.0
     per_contour_line_style: str = "-"
+    per_level_marker_size: float = 42.0
+    per_level_marker_style: str = "o"
     show_per_contour_label: bool = True
     per_contour_label_font_size: int = 18
 

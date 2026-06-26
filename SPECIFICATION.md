@@ -144,6 +144,8 @@ data/runs/<run_id>/
 
 従来互換として、出力先がディレクトリの場合は `data/runs/<run_id>/` 形式でCSVを保存する。出力先が `.sqlite`, `.sqlite3`, `.db` のいずれかの拡張子を持つ場合はSQLite run storeとして扱う。Web UIのrun探索はCSV runディレクトリとSQLite run storeの両方を対象にする。既存のグラフ処理はCSV runディレクトリを前提にしているため、SQLite runを対象にグラフ作成する場合はジョブ実行時に対象runだけを一時ディレクトリへ `metadata.csv`, `send_log.csv`, `calculated_Cycle_data.csv`, `phase_gap_error.csv` として展開する。
 
+Web UIのシミュレーションフォームでは保存形式の既定をSQLiteにする。CSV保存は保存形式で `CSV` を選んだ場合だけ有効になり、出力先ディレクトリ配下へ従来形式のrunディレクトリを書き出す。
+
 ### 7.2 metadata.csv
 
 主な列:
@@ -548,6 +550,8 @@ success_ratio = actual_send_count_in_window / expected_packets
 PER[%] = (1 - success_ratio) * 100
 ```
 
+K-axis plots label the tick values as `tick × -0.0001` to show the simulation experiment parameter `strength_ratio = -0.0001`.
+
 PERは0未満にならないようクリップする。
 
 ## 11. グラフ生成仕様
@@ -562,12 +566,12 @@ PERは0未満にならないようクリップする。
 | `plot-per-aligned` | 複数runのPER | `outputs/figures/per_aligned_graphs/*` | 基準cycleでそろえたPER比較。 |
 | `compare-per` | 複数runのPER | `outputs/figures/compare_per_graphs/*` | デバイス数・送信間隔ごとのPER比較。 |
 | `compare-per-by-coupling-strength` | 複数runのPER | `outputs/figures/per_by_coupling_strength_graphs/*` | 指定時刻のPERを結合強度ごとに比較。 |
-| `plot-per-timing-k-heatmap` | 複数runのPER | `outputs/figures/per_timing_k_heatmaps/*.pdf` | PER timingと結合強度KごとのPERヒートマップ。`show_per_contour_line = true` の場合、`per_contour_level` [%] のPER等高線を重ね描きする。 |
+| `plot-per-timing-k-heatmap` | 複数runのPER | `outputs/figures/per_timing_k_heatmaps/*.pdf` | PER timingと結合強度KごとのPERヒートマップ。`show_per_contour_line = true` の場合、各Kについて `per_contour_level` [%] 以下になる最小PER timingをマーカーで重ね描きする。 |
 | `plot-aggregated-phase-gap-error` | `data/aggregated/*.csv` | `outputs/figures/aggregated_stats_graphs/*.pdf` | 集約済み位相ギャップ誤差。 |
 | `plot-aggregated-phase-gap-error-overlay` | `data/aggregated/*.csv` | `outputs/figures/aggregated_stats_overlay_graphs/*` | 集約済み位相ギャップ誤差の重ね描き。 |
 | `plot-convergence-summary` | `data/aggregated/*.csv` | `outputs/figures/convergence_graphs/*` | 収束cycleと収束後変動の要約。 |
 
-`plot-per-timing-k-heatmap` のPER等高線オプションは、`PerTimingCouplingStrengthHeatmapConfig` で指定する。`show_per_contour_line` は等高線表示のON/OFF、`per_contour_level` は描画するPER値[%]、`per_contour_color` は線色、`per_contour_line_width` は線幅、`per_contour_line_style` は線種、`show_per_contour_label` は線ラベル表示、`per_contour_label_font_size` は線ラベルのフォントサイズである。例えばPER 0%の線を描く場合は `show_per_contour_line = true`, `per_contour_level = 0.0` を指定する。このオプションは表示だけを変更するため、同じtiming範囲・step・PER窓幅で作成済みの集計CSVがある場合は、Web UIの再描画または `RESEARCH_PROGRAM_STYLE_ONLY_REDRAW=1` で再集計せずに反映できる。
+`plot-per-timing-k-heatmap` のPER levelマーカーオプションは、`PerTimingCouplingStrengthHeatmapConfig` で指定する。`show_per_contour_line` はマーカー表示のON/OFF、`per_contour_level` は閾値N[%]、`per_contour_color` はマーカー色、`per_level_marker_size` はマーカーサイズ、`per_level_marker_style` はマーカー形状、`show_per_contour_label` は凡例表示、`per_contour_label_font_size` は凡例フォントサイズである。各Kについて、集計済みPERがN%以下になる最小のPER timingだけを1点描画し、点同士は線で結ばない。例えばPER 0%以下になる最小timingを描く場合は `show_per_contour_line = true`, `per_contour_level = 0.0` を指定する。このオプションは表示だけを変更するため、同じtiming範囲・step・PER窓幅で作成済みの集計CSVがある場合は、Web UIの再描画または `RESEARCH_PROGRAM_STYLE_ONLY_REDRAW=1` で再集計せずに反映できる。
 
 位相差グラフはデフォルトでは `send_log.csv` の実送信時刻のみを使う。`VISUALIZE_PHASE_DIFF_CONFIG.include_skipped_send_times = true` の場合だけ、`carrier_sense_log.csv` の `action = skip_busy` 行を送信予定時刻として合成して位相差計算に含める。
 
@@ -602,7 +606,7 @@ uv run research-program --help
 | `aggregate-phase-gap-error` | 位相ギャップ誤差を集約する。 |
 | `compare-per` | デバイス数・送信間隔別PER比較を作成する。 |
 | `compare-per-by-coupling-strength` | 結合強度別PER比較を作成する。 |
-| `plot-per-timing-k-heatmap` | PER timingと結合強度KごとのPERヒートマップを作成する。必要に応じてPER=N%の等高線を重ね描きする。 |
+| `plot-per-timing-k-heatmap` | PER timingと結合強度KごとのPERヒートマップを作成する。必要に応じて、各KでPERがN%以下になる最小timingをマーカーで重ね描きする。 |
 | `plot-phase-diff` | 位相差グラフを作成する。 |
 | `plot-phase-gap-error` | 位相ギャップ誤差グラフを作成する。 |
 | `plot-per` | PERグラフを作成する。 |

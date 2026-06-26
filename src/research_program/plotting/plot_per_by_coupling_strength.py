@@ -17,6 +17,10 @@ from research_program.io.send_log import (
     detection_time_values,
     normalize_send_time_columns,
 )
+from research_program.plotting.labels import (
+    coupling_strength_axis_label,
+    coupling_strength_value_label,
+)
 
 
 CFG = PER_BY_COUPLING_STRENGTH_PLOT_CONFIG
@@ -377,7 +381,11 @@ def format_minimum_per_summary(coupling_function: str, row: pd.Series) -> str:
     coupling_strength = float(row["coupling_strength"])
     per_percent = float(row["per_percent_mean"])
     count = int(row["count"]) if "count" in row and not pd.isna(row["count"]) else 0
-    return f"min PER: method={display_name}, K={coupling_strength:g}, PER={per_percent:g}%, count={count}"
+    return (
+        f"min PER: method={display_name}, "
+        f"{coupling_strength_value_label(coupling_strength)}, "
+        f"PER={per_percent:g}%, count={count}"
+    )
 
 
 def annotate_minimum_per(row: pd.Series) -> None:
@@ -386,7 +394,7 @@ def annotate_minimum_per(row: pd.Series) -> None:
 
     coupling_strength = float(row["coupling_strength"])
     per_percent = float(row["per_percent_mean"])
-    label = f"min PER={per_percent:g}%\nK={coupling_strength:g}"
+    label = f"min PER={per_percent:g}%\n{coupling_strength_value_label(coupling_strength)}"
 
     plt.plot(
         [coupling_strength],
@@ -489,7 +497,7 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
         if CFG.ylim_min is not None or CFG.ylim_max is not None:
             plt.ylim(bottom=CFG.ylim_min, top=CFG.ylim_max)
 
-        plt.xlabel(CFG.x_label, fontsize=CFG.font_size_label)
+        plt.xlabel(coupling_strength_axis_label(CFG.x_label), fontsize=CFG.font_size_label)
         plt.ylabel(CFG.y_label, fontsize=CFG.font_size_label)
 
         display_name = _display_coupling_function(str(coupling_function))

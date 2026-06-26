@@ -10,6 +10,7 @@ from matplotlib.lines import Line2D
 import pandas as pd
 
 from research_program.config.plot_config import CONVERGENCE_ANALYSIS_CONFIG
+from research_program.plotting.labels import coupling_strength_axis_label
 
 
 CFG = CONVERGENCE_ANALYSIS_CONFIG
@@ -196,7 +197,7 @@ def save_convergence_plot(df: pd.DataFrame, output_dir: Path) -> Path:
             )
         )
 
-    ax_left.set_xlabel("Coupling strength(×-0.0001)", fontsize=CFG.font_size_label)
+    ax_left.set_xlabel(coupling_strength_axis_label("Coupling strength K"), fontsize=CFG.font_size_label)
     ax_left.set_ylabel("Convergence cycle", fontsize=CFG.font_size_label)
     ax_right.set_ylabel("Post-convergence fluctuation", fontsize=CFG.font_size_label)
 

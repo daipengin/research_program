@@ -58,7 +58,7 @@ from research_program.io.run_store import (
     filter_records,
     records_to_frame,
 )
-from research_program.io.sqlite_runs import export_run_to_directory
+from research_program.io.sqlite_runs import export_run_to_directory, is_sqlite_run_store
 from research_program.plotting.phase_gap import (
     DEFAULT_Y_COLUMN,
     build_phase_gap_error_figure,
@@ -822,6 +822,23 @@ def _display_project_path(path: Path) -> str:
         return str(path)
 
 
+def _default_sqlite_output_text(
+    defaults: SimulationRequest,
+    config_defaults: SimulationRequest,
+) -> str:
+    if is_sqlite_run_store(defaults.output_root):
+        return _display_project_path(defaults.output_root)
+    if is_sqlite_run_store(config_defaults.output_root):
+        return _display_project_path(config_defaults.output_root)
+    return "data/run/simulation_runs.sqlite"
+
+
+def _default_csv_output_text(defaults: SimulationRequest) -> str:
+    if not is_sqlite_run_store(defaults.output_root):
+        return _display_project_path(defaults.output_root)
+    return "data/runs"
+
+
 def _simulation_request_to_dict(request: SimulationRequest) -> dict[str, Any]:
     return {
         "num_runs": request.num_runs,
@@ -1317,6 +1334,7 @@ def _simulation_review_frame(request: SimulationRequest) -> pd.DataFrame:
         if request.simulation_mode == "per_measurement"
         else "標準(Standard)"
     )
+    output_storage = "SQLite" if is_sqlite_run_store(request.output_root) else "CSV"
     if request.start_timing_mode == "fixed":
         start_times = fixed_start_times_for_request(request)
         start_timing_detail = ",".join(str(value) for value in start_times)
@@ -1342,6 +1360,7 @@ def _simulation_review_frame(request: SimulationRequest) -> pd.DataFrame:
         ("開始タイミング詳細(Start timing detail)", start_timing_detail),
         ("手動タグ(Manual tags)", ";".join(request.tags)),
         ("実際に使うタグ(Effective tags)", ";".join(effective_tags)),
+        ("保存形式(Output storage)", output_storage),
         ("出力先(Output runs dir / SQLite file)", _display_project_path(request.output_root)),
         ("asleep_log.csvを保存(Save asleep_log.csv)", request.save_asleep_log),
         ("carrier_sense_log.csvを保存(Save carrier_sense_log.csv)", request.save_carrier_sense_log),
@@ -1717,10 +1736,29 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
             value=_manual_tags_text(defaults.tags),
             help="台数タグはデバイス数から自動で付与されます(Device-count tag is added automatically).",
         )
-        output_root = st.text_input(
-            "run出力先ディレクトリまたはSQLiteファイル(Output runs dir or SQLite file)",
-            value=str(defaults.output_root.relative_to(PROJECT_ROOT)),
+        output_storage_format = st.radio(
+            "保存形式(Output storage)",
+            options=["sqlite", "csv"],
+            index=0,
+            horizontal=True,
+            format_func=lambda value: {
+                "sqlite": "SQLite",
+                "csv": "CSV",
+            }[value],
+            key="simulation_output_storage_format",
         )
+        if output_storage_format == "sqlite":
+            output_root = st.text_input(
+                "SQLiteファイル(SQLite file)",
+                value=_default_sqlite_output_text(defaults, config_defaults),
+                key="simulation_output_sqlite_path",
+            )
+        else:
+            output_root = st.text_input(
+                "CSV run出力ディレクトリ(CSV run output dir)",
+                value=_default_csv_output_text(defaults),
+                key="simulation_output_csv_dir",
+            )
         st.subheader("追加ログ出力(Optional CSV logs)")
         log_col_left, log_col_right = st.columns(2)
         with log_col_left:
@@ -2455,7 +2493,7 @@ def _add_error_bar_inputs(
             )
 
 
-def _add_per_contour_line_inputs(
+def _add_per_level_marker_inputs(
     values: dict[str, Any],
     config: Any,
     prefix: str,
@@ -2464,19 +2502,19 @@ def _add_per_contour_line_inputs(
     if not hasattr(config, "show_per_contour_line"):
         return
 
-    st.markdown("**PER contour line**")
+    st.markdown("**PER level markers**")
     values["show_per_contour_line"] = bool(
         st.checkbox(
-            "Show PER=N contour line",
+            "Show minimum timing markers for PER<=N",
             value=bool(_plot_config_value(config, "show_per_contour_line", saved_values, False)),
             key=f"{prefix}_show_per_contour_line",
         )
     )
 
-    col_level, col_color, col_width, col_style = st.columns(4)
+    col_level, col_color, col_size, col_marker = st.columns(4)
     with col_level:
         values["per_contour_level"] = _float_plot_input(
-            "PER level N [%]",
+            "PER threshold N [%]",
             _plot_config_value(config, "per_contour_level", saved_values, 0.0),
             f"{prefix}_per_contour_level",
             min_value=0.0,
@@ -2484,40 +2522,40 @@ def _add_per_contour_line_inputs(
         )
     with col_color:
         values["per_contour_color"] = st.text_input(
-            "Line color",
+            "Marker color",
             value=str(_plot_config_value(config, "per_contour_color", saved_values, "white")),
             key=f"{prefix}_per_contour_color",
         )
-    with col_width:
-        values["per_contour_line_width"] = _float_plot_input(
-            "Line width",
-            _plot_config_value(config, "per_contour_line_width", saved_values, 2.0),
-            f"{prefix}_per_contour_line_width",
-            min_value=0.1,
-            step=0.1,
+    with col_size:
+        values["per_level_marker_size"] = _float_plot_input(
+            "Marker size",
+            _plot_config_value(config, "per_level_marker_size", saved_values, 42.0),
+            f"{prefix}_per_level_marker_size",
+            min_value=1.0,
+            step=1.0,
         )
-    with col_style:
-        style_options = ["-", "--", "-.", ":"]
-        current_style = str(_plot_config_value(config, "per_contour_line_style", saved_values, "-"))
-        values["per_contour_line_style"] = st.selectbox(
-            "Line style",
-            options=style_options,
-            index=style_options.index(current_style) if current_style in style_options else 0,
-            key=f"{prefix}_per_contour_line_style",
+    with col_marker:
+        marker_options = ["o", "s", "^", "D", "x", "+"]
+        current_marker = str(_plot_config_value(config, "per_level_marker_style", saved_values, "o"))
+        values["per_level_marker_style"] = st.selectbox(
+            "Marker",
+            options=marker_options,
+            index=marker_options.index(current_marker) if current_marker in marker_options else 0,
+            key=f"{prefix}_per_level_marker_style",
         )
 
     col_label, col_label_font = st.columns(2)
     with col_label:
         values["show_per_contour_label"] = bool(
             st.checkbox(
-                "Show line label",
+                "Show marker legend",
                 value=bool(_plot_config_value(config, "show_per_contour_label", saved_values, True)),
                 key=f"{prefix}_show_per_contour_label",
             )
         )
     with col_label_font:
         values["per_contour_label_font_size"] = _int_plot_input(
-            "Line label font",
+            "Legend font",
             _plot_config_value(config, "per_contour_label_font_size", saved_values, 18),
             f"{prefix}_per_contour_label_font_size",
             min_value=1,
@@ -2791,7 +2829,7 @@ def _collect_plot_parameter_values(
             value=str(_plot_config_value(config, "colormap", saved_values, "viridis")),
             key=f"{prefix}_colormap",
         )
-        _add_per_contour_line_inputs(values, config, prefix, saved_values)
+        _add_per_level_marker_inputs(values, config, prefix, saved_values)
         st.caption("Each timing uses the PER value at the cycle containing that time, then averages runs by method, K, and timing.")
         _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
@@ -3002,7 +3040,7 @@ def _render_style_only_plot_parameter_controls(command_name: str) -> dict[str, d
         saved_values,
     )
     if command_name == "plot-per-timing-k-heatmap":
-        _add_per_contour_line_inputs(
+        _add_per_level_marker_inputs(
             values,
             config,
             f"redraw_plot_override_{command_name}",
