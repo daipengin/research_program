@@ -14,6 +14,7 @@ import uuid
 
 from research_program.config.paths import resolve_project_path
 from research_program.io.figures import discover_figures
+from research_program.io.sqlite_runs import export_run_to_directory, parse_sqlite_record_key
 
 
 GRAPH_CREATION_JOB_DIR = Path("outputs/reports/graph_creation_jobs")
@@ -94,12 +95,21 @@ def _copy_selected_runs_to_temp(run_paths: list[str], temp_runs_dir: Path) -> No
     temp_runs_dir.mkdir(parents=True, exist_ok=True)
     used_names: set[str] = set()
     for index, run_path_text in enumerate(run_paths):
-        run_path = Path(run_path_text)
-        run_dir_name = run_path.name
+        sqlite_record = parse_sqlite_record_key(run_path_text)
+        if sqlite_record is not None:
+            sqlite_path, run_id = sqlite_record
+            run_dir_name = run_id
+        else:
+            run_path = Path(run_path_text)
+            run_dir_name = run_path.name
         if run_dir_name in used_names:
             run_dir_name = f"{run_dir_name}_{index:04d}"
         used_names.add(run_dir_name)
-        shutil.copytree(run_path, temp_runs_dir / run_dir_name)
+        target_dir = temp_runs_dir / run_dir_name
+        if sqlite_record is not None:
+            export_run_to_directory(sqlite_path, run_id, target_dir)
+        else:
+            shutil.copytree(run_path, target_dir)
 
 
 def _path_is_relative_to(path: Path, root: Path) -> bool:
@@ -118,6 +128,8 @@ def _default_runs_dir(env_overrides: dict[str, str]) -> Path:
 def _single_selected_runs_root(selected_run_paths: list[str]) -> Path | None:
     roots: set[Path] = set()
     for run_path_text in selected_run_paths:
+        if parse_sqlite_record_key(run_path_text) is not None:
+            return None
         try:
             roots.add(Path(run_path_text).resolve().parent)
         except OSError:
@@ -132,6 +144,8 @@ def _needs_selected_run_workspace(
     all_run_count: int,
     default_runs_dir: Path,
 ) -> bool:
+    if any(parse_sqlite_record_key(path_text) is not None for path_text in selected_run_paths):
+        return True
     if len(selected_run_paths) != all_run_count:
         return True
     return any(not _path_is_relative_to(Path(path_text).resolve(), default_runs_dir) for path_text in selected_run_paths)

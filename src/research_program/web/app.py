@@ -58,6 +58,7 @@ from research_program.io.run_store import (
     filter_records,
     records_to_frame,
 )
+from research_program.io.sqlite_runs import export_run_to_directory
 from research_program.plotting.phase_gap import (
     DEFAULT_Y_COLUMN,
     build_phase_gap_error_figure,
@@ -1175,7 +1176,7 @@ def _start_graph_creation_job(
     job_id, job_path = create_graph_creation_job(
         commands=commands_to_run,
         selected_graph_commands=selected_graph_commands,
-        selected_run_paths=[str(record.path) for record in selected_target_records],
+        selected_run_paths=[record.record_key for record in selected_target_records],
         all_run_count=all_run_count,
         env_overrides=env_overrides,
         figure_dirs=[str(path) for path in web_config["paths"].get("figure_dirs", [])],
@@ -1341,7 +1342,7 @@ def _simulation_review_frame(request: SimulationRequest) -> pd.DataFrame:
         ("開始タイミング詳細(Start timing detail)", start_timing_detail),
         ("手動タグ(Manual tags)", ";".join(request.tags)),
         ("実際に使うタグ(Effective tags)", ";".join(effective_tags)),
-        ("出力先(Output runs dir)", _display_project_path(request.output_root)),
+        ("出力先(Output runs dir / SQLite file)", _display_project_path(request.output_root)),
         ("asleep_log.csvを保存(Save asleep_log.csv)", request.save_asleep_log),
         ("carrier_sense_log.csvを保存(Save carrier_sense_log.csv)", request.save_carrier_sense_log),
         ("指定ワーカー数(Requested max workers)", requested_workers),
@@ -1716,7 +1717,10 @@ def _render_simulation_tab(web_config: dict[str, Any]) -> None:
             value=_manual_tags_text(defaults.tags),
             help="台数タグはデバイス数から自動で付与されます(Device-count tag is added automatically).",
         )
-        output_root = st.text_input("run出力ディレクトリ(Output runs dir)", value=str(defaults.output_root.relative_to(PROJECT_ROOT)))
+        output_root = st.text_input(
+            "run出力先ディレクトリまたはSQLiteファイル(Output runs dir or SQLite file)",
+            value=str(defaults.output_root.relative_to(PROJECT_ROOT)),
+        )
         st.subheader("追加ログ出力(Optional CSV logs)")
         log_col_left, log_col_right = st.columns(2)
         with log_col_left:
@@ -1972,11 +1976,15 @@ def _copy_selected_runs_to_temp(records: list[RunRecord], temp_runs_dir: Path) -
     temp_runs_dir.mkdir(parents=True, exist_ok=True)
     used_names: set[str] = set()
     for index, record in enumerate(records):
-        run_dir_name = record.path.name
+        run_dir_name = record.run_id if record.storage_kind == "sqlite" else record.path.name
         if run_dir_name in used_names:
             run_dir_name = f"{run_dir_name}_{index:04d}"
         used_names.add(run_dir_name)
-        shutil.copytree(record.path, temp_runs_dir / run_dir_name)
+        target_dir = temp_runs_dir / run_dir_name
+        if record.storage_kind == "sqlite" and record.sqlite_path is not None:
+            export_run_to_directory(record.sqlite_path, record.run_id, target_dir)
+        else:
+            shutil.copytree(record.path, target_dir)
 
 
 def _aggregate_graph_command_selected(commands: list[str]) -> bool:
@@ -4581,7 +4589,14 @@ def _render_run_archive(records: list[RunRecord], web_config: dict[str, Any]) ->
         "(Moves selected runs to data/archives/temp; this is not deletion)."
     )
 
-    filtered_records = _filter_controls(records, web_config, key_prefix="maintenance_archive")
+    directory_records = [record for record in records if record.storage_kind == "directory"]
+    sqlite_count = len(records) - len(directory_records)
+    if sqlite_count:
+        st.caption(
+            f"SQLite-backed runs are not archived here because multiple runs share one DB file: {sqlite_count}"
+        )
+
+    filtered_records = _filter_controls(directory_records, web_config, key_prefix="maintenance_archive")
     selection_mode = st.radio(
         "アーカイブ対象の選び方(Target run selection)",
         options=["filtered_all", "manual"],
@@ -4684,8 +4699,20 @@ def _render_none_run_cleanup(records: list[RunRecord]) -> None:
         record
         for record in records
         if str(record.metadata.get("coupling_function") or "").strip().upper() == "NONE"
+        and record.storage_kind == "directory"
     ]
     st.metric("削除対象run数(Target NONE runs)", len(none_records))
+
+    sqlite_none_count = sum(
+        1
+        for record in records
+        if str(record.metadata.get("coupling_function") or "").strip().upper() == "NONE"
+        and record.storage_kind == "sqlite"
+    )
+    if sqlite_none_count:
+        st.caption(
+            f"SQLite-backed NONE runs are not deleted here because multiple runs share one DB file: {sqlite_none_count}"
+        )
 
     preview_rows = [
         {

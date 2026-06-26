@@ -73,7 +73,7 @@ src/research_program/
 
 | 用語 | 意味 |
 | --- | --- |
-| run | 1回の実験またはシミュレーション結果を格納する単位。`data/runs/<run_id>/` に保存する。 |
+| run | 1回の実験またはシミュレーション結果を格納する単位。既定のシミュレーション出力では `data/run/simulation_runs.sqlite` のSQLite内に保存する。従来互換のCSV runディレクトリでは `data/runs/<run_id>/` に保存する。 |
 | 振動子 / device | シミュレーション内の送信主体。`oscillator_id` で識別する。 |
 | cycle | 参照振動子の送信時刻を基準に定義される周期番号。 |
 | detection time | 解析で検知時刻として使う時刻。`transmission_end_time` があればそれを使い、なければ `time` を使う。 |
@@ -140,7 +140,9 @@ data/runs/<run_id>/
 
 `asleep_log.csv` はシミュレーションが出力する内部ログで、データ契約上の派生ファイルには含まれない。
 
-シミュレーションの既定出力は `metadata.csv` と `send_log.csv` のみである。`asleep_log.csv` と `carrier_sense_log.csv` は、シミュレーション設定で明示的に保存を有効にした場合だけ作成する。
+シミュレーションの既定出力はSQLiteであり、`data/run/simulation_runs.sqlite` に `runs`, `send_log`, `asleep_log`, `carrier_sense_log`, `calculated_cycle_data`, `phase_gap_error` テーブルとして保存する。`asleep_log` と `carrier_sense_log` は、シミュレーション設定で明示的に保存を有効にした場合だけ行を保存する。`calculated_cycle_data` と `phase_gap_error` はPER計算窓幅などグラフ固有パラメーターに依存しない派生データとして、シミュレーションrun完了後にSQLiteへ保存する。PER値そのものは窓幅に依存するため保存せず、グラフ作成時に `send_log` と `calculated_cycle_data` から再計算する。
+
+従来互換として、出力先がディレクトリの場合は `data/runs/<run_id>/` 形式でCSVを保存する。出力先が `.sqlite`, `.sqlite3`, `.db` のいずれかの拡張子を持つ場合はSQLite run storeとして扱う。Web UIのrun探索はCSV runディレクトリとSQLite run storeの両方を対象にする。既存のグラフ処理はCSV runディレクトリを前提にしているため、SQLite runを対象にグラフ作成する場合はジョブ実行時に対象runだけを一時ディレクトリへ `metadata.csv`, `send_log.csv`, `calculated_Cycle_data.csv`, `phase_gap_error.csv` として展開する。
 
 ### 7.2 metadata.csv
 
@@ -215,7 +217,9 @@ CLI:
 uv run research-program run-simulation
 ```
 
-既定では `configs/experiments/default_simulation.toml` を読み込み、`data/runs/` にrunを保存する。
+既定では `configs/experiments/default_simulation.toml` を読み込み、`data/run/simulation_runs.sqlite` にrunを保存する。`output_runs_dir` にディレクトリを指定した場合は、従来通り `data/runs/<run_id>/` 形式でCSV保存する。
+
+`output_runs_dir` が省略された場合、および `run_simulation_case()` / `run_simulations_in_parallel()` を出力先未指定で直接呼び出した場合の既定出力先も `data/run/simulation_runs.sqlite` である。
 
 ### 8.2 SimulationRequest
 
@@ -685,6 +689,8 @@ outputs/reports/simulation_jobs/<job_id>.json
 - `requests`
 - `results`
 - `error`
+
+`results` の各run結果には、従来の `run_id`, `output_dir`, `elapsed_sec` に加えて、保存形式と保存時間・出力量の計測値を含める。`storage_kind` は `sqlite` または `directory` である。`simulation_elapsed_sec` はイベント処理本体の時間、`save_elapsed_sec` はSQLite/CSV保存時間、`total_elapsed_sec` はその合計である。`send_log_rows`, `asleep_log_rows`, `carrier_sense_log_rows`, `metadata_rows`, `total_event_log_rows`, `total_csv_data_rows` はヘッダーを除いたデータ行数相当である。CSV保存では `send_log_bytes`, `asleep_log_bytes`, `carrier_sense_log_bytes`, `metadata_bytes`, `total_output_bytes` にファイルサイズを入れる。SQLite保存では `sqlite_store_bytes` と `total_output_bytes` にSQLite storeのサイズを入れる。
 
 ### 14.2 グラフ作成ジョブ
 

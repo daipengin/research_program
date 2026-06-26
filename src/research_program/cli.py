@@ -85,6 +85,7 @@ def list_runs(args: argparse.Namespace) -> int:
             "listening_rate",
             "tags",
             "status",
+            "storage_kind",
             "path",
         ]
         if column in df.columns

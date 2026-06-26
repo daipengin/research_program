@@ -1,6 +1,6 @@
 [paths]
 data_format_config = "configs/data_format/run_v1.toml"
-output_runs_dir = "data/runs"
+output_runs_dir = "data/run/simulation_runs.sqlite"
 
 [simulation]
 num_runs = 1

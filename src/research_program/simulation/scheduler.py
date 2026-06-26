@@ -11,8 +11,14 @@ import itertools
 import os
 import time
 
+import pandas as pd
+
+from research_program.io import sqlite_runs
 from research_program.simulation.coupling_functions import CouplingFunction, resolve_coupling_function
 from research_program.simulation.oscillator import Oscillator
+
+
+DEFAULT_SIMULATION_OUTPUT_ROOT = Path("data/run/simulation_runs.sqlite")
 
 
 class OscillatorEventType(Enum):
@@ -279,6 +285,295 @@ class BufferedCsvEventLogger:
     def flush_all(self, config: RunConfig) -> None:
         self.flush_logs()
         self.flush_metadata(config)
+
+    def row_counts(self) -> dict[str, int]:
+        send_log_rows = len(self.send_rows)
+        asleep_log_rows = len(self.asleep_rows)
+        carrier_sense_log_rows = len(self.carrier_sense_rows)
+        total_event_log_rows = send_log_rows + asleep_log_rows + carrier_sense_log_rows
+        metadata_rows = 1
+        return {
+            "send_log_rows": send_log_rows,
+            "asleep_log_rows": asleep_log_rows,
+            "carrier_sense_log_rows": carrier_sense_log_rows,
+            "metadata_rows": metadata_rows,
+            "total_event_log_rows": total_event_log_rows,
+            "total_csv_data_rows": total_event_log_rows + metadata_rows,
+        }
+
+    def output_file_sizes(self) -> dict[str, int]:
+        def file_size(path: Path, *, enabled: bool = True) -> int:
+            if not enabled or not path.exists():
+                return 0
+            return path.stat().st_size
+
+        send_log_bytes = file_size(self.send_log_path)
+        asleep_log_bytes = file_size(self.asleep_log_path, enabled=self.save_asleep_log)
+        carrier_sense_log_bytes = file_size(
+            self.carrier_sense_log_path,
+            enabled=self.save_carrier_sense_log,
+        )
+        metadata_bytes = file_size(self.metadata_log_path)
+        return {
+            "send_log_bytes": send_log_bytes,
+            "asleep_log_bytes": asleep_log_bytes,
+            "carrier_sense_log_bytes": carrier_sense_log_bytes,
+            "metadata_bytes": metadata_bytes,
+            "total_output_bytes": (
+                send_log_bytes
+                + asleep_log_bytes
+                + carrier_sense_log_bytes
+                + metadata_bytes
+            ),
+        }
+
+
+class SQLiteEventLogger:
+    def __init__(
+        self,
+        sqlite_path: str | Path,
+        run_id: str,
+        save_asleep_log: bool = False,
+        save_carrier_sense_log: bool = False,
+        batch_size: int = 10_000,
+    ) -> None:
+        self.sqlite_path = Path(sqlite_path)
+        self.run_id = run_id
+        self.save_asleep_log = save_asleep_log
+        self.save_carrier_sense_log = save_carrier_sense_log
+        self.batch_size = max(1, int(batch_size))
+
+        self.conn = sqlite_runs.connect(self.sqlite_path)
+        sqlite_runs.initialize(self.conn)
+        sqlite_runs.delete_run(self.conn, self.run_id)
+
+        self.send_buffer: list[tuple[Any, ...]] = []
+        self.asleep_buffer: list[tuple[Any, ...]] = []
+        self.carrier_sense_buffer: list[tuple[Any, ...]] = []
+        self.send_log_rows = 0
+        self.asleep_log_rows = 0
+        self.carrier_sense_log_rows = 0
+
+    def log_send(
+        self,
+        time_: float,
+        oscillator_id: int,
+        send_count: int,
+        transmission_end_time: float,
+        transmission_time_ms: float,
+    ) -> None:
+        self.send_buffer.append(
+            (
+                self.run_id,
+                time_,
+                str(oscillator_id),
+                send_count,
+                transmission_end_time,
+                transmission_time_ms,
+            )
+        )
+        self.send_log_rows += 1
+        if len(self.send_buffer) >= self.batch_size:
+            self._flush_send_buffer()
+
+    def log_asleep(self, current_time: float, next_time: float, oscillator_id: int) -> None:
+        if not self.save_asleep_log:
+            return
+        self.asleep_buffer.append((self.run_id, current_time, next_time, str(oscillator_id)))
+        self.asleep_log_rows += 1
+        if len(self.asleep_buffer) >= self.batch_size:
+            self._flush_asleep_buffer()
+
+    def log_carrier_sense(
+        self,
+        time_: float,
+        oscillator_id: int,
+        action: str,
+        carrier_sense_start: float,
+        carrier_sense_end: float,
+        blocking_oscillator_id: Optional[int],
+        blocking_transmission_start: Optional[float],
+        blocking_transmission_end: Optional[float],
+    ) -> None:
+        if not self.save_carrier_sense_log:
+            return
+        self.carrier_sense_buffer.append(
+            (
+                self.run_id,
+                time_,
+                str(oscillator_id),
+                action,
+                carrier_sense_start,
+                carrier_sense_end,
+                None if blocking_oscillator_id is None else str(blocking_oscillator_id),
+                blocking_transmission_start,
+                blocking_transmission_end,
+            )
+        )
+        self.carrier_sense_log_rows += 1
+        if len(self.carrier_sense_buffer) >= self.batch_size:
+            self._flush_carrier_sense_buffer()
+
+    def _flush_send_buffer(self) -> None:
+        if not self.send_buffer:
+            return
+        sqlite_runs.insert_rows(
+            self.conn,
+            "send_log",
+            [
+                "run_id",
+                "time",
+                "oscillator_id",
+                "send_count",
+                "transmission_end_time",
+                "transmission_time_ms",
+            ],
+            self.send_buffer,
+        )
+        self.send_buffer.clear()
+
+    def _flush_asleep_buffer(self) -> None:
+        if not self.asleep_buffer:
+            return
+        sqlite_runs.insert_rows(
+            self.conn,
+            "asleep_log",
+            ["run_id", "current_time", "next_time", "oscillator_id"],
+            self.asleep_buffer,
+        )
+        self.asleep_buffer.clear()
+
+    def _flush_carrier_sense_buffer(self) -> None:
+        if not self.carrier_sense_buffer:
+            return
+        sqlite_runs.insert_rows(
+            self.conn,
+            "carrier_sense_log",
+            [
+                "run_id",
+                "time",
+                "oscillator_id",
+                "action",
+                "carrier_sense_start",
+                "carrier_sense_end",
+                "blocking_oscillator_id",
+                "blocking_transmission_start",
+                "blocking_transmission_end",
+            ],
+            self.carrier_sense_buffer,
+        )
+        self.carrier_sense_buffer.clear()
+
+    def flush_logs(self) -> None:
+        self._flush_send_buffer()
+        self._flush_asleep_buffer()
+        self._flush_carrier_sense_buffer()
+
+    def flush_metadata(self, config: RunConfig) -> None:
+        sqlite_runs.insert_run_metadata(
+            self.conn,
+            sqlite_runs.run_metadata_row(config),
+        )
+
+    def flush_derived_data(self, config: RunConfig) -> None:
+        if self.send_log_rows == 0:
+            return
+
+        from research_program.analysis import calculate_cycle_data
+        from research_program.analysis import calculate_phase_gap_error
+
+        send_df = pd.read_sql_query(
+            """
+            SELECT time, oscillator_id, send_count, transmission_end_time, transmission_time_ms
+            FROM send_log
+            WHERE run_id = ?
+            ORDER BY time, oscillator_id
+            """,
+            self.conn,
+            params=(self.run_id,),
+        )
+        if send_df.empty:
+            return
+
+        tags = list(config.tags)
+        cycle_time = float(config.cycle_time)
+        if "sec" in tags:
+            cycle_time *= 1000.0
+
+        normalized_send_df = calculate_cycle_data.normalize_oscillator_id_column(send_df, tags)
+        normalized_send_df = calculate_cycle_data.normalize_time_column(normalized_send_df, tags)
+        reference_id, cycle_starts, is_original_cycle = calculate_cycle_data.build_cycle_starts(
+            normalized_send_df,
+            cycle_time,
+            tags,
+        )
+        cycle_df = pd.DataFrame(
+            {
+                "cycle_index": range(1, len(cycle_starts) + 1),
+                "cycle_start_time": cycle_starts,
+                "is_original_cycle": [int(value) for value in is_original_cycle],
+                "reference_id": [int(reference_id)] * len(cycle_starts),
+            }
+        )
+        sqlite_runs.replace_dataframe(
+            self.conn,
+            "calculated_cycle_data",
+            self.run_id,
+            cycle_df,
+        )
+
+        try:
+            num_devices = calculate_phase_gap_error.extract_device_count_from_tags(tags)
+        except ValueError:
+            return
+
+        phase_df = calculate_phase_gap_error.compute_mean_abs_gap_error_per_cycle(
+            send_df=normalized_send_df,
+            cycle_starts=cycle_starts,
+            num_devices=num_devices,
+        )
+        sqlite_runs.replace_dataframe(
+            self.conn,
+            "phase_gap_error",
+            self.run_id,
+            phase_df,
+        )
+
+    def flush_all(self, config: RunConfig) -> None:
+        self.flush_logs()
+        self.flush_metadata(config)
+        self.flush_derived_data(config)
+
+    def row_counts(self) -> dict[str, int]:
+        total_event_log_rows = self.send_log_rows + self.asleep_log_rows + self.carrier_sense_log_rows
+        metadata_rows = 1
+        return {
+            "send_log_rows": self.send_log_rows,
+            "asleep_log_rows": self.asleep_log_rows,
+            "carrier_sense_log_rows": self.carrier_sense_log_rows,
+            "metadata_rows": metadata_rows,
+            "total_event_log_rows": total_event_log_rows,
+            "total_csv_data_rows": total_event_log_rows + metadata_rows,
+        }
+
+    def output_file_sizes(self) -> dict[str, int]:
+        paths = [
+            self.sqlite_path,
+            self.sqlite_path.with_name(f"{self.sqlite_path.name}-wal"),
+            self.sqlite_path.with_name(f"{self.sqlite_path.name}-shm"),
+        ]
+        sqlite_store_bytes = sum(path.stat().st_size for path in paths if path.exists())
+        return {
+            "send_log_bytes": 0,
+            "asleep_log_bytes": 0,
+            "carrier_sense_log_bytes": 0,
+            "metadata_bytes": 0,
+            "sqlite_store_bytes": sqlite_store_bytes,
+            "total_output_bytes": sqlite_store_bytes,
+        }
+
+    def close(self) -> None:
+        self.conn.close()
 
 
 @dataclass(order=True)
@@ -584,40 +879,64 @@ class EventScheduler:
 
 def run_simulation_case(
     config: RunConfig,
-    output_root: str | Path = "data/runs",
+    output_root: str | Path = DEFAULT_SIMULATION_OUTPUT_ROOT,
     verbose: bool = False,
 ) -> dict:
-    output_dir = Path(output_root) / config.run_id
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_root_path = Path(output_root)
+    storage_kind = "sqlite" if sqlite_runs.is_sqlite_run_store(output_root_path) else "directory"
+    if storage_kind == "sqlite":
+        output_root_path.parent.mkdir(parents=True, exist_ok=True)
+        output_dir = output_root_path
+        logger = SQLiteEventLogger(
+            sqlite_path=output_root_path,
+            run_id=config.run_id,
+            save_asleep_log=config.save_asleep_log,
+            save_carrier_sense_log=config.save_carrier_sense_log,
+        )
+    else:
+        output_dir = output_root_path / config.run_id
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger = BufferedCsvEventLogger(
-        send_log_path=output_dir / "send_log.csv",
-        asleep_log_path=output_dir / "asleep_log.csv",
-        carrier_sense_log_path=output_dir / "carrier_sense_log.csv",
-        metadata_log_path=output_dir / "metadata.csv",
-        save_asleep_log=config.save_asleep_log,
-        save_carrier_sense_log=config.save_carrier_sense_log,
-    )
+        logger = BufferedCsvEventLogger(
+            send_log_path=output_dir / "send_log.csv",
+            asleep_log_path=output_dir / "asleep_log.csv",
+            carrier_sense_log_path=output_dir / "carrier_sense_log.csv",
+            metadata_log_path=output_dir / "metadata.csv",
+            save_asleep_log=config.save_asleep_log,
+            save_carrier_sense_log=config.save_carrier_sense_log,
+        )
 
     scheduler = EventScheduler(config=config, logger=logger, verbose=verbose)
     scheduler.initialize_from_ranges()
 
     t0 = time.perf_counter()
     scheduler.run()
-    elapsed = time.perf_counter() - t0
+    simulation_elapsed = time.perf_counter() - t0
 
+    row_counts = logger.row_counts()
+    save_t0 = time.perf_counter()
     logger.flush_all(config)
+    save_elapsed = time.perf_counter() - save_t0
+    if hasattr(logger, "close"):
+        logger.close()
+    file_sizes = logger.output_file_sizes()
 
     return {
         "run_id": config.run_id,
         "output_dir": str(output_dir),
-        "elapsed_sec": elapsed,
+        "storage_kind": storage_kind,
+        "elapsed_sec": simulation_elapsed,
+        "simulation_elapsed_sec": simulation_elapsed,
+        "save_elapsed_sec": save_elapsed,
+        "total_elapsed_sec": simulation_elapsed + save_elapsed,
+        **row_counts,
+        **file_sizes,
     }
 
 
 def run_simulations_in_parallel(
     configs: List[RunConfig],
-    output_root: str | Path = "data/runs",
+    output_root: str | Path = DEFAULT_SIMULATION_OUTPUT_ROOT,
     max_workers: Optional[int] = None,
     verbose: bool = False,
     progress_callback: Callable[[int, int, dict], None] | None = None,

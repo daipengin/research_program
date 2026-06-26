@@ -14,6 +14,7 @@ from research_program.io.data_contract import (
     load_data_contract,
     missing_required_files,
 )
+from research_program.io import sqlite_runs
 
 
 DEFAULT_RUN_INDEX_PATH = Path("outputs/reports/run_index.json")
@@ -27,9 +28,13 @@ class RunRecord:
     metadata: dict[str, Any]
     missing_files: tuple[str, ...]
     available_files: tuple[str, ...]
+    storage_kind: str = "directory"
+    sqlite_path: Path | None = None
 
     @property
     def record_key(self) -> str:
+        if self.storage_kind == "sqlite" and self.sqlite_path is not None:
+            return sqlite_runs.sqlite_record_key(self.sqlite_path, self.run_id)
         return str(self.path.resolve())
 
     @property
@@ -115,6 +120,25 @@ def read_metadata(metadata_path: Path, contract: RunDataContract | None = None) 
     return metadata
 
 
+def _metadata_from_sqlite_row(row: dict[str, Any], contract: RunDataContract) -> dict[str, Any]:
+    metadata_spec = contract.files.get("metadata")
+    if metadata_spec is None:
+        return dict(row)
+
+    metadata: dict[str, Any] = {}
+    row_series = pd.Series(row)
+    for column in metadata_spec.columns:
+        value = _first_present(row_series, column.accepted_names)
+        metadata[column.name] = _coerce_metadata_value(
+            value=value,
+            dtype=column.dtype,
+            separator=column.separator,
+        )
+    for column_name, value in row.items():
+        metadata.setdefault(column_name, value)
+    return metadata
+
+
 def _run_signature(run_dir: Path, contract: RunDataContract) -> dict[str, Any]:
     metadata_path = run_dir / "metadata.csv"
     metadata_stat = metadata_path.stat() if metadata_path.exists() else None
@@ -126,6 +150,16 @@ def _run_signature(run_dir: Path, contract: RunDataContract) -> dict[str, Any]:
         "dir_mtime_ns": run_stat.st_mtime_ns,
         "metadata_mtime_ns": metadata_stat.st_mtime_ns if metadata_stat is not None else None,
         "metadata_size": metadata_stat.st_size if metadata_stat is not None else None,
+    }
+
+
+def _sqlite_signature(sqlite_path: Path, contract: RunDataContract) -> dict[str, Any]:
+    return {
+        "path": str(sqlite_path.resolve()),
+        "storage_kind": "sqlite",
+        "contract_version": contract.version,
+        "required_files": list(contract.required_files),
+        "sqlite_files": _sqlite_store_file_signatures(sqlite_path),
     }
 
 
@@ -170,14 +204,79 @@ def _run_roots_signature(runs_dirs: Iterable[str | Path]) -> list[dict[str, Any]
             )
             continue
         root_stat = source_root.stat()
+        sqlite_files = _sqlite_files_for_root(source_root)
         signatures.append(
             {
                 "path": str(source_root.resolve()),
                 "exists": True,
                 "mtime_ns": root_stat.st_mtime_ns,
+                "sqlite_files": [
+                    signature
+                    for path in sqlite_files
+                    for signature in _sqlite_store_file_signatures(path)
+                ],
             }
         )
     return signatures
+
+
+def _sqlite_files_for_root(source_root: Path) -> list[Path]:
+    if source_root.is_file():
+        return [source_root] if sqlite_runs.is_sqlite_run_store(source_root) else []
+    return sorted(
+        path
+        for path in source_root.iterdir()
+        if path.is_file() and sqlite_runs.is_sqlite_run_store(path)
+    )
+
+
+def _sqlite_store_file_signatures(sqlite_path: Path) -> list[dict[str, Any]]:
+    paths = [
+        sqlite_path,
+        sqlite_path.with_name(f"{sqlite_path.name}-wal"),
+        sqlite_path.with_name(f"{sqlite_path.name}-shm"),
+    ]
+    signatures: list[dict[str, Any]] = []
+    for path in paths:
+        if not path.exists():
+            continue
+        stat = path.stat()
+        signatures.append(
+            {
+                "path": str(path.resolve()),
+                "mtime_ns": stat.st_mtime_ns,
+                "size": stat.st_size,
+            }
+        )
+    return signatures
+
+
+def _records_from_sqlite_store(
+    sqlite_path: Path,
+    source_root: Path,
+    contract: RunDataContract,
+) -> list[RunRecord]:
+    records: list[RunRecord] = []
+    for row in sqlite_runs.list_run_rows(sqlite_path):
+        metadata = _metadata_from_sqlite_row(row, contract)
+        run_id = str(metadata.get("run_id") or row.get("run_id") or sqlite_path.stem)
+        available_files = sqlite_runs.available_files_for_run(sqlite_path, run_id)
+        missing_files = tuple(
+            filename for filename in contract.required_files if filename not in set(available_files)
+        )
+        records.append(
+            RunRecord(
+                run_id=run_id,
+                path=sqlite_path,
+                source_root=source_root,
+                metadata=metadata,
+                missing_files=missing_files,
+                available_files=available_files,
+                storage_kind="sqlite",
+                sqlite_path=sqlite_path,
+            )
+        )
+    return records
 
 
 def _records_from_index_entries(entries: dict[str, Any]) -> list[RunRecord]:
@@ -197,6 +296,8 @@ def _records_from_index_entries(entries: dict[str, Any]) -> list[RunRecord]:
                 metadata=metadata,
                 missing_files=tuple(str(item) for item in entry.get("missing_files", [])),
                 available_files=tuple(str(item) for item in entry.get("available_files", [])),
+                storage_kind=str(entry.get("storage_kind") or "directory"),
+                sqlite_path=Path(entry["sqlite_path"]) if entry.get("sqlite_path") else None,
             )
         )
     return records
@@ -224,6 +325,12 @@ def discover_runs(
     for root_value in runs_dirs:
         source_root = resolve_project_path(root_value)
         if not source_root.exists():
+            continue
+
+        for sqlite_path in _sqlite_files_for_root(source_root):
+            records.extend(_records_from_sqlite_store(sqlite_path, source_root, contract))
+
+        if source_root.is_file():
             continue
 
         for run_dir in sorted(path for path in source_root.iterdir() if path.is_dir()):
@@ -276,6 +383,25 @@ def discover_runs_with_index(
         if not source_root.exists():
             continue
 
+        for sqlite_path in _sqlite_files_for_root(source_root):
+            signature = _sqlite_signature(sqlite_path, contract)
+            for record in _records_from_sqlite_store(sqlite_path, source_root, contract):
+                record_key = record.record_key
+                next_entries[record_key] = {
+                    "signature": signature,
+                    "run_id": record.run_id,
+                    "source_root": str(source_root.resolve()),
+                    "metadata": _json_safe(record.metadata),
+                    "missing_files": list(record.missing_files),
+                    "available_files": list(record.available_files),
+                    "storage_kind": "sqlite",
+                    "sqlite_path": str(sqlite_path.resolve()),
+                }
+                records.append(record)
+
+        if source_root.is_file():
+            continue
+
         for run_dir in sorted(path for path in source_root.iterdir() if path.is_dir()):
             record_key = str(run_dir.resolve())
             signature = _run_signature(run_dir, contract)
@@ -300,6 +426,7 @@ def discover_runs_with_index(
                 "metadata": _json_safe(metadata),
                 "missing_files": list(missing_files),
                 "available_files": list(available_files),
+                "storage_kind": "directory",
             }
             records.append(
                 RunRecord(
@@ -326,6 +453,7 @@ def records_to_frame(records: Iterable[RunRecord]) -> pd.DataFrame:
             "run_id": record.run_id,
             "path": str(record.path),
             "source_root": str(record.source_root),
+            "storage_kind": record.storage_kind,
             "status": "ok" if not record.missing_files else "missing files",
             "missing_files": ";".join(record.missing_files),
             "available_files": ";".join(record.available_files),

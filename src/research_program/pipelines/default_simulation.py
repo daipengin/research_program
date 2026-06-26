@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     results = run_simulations_in_parallel(
         configs=all_configs,
-        output_root="data/runs",
+        output_root="data/run/simulation_runs.sqlite",
         max_workers=default_max_workers(len(all_configs)),
         verbose=False,
     )

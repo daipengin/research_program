@@ -6,6 +6,7 @@ import re
 from typing import Any, Callable, Literal
 
 from research_program.config.paths import resolve_project_path
+from research_program.io import sqlite_runs
 from research_program.simulation.config_factory import build_run_configs
 from research_program.simulation.coupling_functions import CouplingFunction
 from research_program.simulation.lora_airtime import (
@@ -19,6 +20,7 @@ from research_program.simulation.range_generators import (
     generate_ranges_same_duration_from_unique_starts,
 )
 from research_program.simulation.scheduler import (
+    DEFAULT_SIMULATION_OUTPUT_ROOT,
     RunConfig,
     default_max_workers,
     run_simulation_case,
@@ -115,7 +117,7 @@ def request_from_config(config: dict[str, Any]) -> SimulationRequest:
         save_asleep_log=bool(simulation.get("save_asleep_log", False)),
         save_carrier_sense_log=bool(simulation.get("save_carrier_sense_log", False)),
         tags=tuple(str(tag) for tag in simulation.get("tags", [])),
-        output_root=resolve_project_path(paths.get("output_runs_dir", "data/runs")),
+        output_root=resolve_project_path(paths.get("output_runs_dir", DEFAULT_SIMULATION_OUTPUT_ROOT)),
         max_workers=int(simulation.get("max_workers", 0)),
     )
 
@@ -325,7 +327,12 @@ def run_simulation_request(
         ranges_factory=_ranges_factory_for_request(request),
     )
 
-    request.output_root.mkdir(parents=True, exist_ok=True)
+    if sqlite_runs.is_sqlite_run_store(request.output_root):
+        request.output_root.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite_runs.connect(request.output_root) as conn:
+            sqlite_runs.initialize(conn)
+    else:
+        request.output_root.mkdir(parents=True, exist_ok=True)
 
     max_workers = resolve_max_workers(len(configs), request.max_workers)
 
