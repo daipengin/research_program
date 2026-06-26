@@ -13,9 +13,11 @@ wheels/
 # Research-generated data and figures
 data/runs/*
 data/aggregated/*
+data/archives/*
 outputs/figures/*
 outputs/reports/*
 !data/runs/.gitkeep
 !data/aggregated/.gitkeep
+!data/archives/.gitkeep
 !outputs/figures/.gitkeep
 !outputs/reports/.gitkeep

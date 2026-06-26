@@ -639,6 +639,51 @@ PER_BY_COUPLING_STRENGTH_PLOT_CONFIG = _apply_plot_overrides(
 )
 
 
+@dataclass(frozen=True)
+class PerTimingCouplingStrengthHeatmapConfig:
+    results_dir: Path = Path("data/runs")
+    graphs_dir: Path = Path("outputs/figures/per_timing_k_heatmaps")
+
+    per_window_width_cycles: int = 10
+    timing_min_ms: float = 0.0
+    timing_max_ms: float = 300000.0
+    timing_step_ms: float = 30000.0
+
+    target_coupling_functions: tuple[str, ...] = ()
+    coupling_strength_min: Optional[float] = None
+    coupling_strength_max: Optional[float] = None
+
+    xlim_min: Optional[float] = None
+    xlim_max: Optional[float] = None
+    ylim_min: Optional[float] = None
+    ylim_max: Optional[float] = None
+    color_min: Optional[float] = 0.0
+    color_max: Optional[float] = 100.0
+
+    x_label: str = "Coupling strength K"
+    y_label: str = "PER timing [ms]"
+    colorbar_label: str = "PER [%]"
+    colormap: str = "viridis"
+
+    font_size_label: int = 30
+    font_size_title: int = 16
+    font_size_ticks: int = 25
+
+    show_title: bool = False
+
+    figure_width: float = 10.0
+    figure_height: float = 7.0
+    save_dpi: int = 300
+
+    use_existing_csv_if_available: bool = False
+
+
+PER_TIMING_K_HEATMAP_CONFIG = _apply_plot_overrides(
+    PerTimingCouplingStrengthHeatmapConfig(),
+    "PER_TIMING_K_HEATMAP_CONFIG",
+)
+
+
 COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG = _apply_plot_overrides(
     ComparePerByDevicesIntervalConfig(
         target_coupling_functions=(),

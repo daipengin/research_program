@@ -180,6 +180,7 @@ uv run research-program plot-per
 uv run research-program plot-per-aligned
 uv run research-program compare-per
 uv run research-program compare-per-by-coupling-strength
+uv run research-program plot-per-timing-k-heatmap
 uv run research-program plot-aggregated-phase-gap-error
 uv run research-program plot-aggregated-phase-gap-error-overlay
 uv run research-program plot-convergence-summary
@@ -265,6 +266,10 @@ uv run research-program clear-experiment-outputs --target figures
 uv run research-program clear-experiment-outputs --target runs --target aggregated --yes
 ```
 
+### 一時アーカイブ
+
+Web UIの `Maintenance` では、フィルタしたrunを削除せずに `data/archives/temp/<archive_id>/runs/` へ一時アーカイブできます。アーカイブ時には元のパスを記録した `manifest.json` を保存し、同じ画面から復元できます。
+
 ## CLI一覧
 
 ```powershell
@@ -288,6 +293,7 @@ uv run research-program plot-per
 uv run research-program plot-per-aligned
 uv run research-program compare-per
 uv run research-program compare-per-by-coupling-strength
+uv run research-program plot-per-timing-k-heatmap
 uv run research-program plot-aggregated-phase-gap-error
 uv run research-program plot-aggregated-phase-gap-error-overlay
 uv run research-program plot-convergence-summary

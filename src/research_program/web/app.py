@@ -37,6 +37,12 @@ from research_program.io.cleanup import (
     cleanup_experiment_outputs,
     cleanup_run_directories,
 )
+from research_program.io.archive import (
+    ArchiveResult,
+    archive_run_directories,
+    list_temp_archives,
+    restore_archive,
+)
 from research_program.io.data_contract import RunDataContract, load_data_contract
 from research_program.io.figures import (
     FigureAsset,
@@ -67,6 +73,7 @@ from research_program.config.plot_config import (
     COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG,
     CONVERGENCE_ANALYSIS_CONFIG,
     PER_BY_COUPLING_STRENGTH_PLOT_CONFIG,
+    PER_TIMING_K_HEATMAP_CONFIG,
     PER_ALIGNED_PLOT_CONFIG,
     PER_PLOT_CONFIG,
     PHASE_GAP_ERROR_PLOT_CONFIG,
@@ -333,6 +340,10 @@ GRAPH_CREATION_COMMANDS = {
         "label": "PER vs K by coupling function",
         "output": "outputs/figures/per_by_coupling_strength_graphs/*.pdf",
     },
+    "plot-per-timing-k-heatmap": {
+        "label": "PER timing × K heatmap",
+        "output": "outputs/figures/per_timing_k_heatmaps/*.pdf",
+    },
     "plot-aggregated-phase-gap-error": {
         "label": "集約位相ギャップ誤差グラフ(Aggregated phase-gap error graphs)",
         "output": "outputs/figures/aggregated_stats_graphs/*.pdf",
@@ -348,10 +359,20 @@ GRAPH_CREATION_COMMANDS = {
 }
 
 GRAPH_CREATION_PAGE_PREFIX = "graph_create::"
-STYLE_ONLY_REDRAW_GRAPH_COMMANDS = {"compare-per", "compare-per-by-coupling-strength"}
+STYLE_ONLY_REDRAW_GRAPH_COMMANDS = {
+    "compare-per",
+    "compare-per-by-coupling-strength",
+    "plot-per-timing-k-heatmap",
+}
 STYLE_ONLY_SOURCE_FIELDS_BY_GRAPH_COMMAND: dict[str, tuple[str, ...]] = {
     "compare-per": ("target_cycle", "per_window_width_cycles"),
     "compare-per-by-coupling-strength": ("target_time_ms", "per_window_width_cycles"),
+    "plot-per-timing-k-heatmap": (
+        "timing_min_ms",
+        "timing_max_ms",
+        "timing_step_ms",
+        "per_window_width_cycles",
+    ),
 }
 
 GRAPH_PREPROCESS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
@@ -361,6 +382,7 @@ GRAPH_PREPROCESS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "plot-per-aligned": ("calculate-cycle-data",),
     "compare-per": ("calculate-cycle-data",),
     "compare-per-by-coupling-strength": ("calculate-cycle-data",),
+    "plot-per-timing-k-heatmap": ("calculate-cycle-data",),
     "plot-aggregated-phase-gap-error": (
         "calculate-phase-gap-error",
         "aggregate-phase-gap-error",
@@ -384,6 +406,10 @@ PLOT_CONFIG_BY_GRAPH_COMMAND: dict[str, tuple[str, Any]] = {
     "compare-per-by-coupling-strength": (
         "PER_BY_COUPLING_STRENGTH_PLOT_CONFIG",
         PER_BY_COUPLING_STRENGTH_PLOT_CONFIG,
+    ),
+    "plot-per-timing-k-heatmap": (
+        "PER_TIMING_K_HEATMAP_CONFIG",
+        PER_TIMING_K_HEATMAP_CONFIG,
     ),
     "plot-aggregated-phase-gap-error": (
         "AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG",
@@ -412,6 +438,7 @@ GRAPH_TYPE_BY_OUTPUT_DIR = {
     "per_aligned_graphs": GRAPH_CREATION_COMMANDS["plot-per-aligned"]["label"],
     "compare_per_graphs": GRAPH_CREATION_COMMANDS["compare-per"]["label"],
     "per_by_coupling_strength_graphs": GRAPH_CREATION_COMMANDS["compare-per-by-coupling-strength"]["label"],
+    "per_timing_k_heatmaps": GRAPH_CREATION_COMMANDS["plot-per-timing-k-heatmap"]["label"],
     "aggregated_stats_graphs": GRAPH_CREATION_COMMANDS["plot-aggregated-phase-gap-error"]["label"],
     "aggregated_stats_overlay_graphs": GRAPH_CREATION_COMMANDS["plot-aggregated-phase-gap-error-overlay"]["label"],
     "convergence_graphs": GRAPH_CREATION_COMMANDS["plot-convergence-summary"]["label"],
@@ -430,6 +457,7 @@ FIGURE_SCOPE_BY_OUTPUT_DIR = {
     "per_aligned_graphs": "single",
     "compare_per_graphs": "multiple",
     "per_by_coupling_strength_graphs": "multiple",
+    "per_timing_k_heatmaps": "multiple",
     "aggregated_stats_graphs": "multiple",
     "aggregated_stats_overlay_graphs": "multiple",
     "convergence_graphs": "multiple",
@@ -437,6 +465,7 @@ FIGURE_SCOPE_BY_OUTPUT_DIR = {
 
 GRAPH_DESCRIPTION_BY_OUTPUT_DIR = {
     "per_by_coupling_strength_graphs": "Compares PER at a target time by coupling strength K, separated by coupling function",
+    "per_timing_k_heatmaps": "Shows PER as color over coupling strength K and PER timing",
     "phase_diff_graphs": "1つのrunの送信時刻から位相差を表示(Uses one run to show phase differences)",
     "phase_gap_error_graphs": "1つのrunの位相ギャップ誤差を表示(Uses one run to show phase-gap error)",
     "per_graphs": "1つのrunのPERを表示(Uses one run to show PER)",
@@ -1980,6 +2009,10 @@ def _estimated_figure_count(command_name: str, records: list[RunRecord]) -> tupl
         target_functions = set(PER_BY_COUPLING_STRENGTH_PLOT_CONFIG.target_coupling_functions)
         count = len(coupling_functions) if not target_functions else len(coupling_functions.intersection(target_functions))
         return count, "1 figure per coupling function"
+    if command_name == "plot-per-timing-k-heatmap":
+        target_functions = set(PER_TIMING_K_HEATMAP_CONFIG.target_coupling_functions)
+        count = len(coupling_functions) if not target_functions else len(coupling_functions.intersection(target_functions))
+        return count, "1 heatmap per coupling function"
     if command_name == "plot-aggregated-phase-gap-error":
         allowed_pairs = {
             pair
@@ -2552,6 +2585,61 @@ def _collect_plot_parameter_values(
         _add_min_per_annotation_inputs(values, config, prefix, saved_values)
         _add_error_bar_inputs(values, config, prefix, saved_values)
         st.caption("PER vs K uses the PER value at the cycle containing the specified timing.")
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "plot-per-timing-k-heatmap":
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+        _add_range_plot_inputs(
+            values,
+            config,
+            prefix,
+            title="PER color range",
+            min_field="color_min",
+            max_field="color_max",
+            min_label="PER color min [%]",
+            max_label="PER color max [%]",
+            saved_values=saved_values,
+        )
+        st.markdown("**PER timing × K heatmap**")
+        col_start, col_end, col_step, col_window = st.columns(4)
+        with col_start:
+            values["timing_min_ms"] = _float_plot_input(
+                "Timing min [ms]",
+                _plot_config_value(config, "timing_min_ms", saved_values),
+                f"{prefix}_timing_min_ms",
+                min_value=0.0,
+                step=1000.0,
+            )
+        with col_end:
+            values["timing_max_ms"] = _float_plot_input(
+                "Timing max [ms]",
+                _plot_config_value(config, "timing_max_ms", saved_values),
+                f"{prefix}_timing_max_ms",
+                min_value=0.0,
+                step=1000.0,
+            )
+        with col_step:
+            values["timing_step_ms"] = _float_plot_input(
+                "Timing step [ms]",
+                _plot_config_value(config, "timing_step_ms", saved_values),
+                f"{prefix}_timing_step_ms",
+                min_value=1.0,
+                step=1000.0,
+            )
+        with col_window:
+            values["per_window_width_cycles"] = _int_plot_input(
+                "PER window width [cycles]",
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
+                f"{prefix}_per_window_width_cycles",
+                min_value=1,
+            )
+        values["colormap"] = st.text_input(
+            "Colormap",
+            value=str(_plot_config_value(config, "colormap", saved_values, "viridis")),
+            key=f"{prefix}_colormap",
+        )
+        st.caption("Each timing uses the PER value at the cycle containing that time, then averages runs by method, K, and timing.")
         _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
         return values
 
@@ -4263,6 +4351,175 @@ def _cleanup_result_to_frame(result: CleanupResult) -> pd.DataFrame:
     )
 
 
+def _archive_result_to_frame(result: ArchiveResult) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for item in result.items:
+        source_path = item.source_path
+        archived_path = item.archived_path
+        try:
+            source_text = str(source_path.relative_to(PROJECT_ROOT))
+        except ValueError:
+            source_text = str(source_path)
+        try:
+            archived_text = str(archived_path.relative_to(PROJECT_ROOT))
+        except ValueError:
+            archived_text = str(archived_path)
+        rows.append(
+            {
+                "source_path": source_text,
+                "archived_path": archived_text,
+                "kind": "directory" if item.is_dir else "file",
+                "size_kb": round(item.size_bytes / 1024, 1),
+                "status": item.status,
+                "message": item.message,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _render_archive_restore() -> None:
+    archive_dirs = list_temp_archives()
+    if not archive_dirs:
+        st.caption("一時アーカイブはまだありません(No temporary archives yet).")
+        return
+
+    archive_by_key = {str(path): path for path in archive_dirs}
+    selected_key = st.selectbox(
+        "復元するアーカイブ(Archive to restore)",
+        options=list(archive_by_key),
+        format_func=lambda key: _display_project_path(archive_by_key[key]),
+        key="restore_archive_select",
+    )
+    selected_archive = archive_by_key[selected_key]
+    preview = restore_archive(selected_archive, dry_run=True)
+
+    col_count, col_size = st.columns(2)
+    col_count.metric("復元対象run数(Runs)", preview.item_count)
+    col_size.metric("サイズ[MB](Size [MB])", f"{preview.total_size_mb:.3f}")
+    st.dataframe(_archive_result_to_frame(preview), width="stretch", hide_index=True)
+
+    blocked_items = [item for item in preview.items if item.status != "ok"]
+    if blocked_items:
+        st.warning("元の場所に同名データがあるため、復元できない項目があります(Some items cannot be restored because original paths already exist).")
+
+    confirmation = st.text_input(
+        "復元を有効にするには RESTORE と入力(Type RESTORE to enable restore)",
+        key="restore_archive_confirmation",
+    )
+    restore_disabled = confirmation != "RESTORE" or bool(blocked_items) or preview.item_count == 0
+    if st.button(
+        "選択したアーカイブを復元(Restore selected archive)",
+        disabled=restore_disabled,
+        key="restore_archive_button",
+    ):
+        result = restore_archive(selected_archive, dry_run=False)
+        st.success(
+            f"{result.item_count} 件を復元しました"
+            f"(Restored {result.item_count} item(s))."
+        )
+        _bump_cache_token("runs")
+        st.cache_data.clear()
+        st.rerun()
+
+
+def _render_run_archive(records: list[RunRecord], web_config: dict[str, Any]) -> None:
+    st.subheader("対象runを一時アーカイブ(Temporarily archive target runs)")
+    st.caption(
+        "選択したrunを data/archives/temp に移動します。削除ではなく、後から復元できます"
+        "(Moves selected runs to data/archives/temp; this is not deletion)."
+    )
+
+    filtered_records = _filter_controls(records, web_config, key_prefix="maintenance_archive")
+    selection_mode = st.radio(
+        "アーカイブ対象の選び方(Target run selection)",
+        options=["filtered_all", "manual"],
+        horizontal=True,
+        key="maintenance_archive_selection_mode",
+        format_func=lambda value: {
+            "filtered_all": "フィルタ結果をすべて使う(Use all filtered runs)",
+            "manual": "個別に選択(Select individually)",
+        }[value],
+    )
+
+    if selection_mode == "filtered_all":
+        target_records = filtered_records
+    else:
+        search_text = st.text_input(
+            "run検索(Run search)",
+            key="maintenance_archive_run_search",
+        )
+        candidate_records = filtered_records
+        if search_text.strip():
+            keywords = [keyword.lower() for keyword in search_text.split() if keyword.strip()]
+            candidate_records = [
+                record
+                for record in filtered_records
+                if all(keyword in f"{record.run_id} {record.path}".lower() for keyword in keywords)
+            ]
+        max_candidates = st.number_input(
+            "選択候補の最大表示数(Max displayed candidates)",
+            min_value=1,
+            value=500,
+            key="maintenance_archive_max_candidates",
+        )
+        displayed_candidates = candidate_records[: int(max_candidates)]
+        record_by_key = {record.record_key: record for record in displayed_candidates}
+        selected_keys = st.multiselect(
+            "アーカイブするrun(Runs to archive)",
+            options=list(record_by_key),
+            default=[],
+            key="maintenance_archive_runs",
+            format_func=lambda key: f"{record_by_key[key].run_id} ({_display_project_path(record_by_key[key].path)})",
+        )
+        target_records = [record_by_key[key] for key in selected_keys if key in record_by_key]
+        st.caption(f"候補 {len(candidate_records)} 件中 {len(displayed_candidates)} 件を表示中(Showing {len(displayed_candidates)} of {len(candidate_records)} candidates).")
+
+    try:
+        preview = archive_run_directories((record.path for record in target_records), dry_run=True)
+        archive_error = ""
+    except ValueError as exc:
+        preview = ArchiveResult(
+            archive_dir=PROJECT_ROOT / "data" / "archives" / "temp",
+            dry_run=True,
+            item_count=0,
+            total_bytes=0,
+            items=tuple(),
+        )
+        archive_error = str(exc)
+
+    if archive_error:
+        st.error(archive_error)
+
+    col_count, col_size = st.columns(2)
+    col_count.metric("アーカイブ対象run数(Target runs)", preview.item_count)
+    col_size.metric("サイズ[MB](Size [MB])", f"{preview.total_size_mb:.3f}")
+    st.dataframe(_archive_result_to_frame(preview), width="stretch", hide_index=True)
+
+    confirmation = st.text_input(
+        "アーカイブを有効にするには ARCHIVE と入力(Type ARCHIVE to enable archive)",
+        key="archive_runs_confirmation",
+    )
+    archive_disabled = confirmation != "ARCHIVE" or preview.item_count == 0 or bool(archive_error)
+    if st.button(
+        "対象runを一時アーカイブ(Archive target runs)",
+        disabled=archive_disabled,
+        type="primary",
+        key="archive_runs_button",
+    ):
+        with st.spinner("対象runを一時アーカイブしています(Archiving target runs)..."):
+            result = archive_run_directories((record.path for record in target_records), dry_run=False)
+        st.success(
+            f"{result.item_count} 件を { _display_project_path(result.archive_dir) } にアーカイブしました"
+            f"(Archived {result.item_count} item(s))."
+        )
+        _bump_cache_token("runs")
+        st.cache_data.clear()
+        st.rerun()
+
+    with st.expander("一時アーカイブの復元(Restore temporary archive)", expanded=False):
+        _render_archive_restore()
+
+
 def _render_none_run_cleanup(records: list[RunRecord]) -> None:
     st.subheader("NONE runのみ削除(Delete NONE runs only)")
     st.warning(
@@ -4315,7 +4572,9 @@ def _render_none_run_cleanup(records: list[RunRecord]) -> None:
         st.rerun()
 
 
-def _render_maintenance_tab(records: list[RunRecord]) -> None:
+def _render_maintenance_tab(records: list[RunRecord], web_config: dict[str, Any]) -> None:
+    _render_run_archive(records, web_config)
+    st.divider()
     _render_none_run_cleanup(records)
     st.divider()
     st.subheader("実験結果の削除(Delete Experiment Outputs)")
@@ -4870,7 +5129,7 @@ def main() -> None:
         _render_server_tab()
     elif page == "maintenance":
         assert records is not None
-        _render_maintenance_tab(records)
+        _render_maintenance_tab(records, web_config)
     elif page == "contract":
         _render_contract_tab(contract)
 

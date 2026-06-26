@@ -29,6 +29,7 @@ MODULE_COMMANDS = {
     "aggregate-phase-gap-error": "research_program.analysis.aggregate_phase_gap_error_stats",
     "compare-per": "research_program.analysis.compare_per_by_devices_and_interval",
     "compare-per-by-coupling-strength": "research_program.plotting.plot_per_by_coupling_strength",
+    "plot-per-timing-k-heatmap": "research_program.plotting.plot_per_timing_k_heatmap",
     "plot-phase-diff": "research_program.plotting.visualize_phase_diff",
     "plot-phase-gap-error": "research_program.plotting.plot_phase_gap_error",
     "plot-per": "research_program.plotting.plot_PER",
