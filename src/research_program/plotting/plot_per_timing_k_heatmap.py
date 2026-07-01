@@ -30,6 +30,12 @@ from research_program.plotting.labels import (
 
 CFG = PER_TIMING_K_HEATMAP_CONFIG
 
+TIMING_DISPLAY_UNITS: dict[str, tuple[float, str]] = {
+    "ms": (1.0, "ms"),
+    "s": (1000.0, "s"),
+    "min": (60000.0, "min"),
+}
+
 
 def _format_number_for_filename(value: float) -> str:
     if float(value).is_integer():
@@ -44,6 +50,44 @@ def _safe_filename_part(value: str) -> str:
 
 def _display_coupling_function(coupling_function: str) -> str:
     return "FrogChorus" if coupling_function == "FROGCHORUS" else coupling_function
+
+
+def _timing_display_unit() -> str:
+    unit = str(getattr(CFG, "timing_display_unit", "ms")).strip().lower()
+    if unit in {"m", "minute", "minutes"}:
+        unit = "min"
+    if unit in {"sec", "second", "seconds"}:
+        unit = "s"
+    if unit not in TIMING_DISPLAY_UNITS:
+        raise ValueError("timing_display_unit must be one of: ms, s, min")
+    return unit
+
+
+def _timing_display_divisor() -> float:
+    divisor, _ = TIMING_DISPLAY_UNITS[_timing_display_unit()]
+    return divisor
+
+
+def _timing_display_label() -> str:
+    _, label = TIMING_DISPLAY_UNITS[_timing_display_unit()]
+    return label
+
+
+def _timing_axis_label() -> str:
+    base_label = str(getattr(CFG, "y_label", "PER timing")).strip() or "PER timing"
+    for suffix in (" [ms]", " [s]", " [min]"):
+        if base_label.endswith(suffix):
+            base_label = base_label[: -len(suffix)]
+            break
+    return f"{base_label} [{_timing_display_label()}]"
+
+
+def _to_display_timing(values_ms: np.ndarray) -> np.ndarray:
+    return values_ms / _timing_display_divisor()
+
+
+def _format_timing_for_annotation(value: float) -> str:
+    return f"{value:g} {_timing_display_label()}"
 
 
 def timing_grid_ms() -> np.ndarray:
@@ -242,6 +286,20 @@ def _pivot_heatmap(sub: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarra
     return x, y, z
 
 
+def _cell_extent_from_centers(values: np.ndarray) -> tuple[float, float]:
+    if values.size == 0:
+        return 0.0, 0.0
+    if values.size == 1:
+        center = float(values[0])
+        return center - 0.5, center + 0.5
+
+    centers = values.astype(np.float64, copy=False)
+    midpoints = (centers[:-1] + centers[1:]) / 2.0
+    first_width = midpoints[0] - centers[0]
+    last_width = centers[-1] - midpoints[-1]
+    return float(centers[0] - first_width), float(centers[-1] + last_width)
+
+
 def per_level_marker_points(
     x: np.ndarray,
     y: np.ndarray,
@@ -263,6 +321,26 @@ def per_level_marker_points(
     return (
         np.array(x_points, dtype=np.float64),
         np.array(y_points, dtype=np.float64),
+    )
+
+
+def zero_per_marker_points(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    tolerance: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    if x.size == 0 or y.size == 0 or z.size == 0:
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+
+    mask = np.isfinite(z) & (np.abs(z) <= max(float(tolerance), 0.0))
+    y_indices, x_indices = np.nonzero(mask)
+    if x_indices.size == 0:
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+
+    return (
+        x[x_indices].astype(np.float64, copy=False),
+        y[y_indices].astype(np.float64, copy=False),
     )
 
 
@@ -299,7 +377,7 @@ def draw_minimum_per_timing_annotation(x_point: float, y_point: float) -> None:
         (
             "min timing\n"
             f"{coupling_strength_value_label(x_point)}\n"
-            f"t={y_point:g} ms"
+            f"t={_format_timing_for_annotation(y_point)}"
         ),
         xy=(x_point, y_point),
         xytext=(8, 8),
@@ -349,6 +427,35 @@ def draw_per_level_markers(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
         plt.legend(fontsize=CFG.per_contour_label_font_size)
 
 
+def draw_zero_per_markers(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
+    if not getattr(CFG, "show_zero_per_markers", False):
+        return
+    if x.size == 0 or y.size == 0:
+        return
+
+    x_points, y_points = zero_per_marker_points(
+        x,
+        y,
+        z,
+        tolerance=float(getattr(CFG, "zero_per_marker_tolerance", 1e-9)),
+    )
+    if x_points.size == 0:
+        return
+
+    label = "PER=0%" if getattr(CFG, "show_zero_per_marker_label", True) else None
+    plt.scatter(
+        x_points,
+        y_points,
+        s=float(getattr(CFG, "zero_per_marker_size", 30.0)),
+        marker=str(getattr(CFG, "zero_per_marker_style", "x")),
+        color=str(getattr(CFG, "zero_per_marker_color", "black")),
+        label=label,
+        zorder=4,
+    )
+    if label is not None:
+        plt.legend(fontsize=CFG.per_contour_label_font_size)
+
+
 def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     output_paths: list[Path] = []
@@ -356,9 +463,10 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
         return output_paths
 
     for coupling_function, sub in df.groupby("coupling_function"):
-        x, y, z = _pivot_heatmap(sub)
-        if x.size == 0 or y.size == 0:
+        x, y_ms, z = _pivot_heatmap(sub)
+        if x.size == 0 or y_ms.size == 0:
             continue
+        y = _to_display_timing(y_ms)
 
         plt.figure(figsize=(CFG.figure_width, CFG.figure_height))
         mesh = plt.imshow(
@@ -369,9 +477,13 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
             cmap=CFG.colormap,
             vmin=CFG.color_min,
             vmax=CFG.color_max,
-            extent=[float(x.min()), float(x.max()), float(y.min()), float(y.max())],
+            extent=[
+                *_cell_extent_from_centers(x),
+                *_cell_extent_from_centers(y),
+            ],
         )
         draw_per_level_markers(x, y, z)
+        draw_zero_per_markers(x, y, z)
 
         colorbar = plt.colorbar(mesh)
         colorbar.set_label(CFG.colorbar_label, fontsize=CFG.font_size_label)
@@ -384,7 +496,7 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
             plt.ylim(bottom=CFG.ylim_min, top=CFG.ylim_max)
 
         plt.xlabel(coupling_strength_axis_label(CFG.x_label), fontsize=CFG.font_size_label)
-        plt.ylabel(CFG.y_label, fontsize=CFG.font_size_label)
+        plt.ylabel(_timing_axis_label(), fontsize=CFG.font_size_label)
 
         if CFG.show_title:
             display_name = _display_coupling_function(str(coupling_function))

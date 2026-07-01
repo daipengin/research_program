@@ -4,9 +4,9 @@
 
 ## 1. 概要
 
-`research_program` は、研究で扱う振動子ネットワークのシミュレーション、実機CSVデータの取り込み、周期・位相ギャップ誤差・PERの解析、グラフ生成、StreamlitによるWeb可視化を統合するPythonプロジェクトである。
+`research_program` は、研究で扱う振動子ネットワークのシミュレーション、周期・PERの解析、グラフ生成、StreamlitによるWeb可視化を統合するPythonプロジェクトである。実機CSVデータ取り込みと位相ギャップ誤差系の解析・描画は、現行の通常導線から外し、アーカイブ用コマンドとして保持する。
 
-主な利用者は、シミュレーション条件を変えながら複数runを生成し、実機データと同じrun形式で後処理・可視化したい研究作業者を想定する。
+主な利用者は、シミュレーション条件を変えながら複数runを生成し、PER中心の後処理・可視化を行いたい研究作業者を想定する。
 
 ## 2. スコープ
 
@@ -50,17 +50,17 @@ configs/
   experiments/      シミュレーション設定
   web/              Web UI設定
 data/
-  raw/real/         実機の元CSVデータ
   raw/simulation/   シミュレーション用の元データ
+  archives/         アーカイブ済み機能や一時退避データ
   runs/             共通run形式のデータ
   aggregated/       集約済み解析データ
 outputs/
   figures/          生成グラフ
   reports/          ジョブ状態、run index、前回設定など
 src/research_program/
-  analysis/         周期データ、位相ギャップ誤差、PER集約
+  analysis/         周期データ、PER集約
   config/           パス、TOML、プロット設定
-  io/               run探索、CSV契約、画像探索、削除
+  io/               run探索、データ契約、画像探索、削除
   pipelines/        旧来または補助的な一括実行入口
   plotting/         グラフ生成
   simulation/       シミュレータ本体
@@ -141,6 +141,8 @@ data/runs/<run_id>/
 `asleep_log.csv` はシミュレーションが出力する内部ログで、データ契約上の派生ファイルには含まれない。
 
 シミュレーションの既定出力はSQLiteであり、`data/run/simulation_runs.sqlite` に `runs`, `send_log`, `asleep_log`, `carrier_sense_log`, `calculated_cycle_data`, `phase_gap_error` テーブルとして保存する。`asleep_log` と `carrier_sense_log` は、シミュレーション設定で明示的に保存を有効にした場合だけ行を保存する。`calculated_cycle_data` と `phase_gap_error` はPER計算窓幅などグラフ固有パラメーターに依存しない派生データとして、シミュレーションrun完了後にSQLiteへ保存する。PER値そのものは窓幅に依存するため保存せず、グラフ作成時に `send_log` と `calculated_cycle_data` から再計算する。
+
+SQLiteへのイベントログ書き込みは、run中にメモリ上のバッファへ蓄積し、バッチ単位で `executemany` により保存する。バッチ行数は固定値ではなく、実行環境の利用可能メモリから目標バッファ容量を自動算出し、保存対象ログ種別ごとの概算メモリ使用量に応じて決定する。既定では利用可能メモリの25%を目標にし、メモリ取得に失敗した場合だけ256MiBを目標にする。バッチ行数の下限は10,000行とし、大容量メモリ環境を生かすため上限は設けない。これにより、メモリを積極的に利用してSQLiteへの書き込み回数を減らし、I/O時間を抑える。
 
 従来互換として、出力先がディレクトリの場合は `data/runs/<run_id>/` 形式でCSVを保存する。出力先が `.sqlite`, `.sqlite3`, `.db` のいずれかの拡張子を持つ場合はSQLite run storeとして扱う。Web UIのrun探索はCSV runディレクトリとSQLite run storeの両方を対象にする。既存のグラフ処理はCSV runディレクトリを前提にしているため、SQLite runを対象にグラフ作成する場合はジョブ実行時に対象runだけを一時ディレクトリへ `metadata.csv`, `send_log.csv`, `calculated_Cycle_data.csv`, `phase_gap_error.csv` として展開する。
 
@@ -392,12 +394,12 @@ T_airtime_ms = (T_preamble + T_payload) * 1000
 - `5 <= coding_rate_denominator <= 8`
 - `preamble_symbols >= 0`
 
-## 9. 実機データ取り込み仕様
+## 9. アーカイブ済み: 実機データ取り込み仕様
 
 CLI:
 
 ```powershell
-uv run research-program import-raw-data
+uv run research-program archive-import-raw-data
 ```
 
 入力:
@@ -473,12 +475,12 @@ uv run research-program calculate-cycle-data
 - 参照振動子の連続送信間隔が `cycle_time * 1.3` 以上なら、周期欠損とみなす。
 - `round(gap / cycle_time) - 1` 個の周期開始時刻を補間する。
 
-### 10.3 位相ギャップ誤差作成
+### 10.3 アーカイブ済み: 位相ギャップ誤差作成
 
 CLI:
 
 ```powershell
-uv run research-program calculate-phase-gap-error
+uv run research-program archive-calculate-phase-gap-error
 ```
 
 入力:
@@ -504,12 +506,12 @@ uv run research-program calculate-phase-gap-error
 
 `device_count` は `<N>dai` タグから取得する。このタグがないrunは位相ギャップ誤差計算に失敗する。
 
-### 10.4 位相ギャップ誤差の集約
+### 10.4 アーカイブ済み: 位相ギャップ誤差の集約
 
 CLI:
 
 ```powershell
-uv run research-program aggregate-phase-gap-error
+uv run research-program archive-aggregate-phase-gap-error
 ```
 
 入力:
@@ -561,17 +563,13 @@ PERは0未満にならないようクリップする。
 | CLIコマンド | 主な入力 | 主な出力 | 内容 |
 | --- | --- | --- | --- |
 | `plot-phase-diff` | `send_log.csv`, `calculated_Cycle_data.csv` | `outputs/figures/phase_diff_graphs/*.pdf` | 参照振動子との位相差。 |
-| `plot-phase-gap-error` | `phase_gap_error.csv` | `outputs/figures/phase_gap_error_graphs/*.pdf` | 位相ギャップ誤差と比率。 |
 | `plot-per` | `send_log.csv`, `calculated_Cycle_data.csv` | `outputs/figures/per_graphs/*.pdf` | runごとのPER推移とPER変化量。 |
 | `plot-per-aligned` | 複数runのPER | `outputs/figures/per_aligned_graphs/*` | 基準cycleでそろえたPER比較。 |
 | `compare-per` | 複数runのPER | `outputs/figures/compare_per_graphs/*` | デバイス数・送信間隔ごとのPER比較。 |
 | `compare-per-by-coupling-strength` | 複数runのPER | `outputs/figures/per_by_coupling_strength_graphs/*` | 指定時刻のPERを結合強度ごとに比較。 |
 | `plot-per-timing-k-heatmap` | 複数runのPER | `outputs/figures/per_timing_k_heatmaps/*.pdf` | PER timingと結合強度KごとのPERヒートマップ。`show_per_contour_line = true` の場合、各Kについて `per_contour_level` [%] 以下になる最小PER timingをマーカーで重ね描きする。 |
-| `plot-aggregated-phase-gap-error` | `data/aggregated/*.csv` | `outputs/figures/aggregated_stats_graphs/*.pdf` | 集約済み位相ギャップ誤差。 |
-| `plot-aggregated-phase-gap-error-overlay` | `data/aggregated/*.csv` | `outputs/figures/aggregated_stats_overlay_graphs/*` | 集約済み位相ギャップ誤差の重ね描き。 |
-| `plot-convergence-summary` | `data/aggregated/*.csv` | `outputs/figures/convergence_graphs/*` | 収束cycleと収束後変動の要約。 |
 
-`plot-per-timing-k-heatmap` のPER levelマーカーオプションは、`PerTimingCouplingStrengthHeatmapConfig` で指定する。`show_per_contour_line` はマーカー表示のON/OFF、`per_contour_level` は閾値N[%]、`per_contour_color` はマーカー色、`per_level_marker_size` はマーカーサイズ、`per_level_marker_style` はマーカー形状、`show_per_contour_label` は凡例表示、`per_contour_label_font_size` は凡例フォントサイズである。各Kについて、集計済みPERがN%以下になる最小のPER timingだけを1点描画し、点同士は線で結ばない。`show_min_per_timing_annotation = true` の場合は、そのマーカー群のうちPER timingが最小になる点を星印で強調し、K値とtimingを注釈表示する。同じtimingの点が複数ある場合はKが小さい点を採用する。例えばPER 0%以下になる最小timingを描く場合は `show_per_contour_line = true`, `per_contour_level = 0.0` を指定する。このオプションは表示だけを変更するため、同じtiming範囲・step・PER窓幅で作成済みの集計CSVがある場合は、Web UIの再描画または `RESEARCH_PROGRAM_STYLE_ONLY_REDRAW=1` で再集計せずに反映できる。
+`plot-per-timing-k-heatmap` のPER levelマーカーオプションは、`PerTimingCouplingStrengthHeatmapConfig` で指定する。ヒートマップの色分け範囲は `color_min` と `color_max` [%] で指定し、例えば0〜10%で色分けしたい場合は `color_min = 0.0`, `color_max = 10.0` を指定する。PER timingの計算条件と集計CSVはmsで保持し、縦軸の表示単位だけを `timing_display_unit` で `ms`, `s`, `min` から選べる。`show_per_contour_line` はマーカー表示のON/OFF、`per_contour_level` は閾値N[%]、`per_contour_color` はマーカー色、`per_level_marker_size` はマーカーサイズ、`per_level_marker_style` はマーカー形状、`show_per_contour_label` は凡例表示、`per_contour_label_font_size` は凡例フォントサイズである。各Kについて、集計済みPERがN%以下になる最小のPER timingだけを1点描画し、点同士は線で結ばない。`show_min_per_timing_annotation = true` の場合は、そのマーカー群のうちPER timingが最小になる点を星印で強調し、K値とtimingを注釈表示する。同じtimingの点が複数ある場合はKが小さい点を採用する。例えばPER 0%以下になる最小timingを描く場合は `show_per_contour_line = true`, `per_contour_level = 0.0` を指定する。PERが0%のセルすべてにだけマーカーを重ねる場合は `show_zero_per_markers = true` を指定する。0%判定は `zero_per_marker_tolerance` 以下の絶対値で行い、色・サイズ・形状は `zero_per_marker_color`, `zero_per_marker_size`, `zero_per_marker_style` で指定する。これらのオプションは表示だけを変更するため、同じtiming範囲・step・PER窓幅で作成済みの集計CSVがある場合は、Web UIの再描画または `RESEARCH_PROGRAM_STYLE_ONLY_REDRAW=1` で再集計せずに反映できる。
 
 位相差グラフはデフォルトでは `send_log.csv` の実送信時刻のみを使う。`VISUALIZE_PHASE_DIFF_CONFIG.include_skipped_send_times = true` の場合だけ、`carrier_sense_log.csv` の `action = skip_busy` 行を送信予定時刻として合成して位相差計算に含める。
 
@@ -580,9 +578,7 @@ PERは0未満にならないようクリップする。
 | グラフ | 前処理 |
 | --- | --- |
 | 位相差 | `calculate-cycle-data` |
-| 位相ギャップ誤差 | `calculate-phase-gap-error` |
 | PER | `calculate-cycle-data` |
-| 集約系グラフ | `calculate-phase-gap-error`, `aggregate-phase-gap-error` |
 
 ## 12. CLI仕様
 
@@ -600,20 +596,25 @@ uv run research-program --help
 | `list-runs` | Web設定のrun探索対象からrun一覧を表示する。 |
 | `run-simulation` | TOML設定からシミュレーションを実行する。 |
 | `clear-experiment-outputs` | 生成データ削除。既定はドライラン。 |
-| `import-raw-data` | 実機CSVをrun形式へ変換する。 |
 | `calculate-cycle-data` | 周期データを作成する。 |
-| `calculate-phase-gap-error` | 位相ギャップ誤差を作成する。 |
-| `aggregate-phase-gap-error` | 位相ギャップ誤差を集約する。 |
 | `compare-per` | デバイス数・送信間隔別PER比較を作成する。 |
 | `compare-per-by-coupling-strength` | 結合強度別PER比較を作成する。 |
 | `plot-per-timing-k-heatmap` | PER timingと結合強度KごとのPERヒートマップを作成する。必要に応じて、各KでPERがN%以下になる最小timingをマーカーで重ね描きする。 |
 | `plot-phase-diff` | 位相差グラフを作成する。 |
-| `plot-phase-gap-error` | 位相ギャップ誤差グラフを作成する。 |
 | `plot-per` | PERグラフを作成する。 |
 | `plot-per-aligned` | 基準cycle整列PERグラフを作成する。 |
-| `plot-aggregated-phase-gap-error` | 集約済み位相ギャップ誤差グラフを作成する。 |
-| `plot-aggregated-phase-gap-error-overlay` | 集約済み位相ギャップ誤差の重ね描きを作成する。 |
-| `plot-convergence-summary` | 収束要約グラフを作成する。 |
+
+アーカイブ用コマンド:
+
+| コマンド | 仕様 |
+| --- | --- |
+| `archive-import-raw-data` | 実機CSVをrun形式へ変換する旧処理。 |
+| `archive-calculate-phase-gap-error` | 位相ギャップ誤差を作成する旧処理。 |
+| `archive-aggregate-phase-gap-error` | 位相ギャップ誤差を集約する旧処理。 |
+| `archive-plot-phase-gap-error` | 位相ギャップ誤差グラフを作成する旧処理。 |
+| `archive-plot-aggregated-phase-gap-error` | 集約済み位相ギャップ誤差グラフを作成する旧処理。 |
+| `archive-plot-aggregated-phase-gap-error-overlay` | 集約済み位相ギャップ誤差の重ね描きを作成する旧処理。 |
+| `archive-plot-convergence-summary` | 収束要約グラフを作成する旧処理。 |
 
 ## 13. Web UI仕様
 
@@ -694,7 +695,7 @@ outputs/reports/simulation_jobs/<job_id>.json
 - `results`
 - `error`
 
-`results` の各run結果には、従来の `run_id`, `output_dir`, `elapsed_sec` に加えて、保存形式と保存時間・出力量の計測値を含める。`storage_kind` は `sqlite` または `directory` である。`simulation_elapsed_sec` はイベント処理本体の時間、`save_elapsed_sec` はSQLite/CSV保存時間、`total_elapsed_sec` はその合計である。`send_log_rows`, `asleep_log_rows`, `carrier_sense_log_rows`, `metadata_rows`, `total_event_log_rows`, `total_csv_data_rows` はヘッダーを除いたデータ行数相当である。CSV保存では `send_log_bytes`, `asleep_log_bytes`, `carrier_sense_log_bytes`, `metadata_bytes`, `total_output_bytes` にファイルサイズを入れる。SQLite保存では `sqlite_store_bytes` と `total_output_bytes` にSQLite storeのサイズを入れる。
+`results` の各run結果には、従来の `run_id`, `output_dir`, `elapsed_sec` に加えて、保存形式と保存時間・出力量の計測値を含める。`storage_kind` は `sqlite` または `directory` である。`simulation_elapsed_sec` はイベント処理本体の時間、`save_elapsed_sec` はSQLite/CSV保存時間、`total_elapsed_sec` はその合計である。`send_log_rows`, `asleep_log_rows`, `carrier_sense_log_rows`, `metadata_rows`, `total_event_log_rows`, `total_csv_data_rows` はヘッダーを除いたデータ行数相当である。CSV保存では `send_log_bytes`, `asleep_log_bytes`, `carrier_sense_log_bytes`, `metadata_bytes`, `total_output_bytes` にファイルサイズを入れる。SQLite保存では `sqlite_batch_size`, `sqlite_batch_target_memory_bytes`, `sqlite_store_bytes`, `total_output_bytes` に、実際のイベントログバッチ行数、目標バッファ容量、SQLite storeのサイズを入れる。
 
 ### 14.2 グラフ作成ジョブ
 
@@ -773,21 +774,18 @@ uv run research-program clear-experiment-outputs
 ```powershell
 uv run research-program run-simulation
 uv run research-program calculate-cycle-data
-uv run research-program calculate-phase-gap-error
-uv run research-program aggregate-phase-gap-error
 uv run research-program plot-phase-diff
-uv run research-program plot-phase-gap-error
 uv run research-program plot-per
-uv run research-program plot-aggregated-phase-gap-error-overlay
+uv run research-program plot-per-timing-k-heatmap
 ```
 
-### 17.2 実機データ取り込みから解析
+### 17.2 アーカイブ済み機能を使う場合
 
 ```powershell
-uv run research-program import-raw-data
+uv run research-program archive-import-raw-data
 uv run research-program calculate-cycle-data
-uv run research-program calculate-phase-gap-error
-uv run research-program plot-per
+uv run research-program archive-calculate-phase-gap-error
+uv run research-program archive-plot-phase-gap-error
 ```
 
 ### 17.3 Web UIでの運用
@@ -804,8 +802,8 @@ uv run research-program plot-per
 - `run-simulation` は `num_runs < 1`, `device_count < 1`, 未対応の `simulation_mode`, ランダム開始候補不足、負の `carrier_sense_duration_ms` をエラーにする。
 - `fixed_start_times` は `device_count` 個でなければエラーになる。
 - `LoRaAirtimeConfig` はSF、帯域幅、符号化率、プリアンブル長などを検証する。
-- `calculate-phase-gap-error` は `<N>dai` タグがないrunでデバイス数を取得できない。
-- 実機CSV取り込みはUTF-8 CSVを前提にしている。
+- アーカイブ済みの `archive-calculate-phase-gap-error` は `<N>dai` タグがないrunでデバイス数を取得できない。
+- アーカイブ済みの実機CSV取り込みはUTF-8 CSVを前提にしている。
 - 多くの後処理は `data/runs` 直下の各ディレクトリをrunとして扱う。
 - Windows環境ではバックグラウンドジョブ実行中のJSON置換で一時的なPermissionErrorが起き得るため、atomic writeはリトライする。
 
@@ -856,8 +854,7 @@ uv run research-program describe-data-format
 uv run research-program list-runs
 uv run research-program run-simulation
 uv run research-program calculate-cycle-data
-uv run research-program calculate-phase-gap-error
-uv run research-program aggregate-phase-gap-error
+uv run research-program plot-per
 ```
 
 生成物を削除する場合は、先にドライランを確認する。

@@ -662,6 +662,7 @@ class PerTimingCouplingStrengthHeatmapConfig:
 
     x_label: str = "Coupling strength K (tick × -0.0001)"
     y_label: str = "PER timing [ms]"
+    timing_display_unit: str = "ms"
     colorbar_label: str = "PER [%]"
     colormap: str = "viridis"
 
@@ -688,6 +689,12 @@ class PerTimingCouplingStrengthHeatmapConfig:
     min_per_timing_annotation_font_size: int = 14
     min_per_timing_marker_size: float = 120.0
     min_per_timing_marker_color: str = "tab:red"
+    show_zero_per_markers: bool = False
+    zero_per_marker_tolerance: float = 1e-9
+    zero_per_marker_color: str = "black"
+    zero_per_marker_size: float = 30.0
+    zero_per_marker_style: str = "x"
+    show_zero_per_marker_label: bool = True
 
     use_existing_csv_if_available: bool = False
 

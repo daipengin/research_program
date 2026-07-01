@@ -17,6 +17,7 @@ data/aggregated/*
 data/archives/*
 outputs/figures/*
 outputs/reports/*
+outputs/cache/*
 !data/runs/.gitkeep
 !data/run/.gitkeep
 !data/aggregated/.gitkeep

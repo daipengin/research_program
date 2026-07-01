@@ -6,6 +6,7 @@ from typing import Callable, Dict, List, Optional, Tuple, Any
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import csv
+import ctypes
 import heapq
 import itertools
 import os
@@ -19,6 +20,81 @@ from research_program.simulation.oscillator import Oscillator
 
 
 DEFAULT_SIMULATION_OUTPUT_ROOT = Path("data/run/simulation_runs.sqlite")
+SQLITE_MIN_EVENT_BATCH_ROWS = 10_000
+SQLITE_TARGET_BATCH_MEMORY_FRACTION = 0.25
+SQLITE_FALLBACK_TARGET_BATCH_MEMORY_BYTES = 256 * 1024 * 1024
+SQLITE_SEND_ROW_MEMORY_BYTES = 512
+SQLITE_ASLEEP_ROW_MEMORY_BYTES = 384
+SQLITE_CARRIER_SENSE_ROW_MEMORY_BYTES = 768
+
+
+class _MemoryStatus(ctypes.Structure):
+    _fields_ = [
+        ("dwLength", ctypes.c_ulong),
+        ("dwMemoryLoad", ctypes.c_ulong),
+        ("ullTotalPhys", ctypes.c_ulonglong),
+        ("ullAvailPhys", ctypes.c_ulonglong),
+        ("ullTotalPageFile", ctypes.c_ulonglong),
+        ("ullAvailPageFile", ctypes.c_ulonglong),
+        ("ullTotalVirtual", ctypes.c_ulonglong),
+        ("ullAvailVirtual", ctypes.c_ulonglong),
+        ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+    ]
+
+
+def _available_memory_bytes() -> int | None:
+    if os.name == "nt":
+        status = _MemoryStatus()
+        status.dwLength = ctypes.sizeof(status)
+        try:
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):  # type: ignore[attr-defined]
+                return int(status.ullAvailPhys)
+        except (AttributeError, OSError):
+            return None
+        return None
+
+    try:
+        pages = os.sysconf("SC_AVPHYS_PAGES")
+        page_size = os.sysconf("SC_PAGE_SIZE")
+    except (AttributeError, OSError, ValueError):
+        return None
+    if pages <= 0 or page_size <= 0:
+        return None
+    return int(pages * page_size)
+
+
+def _sqlite_target_batch_memory_bytes() -> int:
+    available_memory = _available_memory_bytes()
+    if available_memory is None:
+        return SQLITE_FALLBACK_TARGET_BATCH_MEMORY_BYTES
+    return max(
+        SQLITE_FALLBACK_TARGET_BATCH_MEMORY_BYTES,
+        int(available_memory * SQLITE_TARGET_BATCH_MEMORY_FRACTION),
+    )
+
+
+def sqlite_event_batch_size(
+    *,
+    save_asleep_log: bool = False,
+    save_carrier_sense_log: bool = False,
+    target_memory_bytes: int | None = None,
+) -> int:
+    row_memory_bytes = SQLITE_SEND_ROW_MEMORY_BYTES
+    if save_asleep_log:
+        row_memory_bytes += SQLITE_ASLEEP_ROW_MEMORY_BYTES
+    if save_carrier_sense_log:
+        row_memory_bytes += SQLITE_CARRIER_SENSE_ROW_MEMORY_BYTES
+
+    memory_budget = (
+        _sqlite_target_batch_memory_bytes()
+        if target_memory_bytes is None
+        else max(1, int(target_memory_bytes))
+    )
+    estimated_rows = memory_budget // row_memory_bytes
+    return max(
+        SQLITE_MIN_EVENT_BATCH_ROWS,
+        int(estimated_rows),
+    )
 
 
 class OscillatorEventType(Enum):
@@ -335,13 +411,22 @@ class SQLiteEventLogger:
         run_id: str,
         save_asleep_log: bool = False,
         save_carrier_sense_log: bool = False,
-        batch_size: int = 10_000,
+        batch_size: int | None = None,
     ) -> None:
         self.sqlite_path = Path(sqlite_path)
         self.run_id = run_id
         self.save_asleep_log = save_asleep_log
         self.save_carrier_sense_log = save_carrier_sense_log
-        self.batch_size = max(1, int(batch_size))
+        self.target_batch_memory_bytes = _sqlite_target_batch_memory_bytes()
+        self.batch_size = (
+            sqlite_event_batch_size(
+                save_asleep_log=save_asleep_log,
+                save_carrier_sense_log=save_carrier_sense_log,
+                target_memory_bytes=self.target_batch_memory_bytes,
+            )
+            if batch_size is None
+            else max(1, int(batch_size))
+        )
 
         self.conn = sqlite_runs.connect(self.sqlite_path)
         sqlite_runs.initialize(self.conn)
@@ -464,6 +549,21 @@ class SQLiteEventLogger:
         )
         self.carrier_sense_buffer.clear()
 
+    def _send_buffer_frame(self) -> pd.DataFrame | None:
+        if not self.send_buffer or len(self.send_buffer) != self.send_log_rows:
+            return None
+        return pd.DataFrame(
+            self.send_buffer,
+            columns=[
+                "run_id",
+                "time",
+                "oscillator_id",
+                "send_count",
+                "transmission_end_time",
+                "transmission_time_ms",
+            ],
+        ).drop(columns=["run_id"])
+
     def flush_logs(self) -> None:
         self._flush_send_buffer()
         self._flush_asleep_buffer()
@@ -475,23 +575,26 @@ class SQLiteEventLogger:
             sqlite_runs.run_metadata_row(config),
         )
 
-    def flush_derived_data(self, config: RunConfig) -> None:
+    def flush_derived_data(self, config: RunConfig, send_df: pd.DataFrame | None = None) -> None:
         if self.send_log_rows == 0:
             return
 
         from research_program.analysis import calculate_cycle_data
         from research_program.analysis import calculate_phase_gap_error
 
-        send_df = pd.read_sql_query(
-            """
-            SELECT time, oscillator_id, send_count, transmission_end_time, transmission_time_ms
-            FROM send_log
-            WHERE run_id = ?
-            ORDER BY time, oscillator_id
-            """,
-            self.conn,
-            params=(self.run_id,),
-        )
+        if send_df is None:
+            send_df = pd.read_sql_query(
+                """
+                SELECT time, oscillator_id, send_count, transmission_end_time, transmission_time_ms
+                FROM send_log
+                WHERE run_id = ?
+                ORDER BY time, oscillator_id
+                """,
+                self.conn,
+                params=(self.run_id,),
+            )
+        else:
+            send_df = send_df.sort_values(["time", "oscillator_id"], kind="stable").reset_index(drop=True)
         if send_df.empty:
             return
 
@@ -540,9 +643,10 @@ class SQLiteEventLogger:
         )
 
     def flush_all(self, config: RunConfig) -> None:
+        send_df = self._send_buffer_frame()
         self.flush_logs()
         self.flush_metadata(config)
-        self.flush_derived_data(config)
+        self.flush_derived_data(config, send_df=send_df)
 
     def row_counts(self) -> dict[str, int]:
         total_event_log_rows = self.send_log_rows + self.asleep_log_rows + self.carrier_sense_log_rows
@@ -568,6 +672,8 @@ class SQLiteEventLogger:
             "asleep_log_bytes": 0,
             "carrier_sense_log_bytes": 0,
             "metadata_bytes": 0,
+            "sqlite_batch_size": self.batch_size,
+            "sqlite_batch_target_memory_bytes": self.target_batch_memory_bytes,
             "sqlite_store_bytes": sqlite_store_bytes,
             "total_output_bytes": sqlite_store_bytes,
         }
@@ -603,12 +709,12 @@ class EventScheduler:
         self._session_counter = itertools.count()
 
         self.oscillators: Dict[int, Oscillator] = {}
-        self._event_valid: Dict[int, bool] = {}
-        self._events_by_session: Dict[int, set[int]] = {}
-        self._session_to_source: Dict[int, int] = {}
         self._transmission_intervals: List[Tuple[float, float, int]] = []
 
         self._coupling_function = resolve_coupling_function(config.coupling_function)
+        self._per_measurement_enabled = per_measurement_enabled(config)
+        self._transmission_time_ms = effective_transmission_time_ms(config)
+        self._carrier_sense_duration_ms = effective_carrier_sense_duration_ms(config)
 
     def get_or_create_oscillator(self, source_id: int) -> Oscillator:
         if source_id not in self.oscillators:
@@ -624,10 +730,7 @@ class EventScheduler:
         return self.oscillators[source_id]
 
     def create_session(self, source_id: int) -> int:
-        session_id = next(self._session_counter)
-        self._events_by_session[session_id] = set()
-        self._session_to_source[session_id] = source_id
-        return session_id
+        return next(self._session_counter)
 
     def schedule_event(
         self,
@@ -649,19 +752,13 @@ class EventScheduler:
         )
 
         heapq.heappush(self._queue, event)
-        self._event_valid[event_id] = True
-        self._events_by_session.setdefault(session_id, set()).add(event_id)
         return event_id
 
     def invalidate_all_events_for_session(self, session_id: int) -> None:
-        event_ids = self._events_by_session.get(session_id, set())
-        for event_id in event_ids:
-            self._event_valid[event_id] = False
-        self._events_by_session[session_id] = set()
+        return
 
     def _discard_event_reference(self, event_id: int, session_id: int) -> None:
-        if session_id in self._events_by_session:
-            self._events_by_session[session_id].discard(event_id)
+        return
 
     def initialize_from_ranges(self) -> None:
         for start_time, end_time, source_id in self.config.ranges:
@@ -684,12 +781,6 @@ class EventScheduler:
     def run(self) -> None:
         while self._queue:
             event = heapq.heappop(self._queue)
-
-            if not self._event_valid.get(event.event_id, False):
-                continue
-
-            self._discard_event_reference(event.event_id, event.session_id)
-            self._event_valid[event.event_id] = False
             self._handle_event(event)
 
     def _broadcast_receive(self, sender_id: int, current_time: float) -> None:
@@ -708,7 +799,7 @@ class EventScheduler:
             )
 
     def _carrier_sense_window(self, oscillator: Oscillator, current_time: float) -> Tuple[float, float]:
-        duration = effective_carrier_sense_duration_ms(self.config)
+        duration = self._carrier_sense_duration_ms
         carrier_sense_start = current_time - duration
         if oscillator.current_awake_start_time is not None:
             carrier_sense_start = max(float(oscillator.current_awake_start_time), carrier_sense_start)
@@ -737,7 +828,7 @@ class EventScheduler:
         return None
 
     def _record_transmission_interval(self, source_id: int, current_time: float) -> Tuple[float, float]:
-        transmission_time = effective_transmission_time_ms(self.config)
+        transmission_time = self._transmission_time_ms
         transmission_start = current_time
         transmission_end = current_time + transmission_time
         if transmission_time > 0:
@@ -755,7 +846,6 @@ class EventScheduler:
             return
 
         if event_type == OscillatorEventType.REMOVE_Oscillator_Event:
-            self.invalidate_all_events_for_session(session_id)
             oscillator.on_remove(current_time)
             return
 
@@ -764,6 +854,8 @@ class EventScheduler:
             self.schedule_event(next_time, source_id, session_id, next_type)
 
         elif event_type == OscillatorEventType.RECEIVE_Event:
+            if not oscillator.active:
+                return
             self._broadcast_receive(sender_id=source_id, current_time=current_time)
 
         elif event_type == OscillatorEventType.SEND_Event:
@@ -775,7 +867,7 @@ class EventScheduler:
                 current_time=float(current_time),
             )
             blocking_transmission = None
-            if per_measurement_enabled(self.config):
+            if self._per_measurement_enabled:
                 blocking_transmission = self._find_blocking_transmission(
                     source_id=source_id,
                     carrier_sense_start=carrier_sense_start,
@@ -784,7 +876,7 @@ class EventScheduler:
 
             if blocking_transmission is not None:
                 would_be_transmission_end = (
-                    float(current_time) + effective_transmission_time_ms(self.config)
+                    float(current_time) + self._transmission_time_ms
                 )
                 next_type, next_time = oscillator.on_skip_send(
                     current_time,
@@ -808,8 +900,8 @@ class EventScheduler:
                 return
 
             phase_reference_time = float(current_time)
-            if per_measurement_enabled(self.config):
-                phase_reference_time += effective_transmission_time_ms(self.config)
+            if self._per_measurement_enabled:
+                phase_reference_time += self._transmission_time_ms
 
             next_type, next_time = oscillator.on_send(
                 current_time,
@@ -826,9 +918,9 @@ class EventScheduler:
                     oscillator_id=source_id,
                     send_count=oscillator.send_count,
                     transmission_end_time=transmission_end,
-                    transmission_time_ms=effective_transmission_time_ms(self.config),
+                    transmission_time_ms=self._transmission_time_ms,
                 )
-                if per_measurement_enabled(self.config):
+                if self._per_measurement_enabled:
                     self.logger.log_carrier_sense(
                         time_=current_time,
                         oscillator_id=source_id,

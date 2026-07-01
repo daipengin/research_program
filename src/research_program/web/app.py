@@ -25,7 +25,6 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-import matplotlib.pyplot as plt
 import pandas as pd
 from PIL import Image
 import streamlit as st
@@ -59,25 +58,16 @@ from research_program.io.run_store import (
     records_to_frame,
 )
 from research_program.io.sqlite_runs import export_run_to_directory, is_sqlite_run_store
-from research_program.plotting.phase_gap import (
-    DEFAULT_Y_COLUMN,
-    build_phase_gap_error_figure,
-    figure_to_bytes,
-)
 from research_program.plotting.jobs import (
     create_graph_creation_job,
     load_graph_creation_job_statuses,
 )
 from research_program.config.plot_config import (
-    AGGREGATED_PHASE_GAP_ERROR_OVERLAY_PLOT_CONFIG,
-    AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG,
     COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG,
-    CONVERGENCE_ANALYSIS_CONFIG,
     PER_BY_COUPLING_STRENGTH_PLOT_CONFIG,
     PER_TIMING_K_HEATMAP_CONFIG,
     PER_ALIGNED_PLOT_CONFIG,
     PER_PLOT_CONFIG,
-    PHASE_GAP_ERROR_PLOT_CONFIG,
     VISUALIZE_PHASE_DIFF_CONFIG,
 )
 from research_program.simulation.runner import (
@@ -105,6 +95,14 @@ DEFAULT_WEB_CONFIG = Path("configs/web/default.toml")
 LAST_SIMULATION_REQUEST_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_simulation_request.json"
 LAST_GRAPH_PLOT_OVERRIDES_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_graph_plot_overrides.json"
 COUPLING_FUNCTION_OPTIONS = ["KURAMOTO", "LINEAR", "NewSIN", "NONE"]
+
+
+def _display_rows_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    df = pd.DataFrame(rows)
+    for column in df.columns:
+        if str(column).endswith("(Value)"):
+            df[column] = df[column].map(lambda value: "" if value is None else str(value))
+    return df
 
 SWEEP_PARAMETER_SPECS: dict[str, dict[str, Any]] = {
     "coupling_strength": {
@@ -226,11 +224,6 @@ PER_MEASUREMENT_SWEEP_FIELDS = [
     "lora_preamble_symbols",
 ]
 
-Y_COLUMN_LABELS = {
-    DEFAULT_Y_COLUMN: "平均絶対位相ギャップ誤差率(Mean absolute phase-gap error ratio)",
-    "mean_abs_diff_from_ideal_phase_gap": "平均絶対位相ギャップ誤差(Mean absolute phase-gap error)",
-}
-
 RUN_COLUMN_LABELS = {
     "run_id": "run ID(Run ID)",
     "coupling_function": "結合関数(Coupling function)",
@@ -306,24 +299,12 @@ PREPROCESS_COMMANDS = {
         "label": "周期データ作成(Calculate cycle data)",
         "output": "data/runs/*/calculated_Cycle_data.csv",
     },
-    "calculate-phase-gap-error": {
-        "label": "位相ギャップ誤差作成(Calculate phase-gap error)",
-        "output": "data/runs/*/phase_gap_error.csv",
-    },
-    "aggregate-phase-gap-error": {
-        "label": "位相ギャップ誤差集約(Aggregate phase-gap error)",
-        "output": "data/aggregated/*.csv",
-    },
 }
 
 GRAPH_CREATION_COMMANDS = {
     "plot-phase-diff": {
         "label": "位相差グラフ(Phase-difference graphs)",
         "output": "outputs/figures/phase_diff_graphs/*.pdf",
-    },
-    "plot-phase-gap-error": {
-        "label": "位相ギャップ誤差グラフ(Phase-gap error graphs)",
-        "output": "outputs/figures/phase_gap_error_graphs/*.pdf",
     },
     "plot-per": {
         "label": "PERグラフ(PER graphs)",
@@ -345,18 +326,30 @@ GRAPH_CREATION_COMMANDS = {
         "label": "PER timing × K heatmap",
         "output": "outputs/figures/per_timing_k_heatmaps/*.pdf",
     },
-    "plot-aggregated-phase-gap-error": {
-        "label": "集約位相ギャップ誤差グラフ(Aggregated phase-gap error graphs)",
+}
+
+ARCHIVED_GRAPH_CREATION_COMMANDS = {
+    "archive-plot-phase-gap-error": {
+        "label": "アーカイブ: 位相ギャップ誤差グラフ(Archived phase-gap error graphs)",
+        "output": "outputs/figures/phase_gap_error_graphs/*.pdf",
+    },
+    "archive-plot-aggregated-phase-gap-error": {
+        "label": "アーカイブ: 集約位相ギャップ誤差グラフ(Archived aggregated phase-gap error graphs)",
         "output": "outputs/figures/aggregated_stats_graphs/*.pdf",
     },
-    "plot-aggregated-phase-gap-error-overlay": {
-        "label": "集約位相ギャップ誤差重ね描き(Aggregated phase-gap error overlay)",
+    "archive-plot-aggregated-phase-gap-error-overlay": {
+        "label": "アーカイブ: 集約位相ギャップ誤差重ね描き(Archived aggregated phase-gap error overlay)",
         "output": "outputs/figures/aggregated_stats_overlay_graphs/*",
     },
-    "plot-convergence-summary": {
-        "label": "収束サマリーグラフ(Convergence summary graph)",
+    "archive-plot-convergence-summary": {
+        "label": "アーカイブ: 収束サマリーグラフ(Archived convergence summary graph)",
         "output": "outputs/figures/convergence_graphs/*",
     },
+}
+
+GRAPH_COMMAND_LABELS = {
+    **{command: info["label"] for command, info in GRAPH_CREATION_COMMANDS.items()},
+    **{command: info["label"] for command, info in ARCHIVED_GRAPH_CREATION_COMMANDS.items()},
 }
 
 GRAPH_CREATION_PAGE_PREFIX = "graph_create::"
@@ -378,29 +371,15 @@ STYLE_ONLY_SOURCE_FIELDS_BY_GRAPH_COMMAND: dict[str, tuple[str, ...]] = {
 
 GRAPH_PREPROCESS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "plot-phase-diff": ("calculate-cycle-data",),
-    "plot-phase-gap-error": ("calculate-phase-gap-error",),
     "plot-per": ("calculate-cycle-data",),
     "plot-per-aligned": ("calculate-cycle-data",),
     "compare-per": ("calculate-cycle-data",),
     "compare-per-by-coupling-strength": ("calculate-cycle-data",),
     "plot-per-timing-k-heatmap": ("calculate-cycle-data",),
-    "plot-aggregated-phase-gap-error": (
-        "calculate-phase-gap-error",
-        "aggregate-phase-gap-error",
-    ),
-    "plot-aggregated-phase-gap-error-overlay": (
-        "calculate-phase-gap-error",
-        "aggregate-phase-gap-error",
-    ),
-    "plot-convergence-summary": (
-        "calculate-phase-gap-error",
-        "aggregate-phase-gap-error",
-    ),
 }
 
 PLOT_CONFIG_BY_GRAPH_COMMAND: dict[str, tuple[str, Any]] = {
     "plot-phase-diff": ("VISUALIZE_PHASE_DIFF_CONFIG", VISUALIZE_PHASE_DIFF_CONFIG),
-    "plot-phase-gap-error": ("PHASE_GAP_ERROR_PLOT_CONFIG", PHASE_GAP_ERROR_PLOT_CONFIG),
     "plot-per": ("PER_PLOT_CONFIG", PER_PLOT_CONFIG),
     "plot-per-aligned": ("PER_ALIGNED_PLOT_CONFIG", PER_ALIGNED_PLOT_CONFIG),
     "compare-per": ("COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG", COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG),
@@ -412,18 +391,10 @@ PLOT_CONFIG_BY_GRAPH_COMMAND: dict[str, tuple[str, Any]] = {
         "PER_TIMING_K_HEATMAP_CONFIG",
         PER_TIMING_K_HEATMAP_CONFIG,
     ),
-    "plot-aggregated-phase-gap-error": (
-        "AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG",
-        AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG,
-    ),
-    "plot-aggregated-phase-gap-error-overlay": (
-        "AGGREGATED_PHASE_GAP_ERROR_OVERLAY_PLOT_CONFIG",
-        AGGREGATED_PHASE_GAP_ERROR_OVERLAY_PLOT_CONFIG,
-    ),
-    "plot-convergence-summary": ("CONVERGENCE_ANALYSIS_CONFIG", CONVERGENCE_ANALYSIS_CONFIG),
 }
 
 PLOT_RANGE_FIELD_PAIRS = [
+    ("color_min", "color_max", "PER color scale range"),
     ("xlim_min", "xlim_max", "x軸範囲(X-axis range)"),
     ("ylim_min", "ylim_max", "y軸範囲(Y-axis range)"),
     ("per_ylim_min", "per_ylim_max", "PER y軸範囲(PER Y-axis range)"),
@@ -433,16 +404,16 @@ PLOT_RANGE_FIELD_PAIRS = [
 ]
 
 GRAPH_TYPE_BY_OUTPUT_DIR = {
-    "phase_diff_graphs": GRAPH_CREATION_COMMANDS["plot-phase-diff"]["label"],
-    "phase_gap_error_graphs": GRAPH_CREATION_COMMANDS["plot-phase-gap-error"]["label"],
-    "per_graphs": GRAPH_CREATION_COMMANDS["plot-per"]["label"],
-    "per_aligned_graphs": GRAPH_CREATION_COMMANDS["plot-per-aligned"]["label"],
-    "compare_per_graphs": GRAPH_CREATION_COMMANDS["compare-per"]["label"],
-    "per_by_coupling_strength_graphs": GRAPH_CREATION_COMMANDS["compare-per-by-coupling-strength"]["label"],
-    "per_timing_k_heatmaps": GRAPH_CREATION_COMMANDS["plot-per-timing-k-heatmap"]["label"],
-    "aggregated_stats_graphs": GRAPH_CREATION_COMMANDS["plot-aggregated-phase-gap-error"]["label"],
-    "aggregated_stats_overlay_graphs": GRAPH_CREATION_COMMANDS["plot-aggregated-phase-gap-error-overlay"]["label"],
-    "convergence_graphs": GRAPH_CREATION_COMMANDS["plot-convergence-summary"]["label"],
+    "phase_diff_graphs": GRAPH_COMMAND_LABELS["plot-phase-diff"],
+    "phase_gap_error_graphs": GRAPH_COMMAND_LABELS["archive-plot-phase-gap-error"],
+    "per_graphs": GRAPH_COMMAND_LABELS["plot-per"],
+    "per_aligned_graphs": GRAPH_COMMAND_LABELS["plot-per-aligned"],
+    "compare_per_graphs": GRAPH_COMMAND_LABELS["compare-per"],
+    "per_by_coupling_strength_graphs": GRAPH_COMMAND_LABELS["compare-per-by-coupling-strength"],
+    "per_timing_k_heatmaps": GRAPH_COMMAND_LABELS["plot-per-timing-k-heatmap"],
+    "aggregated_stats_graphs": GRAPH_COMMAND_LABELS["archive-plot-aggregated-phase-gap-error"],
+    "aggregated_stats_overlay_graphs": GRAPH_COMMAND_LABELS["archive-plot-aggregated-phase-gap-error-overlay"],
+    "convergence_graphs": GRAPH_COMMAND_LABELS["archive-plot-convergence-summary"],
 }
 
 FIGURE_SCOPE_LABELS = {
@@ -468,13 +439,13 @@ GRAPH_DESCRIPTION_BY_OUTPUT_DIR = {
     "per_by_coupling_strength_graphs": "Compares PER at a target time by coupling strength K, separated by coupling function",
     "per_timing_k_heatmaps": "Shows PER as color over coupling strength K and PER timing",
     "phase_diff_graphs": "1つのrunの送信時刻から位相差を表示(Uses one run to show phase differences)",
-    "phase_gap_error_graphs": "1つのrunの位相ギャップ誤差を表示(Uses one run to show phase-gap error)",
+    "phase_gap_error_graphs": "アーカイブ済み: 1つのrunの位相ギャップ誤差を表示(Archived phase-gap error figure)",
     "per_graphs": "1つのrunのPERを表示(Uses one run to show PER)",
     "per_aligned_graphs": "1つのrunのPERを基準周期にそろえて表示(Uses one run aligned to a base cycle)",
     "compare_per_graphs": "複数runを台数・送信間隔で平均して比較(Compares averages by devices and interval)",
-    "aggregated_stats_graphs": "複数runの位相ギャップ誤差統計を表示(Uses aggregated phase-gap error statistics)",
-    "aggregated_stats_overlay_graphs": "複数runの集約統計を重ね描き(Overlays aggregated statistics)",
-    "convergence_graphs": "複数runの集約統計から収束傾向を表示(Uses aggregated statistics for convergence)",
+    "aggregated_stats_graphs": "アーカイブ済み: 複数runの位相ギャップ誤差統計を表示(Archived aggregated phase-gap error statistics)",
+    "aggregated_stats_overlay_graphs": "アーカイブ済み: 複数runの集約統計を重ね描き(Archived aggregated statistics overlay)",
+    "convergence_graphs": "アーカイブ済み: 複数runの集約統計から収束傾向を表示(Archived convergence summary)",
 }
 
 FIGURE_SCOPE_SORT_ORDER = {
@@ -744,45 +715,6 @@ def _render_runs_tab(records: list[RunRecord], web_config: dict[str, Any]) -> No
         width="stretch",
         hide_index=True,
     )
-
-    with st.expander("簡易グラフ(Quick graph)", expanded=False):
-        y_column = st.selectbox(
-            "Y軸の列(Y column)",
-            [
-                DEFAULT_Y_COLUMN,
-                "mean_abs_diff_from_ideal_phase_gap",
-            ],
-            format_func=lambda value: Y_COLUMN_LABELS.get(value, value),
-        )
-        max_runs = st.number_input("グラフに描画する最大run数(Max graph runs)", min_value=1, value=50)
-        output_format = st.selectbox(
-            "グラフ形式(Graph format)",
-            web_config.get("figures", {}).get("generated_graph_formats", ["pdf", "png", "svg"]),
-        )
-
-        if not st.button("簡易グラフを作成(Create quick graph)"):
-            st.caption("ボタンを押した時だけ phase_gap_error.csv を読み込みます(Reads phase_gap_error.csv only when the button is pressed).")
-            return
-
-        fig, used_count = build_phase_gap_error_figure(
-            filtered_records,
-            y_column=y_column,
-            max_runs=int(max_runs),
-        )
-        if fig is None:
-            st.warning("フィルタ後のrunに phase_gap_error.csv が見つかりませんでした(phase_gap_error.csv was not found in the filtered runs).")
-            return
-
-        st.metric("描画したrun数(Plotted runs)", used_count)
-        st.pyplot(fig, clear_figure=False)
-        graph_bytes, mime, filename = figure_to_bytes(fig, output_format)
-        st.download_button(
-            "グラフをダウンロード(Download graph)",
-            data=graph_bytes,
-            file_name=filename,
-            mime=mime,
-        )
-        plt.close(fig)
 
 
 def _manual_tags_tuple(tags: tuple[str, ...]) -> tuple[str, ...]:
@@ -2025,30 +1957,11 @@ def _copy_selected_runs_to_temp(records: list[RunRecord], temp_runs_dir: Path) -
             shutil.copytree(record.path, target_dir)
 
 
-def _aggregate_graph_command_selected(commands: list[str]) -> bool:
-    aggregate_graph_commands = {
-        "plot-aggregated-phase-gap-error",
-        "plot-aggregated-phase-gap-error-overlay",
-        "plot-convergence-summary",
-    }
-    return bool(aggregate_graph_commands.intersection(commands))
-
-
 def _record_coupling_function(record: RunRecord) -> str | None:
     value = record.metadata.get("coupling_function")
     if value is None or str(value).strip() == "":
         return None
     return str(value).strip()
-
-
-def _record_coupling_strength(record: RunRecord) -> int | None:
-    value = record.metadata.get("coupling_strength")
-    if value is None:
-        return None
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return None
 
 
 def _selected_coupling_functions(records: list[RunRecord]) -> set[str]:
@@ -2059,52 +1972,12 @@ def _selected_coupling_functions(records: list[RunRecord]) -> set[str]:
     }
 
 
-def _selected_coupling_pairs(records: list[RunRecord]) -> set[tuple[str, int]]:
-    pairs: set[tuple[str, int]] = set()
-    for record in records:
-        coupling_function = _record_coupling_function(record)
-        coupling_strength = _record_coupling_strength(record)
-        if coupling_function is not None and coupling_strength is not None:
-            pairs.add((coupling_function, coupling_strength))
-    return pairs
-
-
-def _config_allows_coupling_pair(config: Any, coupling_function: str, coupling_strength: int) -> bool:
-    target_functions = getattr(config, "target_coupling_functions", [])
-    if target_functions and coupling_function not in set(target_functions):
-        return False
-
-    strength_rules = getattr(config, "coupling_function_strength_rules", {})
-    rule = strength_rules.get(coupling_function) if strength_rules else None
-    if rule is not None:
-        strength_min = getattr(rule, "strength_min", None)
-        strength_max = getattr(rule, "strength_max", None)
-        step = getattr(rule, "step", None)
-    else:
-        strength_min = getattr(config, "coupling_strength_min", None)
-        strength_max = getattr(config, "coupling_strength_max", None)
-        step = getattr(config, "coupling_strength_step", None)
-
-    if strength_min is not None and coupling_strength < strength_min:
-        return False
-    if strength_max is not None and coupling_strength > strength_max:
-        return False
-    if step is not None:
-        base = strength_min if strength_min is not None else coupling_strength
-        if (coupling_strength - base) % step != 0:
-            return False
-    return True
-
-
 def _estimated_figure_count(command_name: str, records: list[RunRecord]) -> tuple[int, str]:
     run_count = len(records)
     coupling_functions = _selected_coupling_functions(records)
-    coupling_pairs = _selected_coupling_pairs(records)
 
     if command_name == "plot-phase-diff":
         return run_count, "対象runごとに1枚(1 figure per target run)"
-    if command_name == "plot-phase-gap-error":
-        return run_count * 2, "対象runごとに誤差/比率の2枚(2 figures per target run)"
     if command_name == "plot-per":
         per_figures_per_run = 1 + (1 if PER_PLOT_CONFIG.show_per_change_plot else 0)
         return run_count * per_figures_per_run, f"対象runごとに{per_figures_per_run}枚({per_figures_per_run} figure(s) per target run)"
@@ -2133,27 +2006,6 @@ def _estimated_figure_count(command_name: str, records: list[RunRecord]) -> tupl
         target_functions = set(PER_TIMING_K_HEATMAP_CONFIG.target_coupling_functions)
         count = len(coupling_functions) if not target_functions else len(coupling_functions.intersection(target_functions))
         return count, "1 heatmap per coupling function"
-    if command_name == "plot-aggregated-phase-gap-error":
-        allowed_pairs = {
-            pair
-            for pair in coupling_pairs
-            if _config_allows_coupling_pair(AGGREGATED_PHASE_GAP_ERROR_PLOT_CONFIG, pair[0], pair[1])
-        }
-        return len(allowed_pairs), "結合関数×結合強度ごとの集約CSVにつき1枚(1 per aggregated coupling pair)"
-    if command_name == "plot-aggregated-phase-gap-error-overlay":
-        allowed_pairs = {
-            pair
-            for pair in coupling_pairs
-            if _config_allows_coupling_pair(AGGREGATED_PHASE_GAP_ERROR_OVERLAY_PLOT_CONFIG, pair[0], pair[1])
-        }
-        return (1 if allowed_pairs else 0), "設定条件に合う集約データがあれば1枚(1 if any aggregated data matches config)"
-    if command_name == "plot-convergence-summary":
-        allowed_pairs = {
-            pair
-            for pair in coupling_pairs
-            if _config_allows_coupling_pair(CONVERGENCE_ANALYSIS_CONFIG, pair[0], pair[1])
-        }
-        return (1 if allowed_pairs else 0), "設定条件に合う集約データがあれば1枚(1 if any aggregated data matches config)"
     return 0, "予測対象外(Not estimated)"
 
 
@@ -2599,6 +2451,60 @@ def _add_per_level_marker_inputs(
                 disabled=not values["show_min_per_timing_annotation"],
             )
 
+    if hasattr(config, "show_zero_per_markers"):
+        st.markdown("**0% PER markers**")
+        values["show_zero_per_markers"] = bool(
+            st.checkbox(
+                "Show markers only where PER is 0%",
+                value=bool(_plot_config_value(config, "show_zero_per_markers", saved_values, False)),
+                key=f"{prefix}_show_zero_per_markers",
+            )
+        )
+        col_tolerance, col_color, col_size, col_marker = st.columns(4)
+        with col_tolerance:
+            values["zero_per_marker_tolerance"] = _float_plot_input(
+                "Zero tolerance",
+                _plot_config_value(config, "zero_per_marker_tolerance", saved_values, 1e-9),
+                f"{prefix}_zero_per_marker_tolerance",
+                min_value=0.0,
+                step=0.000001,
+                disabled=not values["show_zero_per_markers"],
+            )
+        with col_color:
+            values["zero_per_marker_color"] = st.text_input(
+                "Marker color",
+                value=str(_plot_config_value(config, "zero_per_marker_color", saved_values, "black")),
+                key=f"{prefix}_zero_per_marker_color",
+                disabled=not values["show_zero_per_markers"],
+            )
+        with col_size:
+            values["zero_per_marker_size"] = _float_plot_input(
+                "Marker size",
+                _plot_config_value(config, "zero_per_marker_size", saved_values, 30.0),
+                f"{prefix}_zero_per_marker_size",
+                min_value=1.0,
+                step=1.0,
+                disabled=not values["show_zero_per_markers"],
+            )
+        with col_marker:
+            marker_options = ["x", "+", "o", "s", "^", "D"]
+            current_marker = str(_plot_config_value(config, "zero_per_marker_style", saved_values, "x"))
+            values["zero_per_marker_style"] = st.selectbox(
+                "Marker",
+                options=marker_options,
+                index=marker_options.index(current_marker) if current_marker in marker_options else 0,
+                key=f"{prefix}_zero_per_marker_style",
+                disabled=not values["show_zero_per_markers"],
+            )
+        values["show_zero_per_marker_label"] = bool(
+            st.checkbox(
+                "Show 0% marker legend",
+                value=bool(_plot_config_value(config, "show_zero_per_marker_label", saved_values, True)),
+                key=f"{prefix}_show_zero_per_marker_label",
+                disabled=not values["show_zero_per_markers"],
+            )
+        )
+
 
 def _add_standard_xy_plot_inputs(
     values: dict[str, Any],
@@ -2821,11 +2727,11 @@ def _collect_plot_parameter_values(
             values,
             config,
             prefix,
-            title="PER color range",
+            title="PER color scale range",
             min_field="color_min",
             max_field="color_max",
-            min_label="PER color min [%]",
-            max_label="PER color max [%]",
+            min_label="PER color scale min [%]",
+            max_label="PER color scale max [%]",
             saved_values=saved_values,
         )
         st.markdown("**PER timing × K heatmap**")
@@ -2865,6 +2771,19 @@ def _collect_plot_parameter_values(
             "Colormap",
             value=str(_plot_config_value(config, "colormap", saved_values, "viridis")),
             key=f"{prefix}_colormap",
+        )
+        timing_display_unit_options = ["ms", "s", "min"]
+        current_timing_display_unit = str(_plot_config_value(config, "timing_display_unit", saved_values, "ms"))
+        values["timing_display_unit"] = st.selectbox(
+            "Timing display unit",
+            options=timing_display_unit_options,
+            index=(
+                timing_display_unit_options.index(current_timing_display_unit)
+                if current_timing_display_unit in timing_display_unit_options
+                else 0
+            ),
+            format_func=lambda value: {"ms": "milliseconds [ms]", "s": "seconds [s]", "min": "minutes [min]"}.get(value, value),
+            key=f"{prefix}_timing_display_unit",
         )
         _add_per_level_marker_inputs(values, config, prefix, saved_values)
         st.caption("Each timing uses the PER value at the cycle containing that time, then averages runs by method, K, and timing.")
@@ -3077,6 +2996,30 @@ def _render_style_only_plot_parameter_controls(command_name: str) -> dict[str, d
         saved_values,
     )
     if command_name == "plot-per-timing-k-heatmap":
+        _add_range_plot_inputs(
+            values,
+            config,
+            f"redraw_plot_override_{command_name}",
+            title="PER color scale range",
+            min_field="color_min",
+            max_field="color_max",
+            min_label="PER color scale min [%]",
+            max_label="PER color scale max [%]",
+            saved_values=saved_values,
+        )
+        timing_display_unit_options = ["ms", "s", "min"]
+        current_timing_display_unit = str(_plot_config_value(config, "timing_display_unit", saved_values, "ms"))
+        values["timing_display_unit"] = st.selectbox(
+            "Timing display unit",
+            options=timing_display_unit_options,
+            index=(
+                timing_display_unit_options.index(current_timing_display_unit)
+                if current_timing_display_unit in timing_display_unit_options
+                else 0
+            ),
+            format_func=lambda value: {"ms": "milliseconds [ms]", "s": "seconds [s]", "min": "minutes [min]"}.get(value, value),
+            key=f"redraw_plot_override_{command_name}_timing_display_unit",
+        )
         _add_per_level_marker_inputs(
             values,
             config,
@@ -3577,7 +3520,7 @@ def _figure_parameter_summary_frame(records: list[RunRecord]) -> pd.DataFrame:
         }
         for field_name, label in FIGURE_PARAMETER_FIELDS
     )
-    return pd.DataFrame(rows)
+    return _display_rows_frame(rows)
 
 
 def _render_figure_parameter_summary(asset: FigureAsset, records: list[RunRecord]) -> None:
@@ -3883,9 +3826,6 @@ def _preprocess_plan_for_graph(
     force_preprocess: bool,
 ) -> tuple[list[str], pd.DataFrame]:
     requirements = GRAPH_PREPROCESS_REQUIREMENTS.get(command_name, tuple())
-    selected_record_keys = {record.record_key for record in selected_records}
-    all_record_keys = {record.record_key for record in all_records}
-    uses_subset = selected_record_keys != all_record_keys
 
     command_reasons: dict[str, str] = {}
     if force_preprocess:
@@ -3893,28 +3833,9 @@ def _preprocess_plan_for_graph(
             command_reasons[command] = "強制実行(Forced by option)"
     else:
         missing_cycle = _records_missing_required_file(selected_records, "calculated_Cycle_data.csv")
-        missing_phase_gap = _records_missing_required_file(selected_records, "phase_gap_error.csv")
 
         if "calculate-cycle-data" in requirements and missing_cycle:
             command_reasons["calculate-cycle-data"] = f"calculated_Cycle_data.csv が不足: {len(missing_cycle)} run"
-
-        if "calculate-phase-gap-error" in requirements and missing_phase_gap:
-            if missing_cycle:
-                command_reasons["calculate-cycle-data"] = f"calculated_Cycle_data.csv が不足: {len(missing_cycle)} run"
-            command_reasons["calculate-phase-gap-error"] = f"phase_gap_error.csv が不足: {len(missing_phase_gap)} run"
-
-        if "aggregate-phase-gap-error" in requirements:
-            aggregate_needed = uses_subset or not _aggregated_outputs_exist(web_config)
-            if aggregate_needed:
-                if missing_cycle:
-                    command_reasons["calculate-cycle-data"] = f"calculated_Cycle_data.csv が不足: {len(missing_cycle)} run"
-                if missing_phase_gap:
-                    command_reasons["calculate-phase-gap-error"] = f"phase_gap_error.csv が不足: {len(missing_phase_gap)} run"
-                command_reasons["aggregate-phase-gap-error"] = (
-                    "対象runが全体の一部です(Subset target)"
-                    if uses_subset
-                    else "集約CSVがありません(Aggregated CSV is missing)"
-                )
 
     ordered_commands = [command for command in PREPROCESS_COMMANDS if command in command_reasons]
     rows = [
@@ -4147,17 +4068,6 @@ def _render_graph_creation_tab(web_config: dict[str, Any], records: list[RunReco
     commands_to_run = list(selected_graph_commands)
     if run_preprocess and not style_only_redraw:
         commands_to_run = [*PREPROCESS_COMMANDS, *commands_to_run]
-
-    all_record_keys = {record.record_key for record in records}
-    selected_record_keys = {record.record_key for record in selected_target_records}
-    uses_subset = selected_record_keys != all_record_keys
-    if (
-        not style_only_redraw
-        and uses_subset
-        and _aggregate_graph_command_selected(selected_graph_commands)
-        and "aggregate-phase-gap-error" not in commands_to_run
-    ):
-        commands_to_run = ["aggregate-phase-gap-error", *commands_to_run]
 
     base_env_overrides: dict[str, str] = {}
     if plot_overrides:
@@ -5253,7 +5163,7 @@ def _render_server_tab() -> None:
 
     st.subheader("基本情報(System)")
     system_rows = [{"項目(Item)": key, "値(Value)": value} for key, value in specs["system"].items()]
-    st.dataframe(pd.DataFrame(system_rows), width="stretch", hide_index=True)
+    st.dataframe(_display_rows_frame(system_rows), width="stretch", hide_index=True)
 
     st.subheader("CPU")
     cpu_rows = [
@@ -5263,7 +5173,7 @@ def _render_server_tab() -> None:
         {"項目(Item)": "論理コア数(Logical cores)", "値(Value)": cpu.get("logical_cores") or "不明"},
         {"項目(Item)": "最大クロック[MHz](Max clock [MHz])", "値(Value)": cpu.get("max_clock_mhz") or "不明"},
     ]
-    st.dataframe(pd.DataFrame(cpu_rows), width="stretch", hide_index=True)
+    st.dataframe(_display_rows_frame(cpu_rows), width="stretch", hide_index=True)
 
     st.subheader("メモリ(Memory)")
     memory_rows = [
@@ -5273,7 +5183,7 @@ def _render_server_tab() -> None:
         {"項目(Item)": "使用率(Usage)", "値(Value)": f"{memory.get('percent')} %" if memory.get("percent") is not None else "不明"},
         {"項目(Item)": "取得元(Source)", "値(Value)": memory.get("source") or "不明"},
     ]
-    st.dataframe(pd.DataFrame(memory_rows), width="stretch", hide_index=True)
+    st.dataframe(_display_rows_frame(memory_rows), width="stretch", hide_index=True)
 
     st.subheader("GPU")
     st.caption(specs["gpu_note"])

@@ -234,7 +234,6 @@ def _sqlite_store_file_signatures(sqlite_path: Path) -> list[dict[str, Any]]:
     paths = [
         sqlite_path,
         sqlite_path.with_name(f"{sqlite_path.name}-wal"),
-        sqlite_path.with_name(f"{sqlite_path.name}-shm"),
     ]
     signatures: list[dict[str, Any]] = []
     for path in paths:
@@ -257,10 +256,13 @@ def _records_from_sqlite_store(
     contract: RunDataContract,
 ) -> list[RunRecord]:
     records: list[RunRecord] = []
-    for row in sqlite_runs.list_run_rows(sqlite_path):
+    rows = sqlite_runs.list_run_rows(sqlite_path)
+    run_ids = [str(row.get("run_id") or sqlite_path.stem) for row in rows]
+    available_files_by_run_id = sqlite_runs.available_files_for_runs(sqlite_path, run_ids)
+    for row in rows:
         metadata = _metadata_from_sqlite_row(row, contract)
         run_id = str(metadata.get("run_id") or row.get("run_id") or sqlite_path.stem)
-        available_files = sqlite_runs.available_files_for_run(sqlite_path, run_id)
+        available_files = available_files_by_run_id.get(run_id, ("metadata.csv", "send_log.csv"))
         missing_files = tuple(
             filename for filename in contract.required_files if filename not in set(available_files)
         )

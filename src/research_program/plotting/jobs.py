@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ from research_program.io.sqlite_runs import export_run_to_directory, parse_sqlit
 
 
 GRAPH_CREATION_JOB_DIR = Path("outputs/reports/graph_creation_jobs")
+SQLITE_RUN_EXPORT_CACHE_DIR = Path("outputs/cache/sqlite_run_exports")
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SRC_ROOT = PROJECT_ROOT / "src"
 
@@ -91,6 +93,54 @@ def _run_research_program_command(command_name: str, env_overrides: dict[str, st
     return completed.returncode == 0, output or "完了しました(Completed)."
 
 
+def _sqlite_store_cache_signature(sqlite_path: Path) -> list[dict[str, Any]]:
+    signatures: list[dict[str, Any]] = []
+    for path in [sqlite_path, sqlite_path.with_name(f"{sqlite_path.name}-wal")]:
+        if not path.exists():
+            continue
+        stat = path.stat()
+        signatures.append(
+            {
+                "path": str(path.resolve()),
+                "mtime_ns": stat.st_mtime_ns,
+                "size": stat.st_size,
+            }
+        )
+    return signatures
+
+
+def _sqlite_run_export_cache_key(sqlite_path: Path, run_id: str) -> str:
+    payload = {
+        "sqlite_path": str(sqlite_path.resolve()),
+        "run_id": run_id,
+        "sqlite_files": _sqlite_store_cache_signature(sqlite_path),
+        "version": 1,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _export_sqlite_run_to_cached_directory(sqlite_path: Path, run_id: str, target_dir: Path) -> None:
+    cache_root = resolve_project_path(SQLITE_RUN_EXPORT_CACHE_DIR)
+    cache_root.mkdir(parents=True, exist_ok=True)
+    cache_key = _sqlite_run_export_cache_key(sqlite_path, run_id)
+    cache_dir = cache_root / cache_key
+
+    if not cache_dir.exists():
+        tmp_cache_dir = cache_root / f".{cache_key}.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+        try:
+            export_run_to_directory(sqlite_path, run_id, tmp_cache_dir)
+            try:
+                tmp_cache_dir.replace(cache_dir)
+            except FileExistsError:
+                shutil.rmtree(tmp_cache_dir, ignore_errors=True)
+        except Exception:
+            shutil.rmtree(tmp_cache_dir, ignore_errors=True)
+            raise
+
+    shutil.copytree(cache_dir, target_dir)
+
+
 def _copy_selected_runs_to_temp(run_paths: list[str], temp_runs_dir: Path) -> None:
     temp_runs_dir.mkdir(parents=True, exist_ok=True)
     used_names: set[str] = set()
@@ -107,7 +157,7 @@ def _copy_selected_runs_to_temp(run_paths: list[str], temp_runs_dir: Path) -> No
         used_names.add(run_dir_name)
         target_dir = temp_runs_dir / run_dir_name
         if sqlite_record is not None:
-            export_run_to_directory(sqlite_path, run_id, target_dir)
+            _export_sqlite_run_to_cached_directory(sqlite_path, run_id, target_dir)
         else:
             shutil.copytree(run_path, target_dir)
 

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import math
 from typing import List, Optional, Tuple
 
 from research_program.simulation.coupling_functions import CouplingFuncType
-import numpy as np
 
 class Oscillator:
     def __init__(
@@ -24,6 +24,10 @@ class Oscillator:
         self.listening_rate = listening_rate
         self.coupling_function = coupling_function
         self.event_type_enum = event_type_enum
+        self.awake_half_duration = self.cycle_time * (self.listening_rate / 2) / 100
+        self.asleep_duration = self.cycle_time * (100 - self.listening_rate) / 100
+        self.phase_scale = 2 * math.pi / self.cycle_time
+        self.coupling_delay_scale = self.coupling_strength * self.cycle_time * self.strength_ratio
 
         self.active: bool = False
 
@@ -54,7 +58,7 @@ class Oscillator:
         self.current_awake_start_time = current_time
         self.current_cycle_send_time = None
 
-        next_time = current_time +  self.cycle_time * (self.listening_rate/2)/100
+        next_time = current_time + self.awake_half_duration
         return (self.event_type_enum.SEND_Event, next_time)
 
     def on_remove(self, current_time: float) -> None:
@@ -77,7 +81,7 @@ class Oscillator:
         self.last_send_time = current_time
         self.current_cycle_send_time = current_time if phase_reference_time is None else phase_reference_time
 
-        next_time = current_time +  self.cycle_time * (self.listening_rate/2)/100
+        next_time = current_time + self.awake_half_duration
         return (self.event_type_enum.ASLEEP_Event, next_time)
 
     def on_skip_send(
@@ -88,7 +92,7 @@ class Oscillator:
         self.last_event_time = current_time
         self.current_cycle_send_time = current_time if phase_reference_time is None else phase_reference_time
 
-        next_time = current_time + self.cycle_time * (self.listening_rate / 2) / 100
+        next_time = current_time + self.awake_half_duration
         return (self.event_type_enum.ASLEEP_Event, next_time)
 
     def on_receive(self, sender_id: int, sender_phase: float, current_time: float) -> None:
@@ -117,10 +121,10 @@ class Oscillator:
                 key=lambda t: abs(t - self.current_cycle_send_time)
             )
 
-            phase_diff = 2* np.pi*(selected_receive_time - self.current_cycle_send_time)/self.cycle_time
+            phase_diff = self.phase_scale * (selected_receive_time - self.current_cycle_send_time)
             coupling_value = self.coupling_function(phase_diff)
 
-            next_awake_delay = coupling_value*self.coupling_strength*self.cycle_time*self.strength_ratio
+            next_awake_delay = coupling_value * self.coupling_delay_scale
         else:
             next_awake_delay = 0
 
@@ -129,7 +133,7 @@ class Oscillator:
 
         
 
-        next_time = current_time + self.cycle_time * (100 - self.listening_rate)/100 + next_awake_delay
+        next_time = current_time + self.asleep_duration + next_awake_delay
         return (self.event_type_enum.AWAKE_Event, next_time)
 
     def on_awake(self, current_time: float) -> Tuple[object, float]:
@@ -142,5 +146,5 @@ class Oscillator:
         self.current_awake_start_time = current_time
         self.current_cycle_send_time = None
 
-        next_time = current_time +  self.cycle_time * (self.listening_rate/2)/100
+        next_time = current_time + self.awake_half_duration
         return (self.event_type_enum.SEND_Event, next_time)

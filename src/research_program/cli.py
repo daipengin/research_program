@@ -23,20 +23,24 @@ from research_program.simulation.runner import (
 
 
 MODULE_COMMANDS = {
-    "import-raw-data": "research_program.io.import_raw_data_to_results",
     "calculate-cycle-data": "research_program.analysis.calculate_cycle_data",
-    "calculate-phase-gap-error": "research_program.analysis.calculate_phase_gap_error",
-    "aggregate-phase-gap-error": "research_program.analysis.aggregate_phase_gap_error_stats",
     "compare-per": "research_program.analysis.compare_per_by_devices_and_interval",
     "compare-per-by-coupling-strength": "research_program.plotting.plot_per_by_coupling_strength",
     "plot-per-timing-k-heatmap": "research_program.plotting.plot_per_timing_k_heatmap",
     "plot-phase-diff": "research_program.plotting.visualize_phase_diff",
-    "plot-phase-gap-error": "research_program.plotting.plot_phase_gap_error",
     "plot-per": "research_program.plotting.plot_PER",
     "plot-per-aligned": "research_program.plotting.plot_per_aligned",
-    "plot-aggregated-phase-gap-error": "research_program.plotting.plot_aggregated_phase_gap_error",
-    "plot-aggregated-phase-gap-error-overlay": "research_program.plotting.plot_aggregated_phase_gap_error_overlay",
-    "plot-convergence-summary": "research_program.plotting.plot_convergence_summary",
+}
+
+
+ARCHIVED_MODULE_COMMANDS = {
+    "archive-import-raw-data": "research_program.io.import_raw_data_to_results",
+    "archive-calculate-phase-gap-error": "research_program.analysis.calculate_phase_gap_error",
+    "archive-aggregate-phase-gap-error": "research_program.analysis.aggregate_phase_gap_error_stats",
+    "archive-plot-phase-gap-error": "research_program.plotting.plot_phase_gap_error",
+    "archive-plot-aggregated-phase-gap-error": "research_program.plotting.plot_aggregated_phase_gap_error",
+    "archive-plot-aggregated-phase-gap-error-overlay": "research_program.plotting.plot_aggregated_phase_gap_error_overlay",
+    "archive-plot-convergence-summary": "research_program.plotting.plot_convergence_summary",
 }
 
 
@@ -178,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cleanup_parser.set_defaults(func=clear_experiment_outputs)
 
-    for command_name, module_name in MODULE_COMMANDS.items():
+    for command_name, module_name in {**MODULE_COMMANDS, **ARCHIVED_MODULE_COMMANDS}.items():
         command_parser = subparsers.add_parser(command_name)
         command_parser.set_defaults(func=run_module_command, module_name=module_name)
 

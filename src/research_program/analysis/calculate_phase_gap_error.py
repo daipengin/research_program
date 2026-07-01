@@ -139,45 +139,32 @@ def compute_mean_abs_gap_error_per_cycle(
     cycle_lengths = compute_cycle_interval_lengths(cycle_starts)
     indexed_df = assign_cycles_from_reference_windows(send_df, cycle_starts)
 
-    rows: list[dict] = []
+    mean_abs_errors = np.full(len(cycle_starts), np.nan, dtype=np.float64)
+    mean_abs_error_ratios = np.full(len(cycle_starts), np.nan, dtype=np.float64)
 
-    for cycle_idx in range(1, len(cycle_starts) + 1):
-        cycle_start = cycle_starts[cycle_idx - 1]
-        cycle_length = cycle_lengths[cycle_idx - 1]
-
-        if not np.isfinite(cycle_length) or cycle_length <= 0:
-            rows.append(
-                {
-                    "cycle_index": cycle_idx,
-                    "mean_abs_diff_from_ideal_phase_gap": np.nan,
-                }
+    if not indexed_df.empty:
+        first_sends = (
+            indexed_df.sort_values(
+                ["cycle_index", DETECTION_TIME_COLUMN, "oscillator_id"],
+                kind="stable",
             )
+            .drop_duplicates(subset=["cycle_index", "oscillator_id"], keep="first")
+        )
+    else:
+        first_sends = indexed_df
+
+    for cycle_idx, cycle_df in first_sends.groupby("cycle_index", sort=False):
+        result_index = int(cycle_idx) - 1
+        if result_index < 0 or result_index >= len(cycle_starts):
             continue
 
-        cycle_df = indexed_df.loc[indexed_df["cycle_index"] == cycle_idx, [DETECTION_TIME_COLUMN, "oscillator_id"]].copy()
-
-        if cycle_df.empty:
-            rows.append(
-                {
-                    "cycle_index": cycle_idx,
-                    "mean_abs_diff_from_ideal_phase_gap": np.nan,
-                }
-            )
+        cycle_start = cycle_starts[result_index]
+        cycle_length = cycle_lengths[result_index]
+        if not np.isfinite(cycle_length) or cycle_length <= 0 or len(cycle_df) < 2:
             continue
 
         # 同一サイクル内で同じ振動子が複数回送信している場合は，
         # 最初の1回だけ採用する。
-        cycle_df = cycle_df.sort_values([DETECTION_TIME_COLUMN, "oscillator_id"]).drop_duplicates(subset=["oscillator_id"], keep="first")
-
-        if len(cycle_df) < 2:
-            rows.append(
-                {
-                    "cycle_index": cycle_idx,
-                    "mean_abs_diff_from_ideal_phase_gap": np.nan,
-                }
-            )
-            continue
-
         times = cycle_df[DETECTION_TIME_COLUMN].to_numpy(dtype=np.float64)
         phases = 2.0 * math.pi * ((times - cycle_start) / cycle_length)
         phases = np.mod(phases, 2.0 * math.pi)
@@ -188,17 +175,16 @@ def compute_mean_abs_gap_error_per_cycle(
         all_diffs = np.concatenate([diffs, np.array([wrap_diff], dtype=np.float64)])
 
         mean_abs_error = float(np.mean(np.abs(all_diffs - ideal_gap)))
-        mean_abs_error_ratio = float(mean_abs_error / ideal_gap)
+        mean_abs_errors[result_index] = mean_abs_error
+        mean_abs_error_ratios[result_index] = float(mean_abs_error / ideal_gap)
 
-        rows.append(
-            {
-                "cycle_index": cycle_idx,
-                "mean_abs_diff_from_ideal_phase_gap": mean_abs_error,
-                "mean_abs_diff_from_ideal_phase_gap_ratio": mean_abs_error_ratio,
-            }
-        )
-
-    return pd.DataFrame(rows)
+    return pd.DataFrame(
+        {
+            "cycle_index": np.arange(1, len(cycle_starts) + 1, dtype=np.int64),
+            "mean_abs_diff_from_ideal_phase_gap": mean_abs_errors,
+            "mean_abs_diff_from_ideal_phase_gap_ratio": mean_abs_error_ratios,
+        }
+    )
 
 
 def process_run(run_dir: Path) -> str:

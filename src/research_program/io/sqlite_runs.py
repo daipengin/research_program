@@ -314,10 +314,27 @@ def list_run_rows(sqlite_path: str | Path) -> list[dict[str, Any]]:
 
 
 def available_files_for_run(sqlite_path: str | Path, run_id: str) -> tuple[str, ...]:
+    return available_files_for_runs(sqlite_path, [run_id]).get(
+        run_id,
+        ("metadata.csv", "send_log.csv"),
+    )
+
+
+def available_files_for_runs(
+    sqlite_path: str | Path,
+    run_ids: Iterable[str],
+) -> dict[str, tuple[str, ...]]:
+    run_id_list = [str(run_id) for run_id in run_ids]
+    files_by_run_id = {
+        run_id: ["metadata.csv", "send_log.csv"]
+        for run_id in run_id_list
+    }
+    if not files_by_run_id:
+        return {}
+
     path = Path(sqlite_path)
     with connect(path) as conn:
         initialize(conn)
-        files = ["metadata.csv", "send_log.csv"]
         checks = [
             ("asleep_log", "asleep_log.csv"),
             ("carrier_sense_log", "carrier_sense_log.csv"),
@@ -325,13 +342,12 @@ def available_files_for_run(sqlite_path: str | Path, run_id: str) -> tuple[str, 
             ("phase_gap_error", "phase_gap_error.csv"),
         ]
         for table_name, filename in checks:
-            count = conn.execute(
-                f"SELECT COUNT(*) FROM {table_name} WHERE run_id = ?",
-                (run_id,),
-            ).fetchone()[0]
-            if count:
-                files.append(filename)
-        return tuple(files)
+            rows = conn.execute(f"SELECT DISTINCT run_id FROM {table_name}").fetchall()
+            for row in rows:
+                row_run_id = str(row[0])
+                if row_run_id in files_by_run_id:
+                    files_by_run_id[row_run_id].append(filename)
+    return {run_id: tuple(files) for run_id, files in files_by_run_id.items()}
 
 
 def export_run_to_directory(sqlite_path: str | Path, run_id: str, output_dir: str | Path) -> None:
