@@ -167,6 +167,7 @@ uv run research-program plot-per
 uv run research-program plot-per-aligned
 uv run research-program compare-per
 uv run research-program compare-per-by-coupling-strength
+uv run research-program compare-per-by-coupling-strength-interval
 uv run research-program plot-per-timing-k-heatmap
 ```
 
@@ -177,20 +178,25 @@ uv run research-program plot-per-timing-k-heatmap
 - 複数runを基準周期でそろえたPER比較グラフ
 - 台数・送信間隔ごとのPER比較グラフ
 - 結合関数・結合強度ごとのPER集計グラフ
+- 任意の時間区間で数えたPER vs Kグラフ
 - PER timing × K ヒートマップ
+
+`compare-per-by-coupling-strength-interval` は、横軸K、縦軸PERのグラフを、任意の時間区間で計算したPERから作成します。対象区間は `[interval_start_ms, interval_end_ms)` で、区間内に開始する周期を対象にし、期待パケット数を `対象周期数 × デバイス数`、到着パケット数を対象周期に割り当たった `send_log.csv` の行数としてPERを計算します。例えば500s〜2000sなら、`interval_start_ms = 500000.0`、`interval_end_ms = 2000000.0` を指定します。描画用CSVとPDFは `outputs/figures/per_by_coupling_strength_interval_graphs/` に、結合関数ごとに同じstemで保存されます。
 
 位相差グラフはデフォルトでは `send_log.csv` の実送信時刻だけを使います。キャリアセンスでスキップした送信予定時刻も含めたい場合は、グラフ設定の `include_skipped_send_times` を有効にします。その場合は `carrier_sense_log.csv` も保存しておく必要があります。
 
-Web UIの `Runs` ページでは、条件に合うrun数を確認できます。`Graph creation` ページでは、上記の画像データをWeb上から選択して作成できます。対象runをパラメーターやタグで絞り込み、既定ではフィルタ後のrunを全て対象にするため、大量のrunを個別選択リストへ展開しません。個別選択が必要な場合だけ、run IDやパスで候補を絞ってから選択できます。必要に応じて、周期データの前処理も同時に実行できます。グラフ作成はバックグラウンドジョブとして開始され、ジョブ状態は `outputs/reports/graph_creation_jobs/` に保存されます。ページをリロードした後でも `Graph creation` ページの `Running graph jobs` から、完了コマンド数、経過時間、残り時間、終了予測時刻を確認できます。`Graph parameters` では、選択したグラフ種類ごとにx軸・y軸範囲、PER計算窓幅、基準周期、画像サイズなどをWeb上から変更できます。ここで変更してグラフ作成に使った値は `outputs/settings/last_graph_plot_overrides.json` に保存され、次回以降の初期値として再利用されます。
+Web UIの `Runs` ページでは、条件に合うrun数を確認できます。`Graph creation` ページでは、上記の画像データをWeb上から選択して作成できます。対象runをパラメーターやタグで絞り込み、既定ではフィルタ後のrunを全て対象にするため、大量のrunを個別選択リストへ展開しません。個別選択が必要な場合だけ、run IDやパスで候補を絞ってから選択できます。必要に応じて、周期データの前処理も同時に実行できます。グラフ作成はバックグラウンドジョブとして開始され、ジョブ状態は `outputs/reports/graph_creation_jobs/` に保存されます。ページをリロードした後でも `Graph creation` ページの `Running graph jobs` から、完了コマンド数、経過時間、残り時間、終了予測時刻を確認できます。`Graph parameters` では、選択したグラフ種類ごとにx軸・y軸範囲、PER計算窓幅、基準周期、画像サイズなどをWeb上から変更できます。PER timingや区間開始・終了などの時間入力は、UI上でms・秒・分を選択でき、内部設定と描画用CSVには従来どおりmsで保存されます。ここで変更してグラフ作成に使った値は `outputs/settings/last_graph_plot_overrides.json` に保存され、次回以降の初期値として再利用されます。
 
 ### 再描画
 
-Web UIの `Graph creation > Redraw` では、作成済みの描画用CSVを使って再描画できます。`compare-per`、`compare-per-by-coupling-strength`、`plot-per-timing-k-heatmap` は、対応するCSVが残っていれば再集計せずにスタイルや表示範囲だけを反映できます。CLIでは次のように実行できます。
+Web UIの `Graph creation > Redraw` では、作成済みの描画用CSVを使って再描画できます。`compare-per`、`compare-per-by-coupling-strength`、`compare-per-by-coupling-strength-interval`、`plot-per-timing-k-heatmap` は、対応するCSVが残っていれば再集計せずにスタイルや表示範囲だけを反映できます。CLIでは次のように実行できます。
 
 ```powershell
 $env:RESEARCH_PROGRAM_STYLE_ONLY_REDRAW = "1"
 uv run research-program plot-per-timing-k-heatmap
 ```
+
+`Interval PER vs K by coupling function` は、Web UIの `Graph redraw` から区間開始・終了を変更して再描画できます。この場合は既存CSVだけではなくrunログから区間PERを再集計し、指定した時間範囲に対応する新しい描画用CSVとPDFを保存します。
 
 ### アーカイブ済み機能
 
@@ -295,5 +301,6 @@ uv run research-program plot-per
 uv run research-program plot-per-aligned
 uv run research-program compare-per
 uv run research-program compare-per-by-coupling-strength
+uv run research-program compare-per-by-coupling-strength-interval
 uv run research-program plot-per-timing-k-heatmap
 ```

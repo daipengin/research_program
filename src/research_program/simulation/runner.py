@@ -16,6 +16,7 @@ from research_program.simulation.lora_airtime import (
 )
 from research_program.simulation.range_generators import (
     generate_even_interval_start_times,
+    generate_ranges_same_duration_from_random_cycle_starts,
     generate_ranges_from_start_times,
     generate_ranges_same_duration_from_unique_starts,
 )
@@ -30,9 +31,9 @@ from research_program.simulation.scheduler import (
 
 DEVICE_COUNT_TAG_PATTERN = re.compile(r"\d+dai")
 DEVICE_COUNT_LABEL_TAG_PATTERN = re.compile(r"device_count_\d+")
-START_TIMING_TAGS = {"start_random", "start_fixed"}
+START_TIMING_TAGS = {"start_random", "start_fixed", "start_random_cycle_ms_with_replacement"}
 SIMULATION_MODE_TAGS = {"mode_standard", "mode_per_measurement"}
-StartTimingMode = Literal["random", "fixed"]
+StartTimingMode = Literal["random", "fixed", "random_cycle_ms_with_replacement"]
 SimulationMode = Literal["standard", "per_measurement"]
 
 
@@ -241,6 +242,19 @@ def _random_ranges_factory(request: SimulationRequest):
     return ranges_factory
 
 
+def _random_cycle_ms_with_replacement_ranges_factory(request: SimulationRequest):
+    def ranges_factory(rng: Any, index: int) -> list[tuple[int, int, int]]:
+        return generate_ranges_same_duration_from_random_cycle_starts(
+            rng=rng,
+            cycle_time=request.cycle_time,
+            k=request.device_count,
+            duration=request.duration,
+            start_device_id=0,
+        )
+
+    return ranges_factory
+
+
 def _fixed_ranges_factory(request: SimulationRequest):
     start_times = fixed_start_times_for_request(request)
 
@@ -257,9 +271,14 @@ def _fixed_ranges_factory(request: SimulationRequest):
 def _ranges_factory_for_request(request: SimulationRequest):
     if request.start_timing_mode == "random":
         return _random_ranges_factory(request)
+    if request.start_timing_mode == "random_cycle_ms_with_replacement":
+        return _random_cycle_ms_with_replacement_ranges_factory(request)
     if request.start_timing_mode == "fixed":
         return _fixed_ranges_factory(request)
-    raise ValueError("start_timing_mode must be 'random' or 'fixed'")
+    raise ValueError(
+        "start_timing_mode must be 'random', 'fixed', or "
+        "'random_cycle_ms_with_replacement'"
+    )
 
 
 def run_simulation_request(
@@ -301,6 +320,8 @@ def run_simulation_request(
         random_sampling_method=(
             "uniform_without_replacement"
             if request.start_timing_mode == "random"
+            else "uniform_1ms_with_replacement_in_cycle"
+            if request.start_timing_mode == "random_cycle_ms_with_replacement"
             else ""
         ),
         start_step=request.start_step if request.start_timing_mode == "random" else None,

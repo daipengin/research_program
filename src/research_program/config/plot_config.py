@@ -640,6 +640,58 @@ PER_BY_COUPLING_STRENGTH_PLOT_CONFIG = _apply_plot_overrides(
 
 
 @dataclass(frozen=True)
+class PerByCouplingStrengthIntervalPlotConfig:
+    results_dir: Path = Path("data/runs")
+    graphs_dir: Path = Path("outputs/figures/per_by_coupling_strength_interval_graphs")
+
+    interval_start_ms: float = 500000.0
+    interval_end_ms: float = 2000000.0
+
+    target_coupling_functions: tuple[str, ...] = ()
+    coupling_strength_min: Optional[float] = None
+    coupling_strength_max: Optional[float] = None
+
+    xlim_min: Optional[float] = None
+    xlim_max: Optional[float] = None
+    ylim_min: Optional[float] = 0
+    ylim_max: Optional[float] = 100
+
+    x_label: str = "Coupling strength K (tick × -0.0001)"
+    y_label: str = "PER [%]"
+
+    font_size_label: int = 30
+    font_size_title: int = 16
+    font_size_ticks: int = 25
+
+    show_title: bool = False
+
+    figure_width: float = 10.0
+    figure_height: float = 6.0
+    save_dpi: int = 300
+
+    marker_style: str = "o"
+    marker_size: float = 8.0
+    line_style: str = "-"
+    line_width: float = 1.5
+
+    show_error_bars: bool = True
+    error_bar_mode: str = "std"
+    error_bar_capsize: float = 4.0
+
+    show_min_per_annotation: bool = True
+    min_per_annotation_font_size: int = 16
+    min_per_marker_size: float = 12.0
+
+    use_existing_csv_if_available: bool = False
+
+
+PER_BY_COUPLING_STRENGTH_INTERVAL_PLOT_CONFIG = _apply_plot_overrides(
+    PerByCouplingStrengthIntervalPlotConfig(),
+    "PER_BY_COUPLING_STRENGTH_INTERVAL_PLOT_CONFIG",
+)
+
+
+@dataclass(frozen=True)
 class PerTimingCouplingStrengthHeatmapConfig:
     results_dir: Path = Path("data/runs")
     graphs_dir: Path = Path("outputs/figures/per_timing_k_heatmaps")

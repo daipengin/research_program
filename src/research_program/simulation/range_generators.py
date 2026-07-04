@@ -51,6 +51,31 @@ def generate_ranges_same_duration_from_unique_starts(
     return ranges
 
 
+def generate_ranges_same_duration_from_random_cycle_starts(
+    rng: random.Random,
+    cycle_time: int,
+    k: int,
+    duration: int,
+    start_device_id: int = 0,
+) -> RangeType:
+    if cycle_time < 1:
+        raise ValueError("cycle_time must be at least 1")
+    if k < 1:
+        raise ValueError("k must be at least 1")
+    if duration < 1:
+        raise ValueError("duration must be at least 1")
+
+    starts = [rng.randrange(0, cycle_time) for _ in range(k)]
+    starts.sort()
+
+    ranges: RangeType = []
+    for i, start_time in enumerate(starts):
+        end_time = start_time + duration
+        device_id = start_device_id + i
+        ranges.append((start_time, end_time, device_id))
+    return ranges
+
+
 def generate_even_interval_start_times(
     k: int,
     interval: int,

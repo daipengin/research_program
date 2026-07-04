@@ -1,0 +1,32 @@
+{
+  "request_id": "20260704_171953_f5a90fb3",
+  "graph_type": "interval_per_vs_k",
+  "graph_key": {
+    "coupling_function": "KURAMOTO"
+  },
+  "params": {
+    "coupling_function": "KURAMOTO",
+    "k_start": 0.0,
+    "k_stop": 0.0,
+    "k_step": 1.0,
+    "k_values": [
+      0.0
+    ],
+    "runs_per_k": 1,
+    "interval_start_ms": 0.0,
+    "interval_end_ms": 1000.0,
+    "per_method": "interval_packet_error_rate",
+    "simulation_base": {
+      "duration_ms": 5000.0,
+      "seed": 1,
+      "device_count": 3,
+      "cycle_time": 1000,
+      "listening_rate": 25,
+      "strength_ratio": -0.0001,
+      "max_workers": 1,
+      "start_step_count": 10,
+      "start_step": 10
+    }
+  },
+  "created_at": "2026-07-04T08:19:53+00:00"
+}

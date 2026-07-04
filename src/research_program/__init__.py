@@ -1,3 +1,3 @@
-"""Research program utilities for simulation, analysis, and visualization."""
+"""Graph-first research program workspace."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

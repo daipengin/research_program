@@ -570,7 +570,10 @@ PERは0未満にならないようクリップする。
 | `plot-per-aligned` | 複数runのPER | `outputs/figures/per_aligned_graphs/*` | 基準cycleでそろえたPER比較。 |
 | `compare-per` | 複数runのPER | `outputs/figures/compare_per_graphs/*` | デバイス数・送信間隔ごとのPER比較。 |
 | `compare-per-by-coupling-strength` | 複数runのPER | `outputs/figures/per_by_coupling_strength_graphs/*` | 指定時刻のPERを結合強度ごとに比較。 |
+| `compare-per-by-coupling-strength-interval` | 複数runのPER | `outputs/figures/per_by_coupling_strength_interval_graphs/*` | 任意の時間区間で数えたPERを結合強度ごとに比較。 |
 | `plot-per-timing-k-heatmap` | 複数runのPER | `outputs/figures/per_timing_k_heatmaps/*.pdf` | PER timingと結合強度KごとのPERヒートマップ。`show_per_contour_line = true` の場合、各Kについて `per_contour_level` [%] 以下になる最小PER timingをマーカーで重ね描きする。 |
+
+`compare-per-by-coupling-strength-interval` は `PerByCouplingStrengthIntervalPlotConfig` で対象区間を指定する。区間は `[interval_start_ms, interval_end_ms)` とし、区間内に開始する周期を対象にする。期待パケット数は `対象周期数 × デバイス数`、到着パケット数は対象周期へ割り当てられた `send_log.csv` の行数である。PERは `max(0, (1 - 到着パケット数 / 期待パケット数) × 100)` [%] とする。例えば500s〜2000sを使う場合は `interval_start_ms = 500000.0`、`interval_end_ms = 2000000.0` を指定する。描画用CSVは結合関数ごとにPDFと同じstemで保存し、`expected_packets_sum`、`actual_packets_sum`、`interval_cycle_count_mean` も保存する。
 
 `plot-per-timing-k-heatmap` のPER levelマーカーオプションは、`PerTimingCouplingStrengthHeatmapConfig` で指定する。ヒートマップの色分け範囲は `color_min` と `color_max` [%] で指定し、例えば0〜10%で色分けしたい場合は `color_min = 0.0`, `color_max = 10.0` を指定する。PER timingの計算条件と描画用CSVはmsで保持し、縦軸の表示単位だけを `timing_display_unit` で `ms`, `s`, `min` から選べる。`show_per_contour_line` はマーカー表示のON/OFF、`per_contour_level` は閾値N[%]、`per_contour_color` はマーカー色、`per_level_marker_size` はマーカーサイズ、`per_level_marker_style` はマーカー形状、`show_per_contour_label` は凡例表示、`per_contour_label_font_size` は凡例フォントサイズである。各Kについて、集計済みPERがN%以下になる最小のPER timingだけを1点描画し、点同士は線で結ばない。`show_min_per_timing_annotation = true` の場合は、そのマーカー群のうちPER timingが最小になる点を星印で強調し、K値とtimingを注釈表示する。同じtimingの点が複数ある場合はKが小さい点を採用する。例えばPER 0%以下になる最小timingを描く場合は `show_per_contour_line = true`, `per_contour_level = 0.0` を指定する。PERが0%のセルすべてにだけマーカーを重ねる場合は `show_zero_per_markers = true` を指定する。0%判定は `zero_per_marker_tolerance` 以下の絶対値で行い、色・サイズ・形状は `zero_per_marker_color`, `zero_per_marker_size`, `zero_per_marker_style` で指定する。これらのオプションは表示だけを変更するため、同じ条件の描画用CSVがある場合は、Web UIの再描画または `RESEARCH_PROGRAM_STYLE_ONLY_REDRAW=1` で再集計せずに反映できる。
 
@@ -602,6 +605,7 @@ uv run research-program --help
 | `calculate-cycle-data` | 周期データを作成する。 |
 | `compare-per` | デバイス数・送信間隔別PER比較を作成する。 |
 | `compare-per-by-coupling-strength` | 結合強度別PER比較を作成する。 |
+| `compare-per-by-coupling-strength-interval` | 指定時間区間のPERを結合強度別に比較する。 |
 | `plot-per-timing-k-heatmap` | PER timingと結合強度KごとのPERヒートマップを作成する。必要に応じて、各KでPERがN%以下になる最小timingをマーカーで重ね描きする。 |
 | `plot-phase-diff` | 位相差グラフを作成する。 |
 | `plot-per` | PERグラフを作成する。 |

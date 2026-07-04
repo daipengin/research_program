@@ -1,0 +1,42 @@
+{
+  "request_id": "20260704_172914_4dd2a7b3",
+  "graph_type": "interval_per_vs_k",
+  "graph_key": {
+    "coupling_function": "KURAMOTO"
+  },
+  "params": {
+    "coupling_function": "KURAMOTO",
+    "k_start": 0.0,
+    "k_stop": 0.0,
+    "k_step": 1.0,
+    "k_values": [
+      0.0
+    ],
+    "runs_per_k": 1,
+    "interval_start_ms": 0.0,
+    "interval_end_ms": 1000.0,
+    "per_method": "interval_packet_error_rate",
+    "simulation_base": {
+      "duration_ms": 5000.0,
+      "seed": 2,
+      "device_count": 3,
+      "cycle_time": 1000,
+      "listening_rate": 25,
+      "strength_ratio": -0.0001,
+      "max_workers": 1,
+      "start_step_count": 10,
+      "start_step": 10,
+      "simulation_mode": "per_measurement",
+      "carrier_sense_duration_ms": 2.0,
+      "lora_payload_bytes": 12,
+      "lora_spreading_factor": 7,
+      "lora_bandwidth_hz": 125000,
+      "lora_coding_rate_denominator": 5,
+      "lora_preamble_symbols": 8,
+      "lora_explicit_header": true,
+      "lora_crc_enabled": true,
+      "lora_low_data_rate_optimize": "auto"
+    }
+  },
+  "created_at": "2026-07-04T08:29:14+00:00"
+}

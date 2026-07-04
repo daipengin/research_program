@@ -1,0 +1,5755 @@
+from __future__ import annotations
+
+import csv
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
+from io import BytesIO
+from itertools import product
+import json
+import math
+import os
+import platform
+import re
+from pathlib import Path
+import shutil
+import socket
+import sys
+import subprocess
+import tempfile
+import time
+from typing import Any
+import zipfile
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+import pandas as pd
+from PIL import Image
+import streamlit as st
+
+from research_program.config.loader import load_toml
+from research_program.config.paths import resolve_project_path
+from research_program.io.cleanup import (
+    CleanupResult,
+    cleanup_experiment_outputs,
+)
+from research_program.io.archive import (
+    ArchiveResult,
+    archive_run_directories,
+    list_temp_archives,
+    restore_archive,
+)
+from research_program.io.data_contract import RunDataContract, load_data_contract
+from research_program.io.figures import (
+    FigureAsset,
+    convert_raster_image,
+    discover_figures,
+    figures_to_frame,
+    original_mime_type,
+    read_original_bytes,
+)
+from research_program.io.run_store import (
+    RunRecord,
+    discover_runs_with_index,
+    filter_records,
+    records_to_frame,
+)
+from research_program.io.sqlite_runs import export_run_to_directory, is_sqlite_run_store
+from research_program.plotting.jobs import (
+    create_graph_creation_job,
+    load_graph_creation_job_statuses,
+)
+from research_program.pipelines.interval_per_vs_k import (
+    create_interval_per_vs_k_job,
+    load_interval_per_vs_k_statuses,
+    redraw_interval_per_vs_k_graph,
+)
+from research_program.config.plot_config import (
+    COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG,
+    PER_BY_COUPLING_STRENGTH_INTERVAL_PLOT_CONFIG,
+    PER_BY_COUPLING_STRENGTH_PLOT_CONFIG,
+    PER_TIMING_K_HEATMAP_CONFIG,
+    PER_ALIGNED_PLOT_CONFIG,
+    PER_PLOT_CONFIG,
+    VISUALIZE_PHASE_DIFF_CONFIG,
+)
+from research_program.simulation.runner import (
+    SimulationRequest,
+    effective_carrier_sense_duration_for_request,
+    fixed_start_times_for_request,
+    lora_airtime_config_from_request,
+    lora_airtime_ms_for_request,
+    normalize_simulation_tags,
+    request_from_config,
+    resolve_max_workers,
+    run_simulation_request,
+)
+from research_program.simulation.jobs import (
+    create_simulation_job,
+    load_simulation_job_statuses,
+)
+from research_program.simulation.range_generators import (
+    generate_even_interval_start_times,
+    parse_start_times_text,
+)
+
+
+DEFAULT_WEB_CONFIG = Path("configs/web/default.toml")
+SETTINGS_DIR = PROJECT_ROOT / "outputs" / "settings"
+LAST_SIMULATION_REQUEST_PATH = SETTINGS_DIR / "last_simulation_request.json"
+LAST_GRAPH_PLOT_OVERRIDES_PATH = SETTINGS_DIR / "last_graph_plot_overrides.json"
+OLD_LAST_SIMULATION_REQUEST_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_simulation_request.json"
+OLD_LAST_GRAPH_PLOT_OVERRIDES_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_graph_plot_overrides.json"
+COUPLING_FUNCTION_OPTIONS = ["KURAMOTO", "LINEAR", "NewSIN", "NONE"]
+
+
+def _display_rows_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
+    df = pd.DataFrame(rows)
+    for column in df.columns:
+        if str(column).endswith("(Value)"):
+            df[column] = df[column].map(lambda value: "" if value is None else str(value))
+    return df
+
+SWEEP_PARAMETER_SPECS: dict[str, dict[str, Any]] = {
+    "coupling_strength": {
+        "label": "結合強度(Coupling strength)",
+        "type": "int",
+        "step": 10,
+    },
+    "strength_ratio": {
+        "label": "強度倍率(Strength ratio)",
+        "type": "float",
+        "step": 0.0001,
+        "format": "%.8f",
+    },
+    "cycle_time": {
+        "label": "周期時間[ms](Cycle time [ms])",
+        "type": "int",
+        "min": 1,
+        "step": 1000,
+    },
+    "listening_rate": {
+        "label": "待機率[%](Listening rate [%])",
+        "type": "int",
+        "min": 1,
+        "max": 99,
+        "step": 1,
+    },
+    "device_count": {
+        "label": "デバイス数(Devices)",
+        "type": "int",
+        "min": 1,
+        "step": 1,
+    },
+    "duration": {
+        "label": "シミュレーション時間[ms](Duration [ms])",
+        "type": "int",
+        "min": 1,
+        "step": 30000,
+    },
+    "start_step": {
+        "label": "開始時刻ステップ[ms](Start step [ms])",
+        "type": "int",
+        "min": 1,
+        "step": 1,
+    },
+    "start_step_count": {
+        "label": "開始時刻ステップ数(Start step count)",
+        "type": "int",
+        "min": 1,
+        "step": 1,
+    },
+    "fixed_start_interval": {
+        "label": "固定開始間隔[ms](Fixed start interval [ms])",
+        "type": "int",
+        "min": 0,
+        "step": 1,
+    },
+    "fixed_start_offset": {
+        "label": "固定開始オフセット[ms](Fixed start offset [ms])",
+        "type": "int",
+        "min": 0,
+        "step": 1,
+    },
+    "carrier_sense_duration_ms": {
+        "label": "キャリアセンス時間[ms](Carrier-sense duration [ms])",
+        "type": "float",
+        "min": 0.0,
+        "step": 1.0,
+    },
+    "lora_payload_bytes": {
+        "label": "LoRaペイロード[bytes](LoRa payload [bytes])",
+        "type": "int",
+        "min": 0,
+        "step": 1,
+    },
+    "lora_spreading_factor": {
+        "label": "LoRa SF(LoRa spreading factor)",
+        "type": "int",
+        "min": 6,
+        "max": 12,
+        "step": 1,
+    },
+    "lora_bandwidth_hz": {
+        "label": "LoRa帯域[Hz](LoRa bandwidth [Hz])",
+        "type": "int",
+        "min": 1,
+        "step": 125000,
+    },
+    "lora_coding_rate_denominator": {
+        "label": "LoRa符号化率 denominator(LoRa coding-rate denominator)",
+        "type": "int",
+        "min": 5,
+        "max": 8,
+        "step": 1,
+    },
+    "lora_preamble_symbols": {
+        "label": "LoRaプリアンブル[symbols](LoRa preamble [symbols])",
+        "type": "int",
+        "min": 0,
+        "step": 1,
+    },
+}
+
+COMMON_SWEEP_FIELDS = [
+    "coupling_strength",
+    "strength_ratio",
+    "cycle_time",
+    "listening_rate",
+    "device_count",
+    "duration",
+]
+RANDOM_START_SWEEP_FIELDS = ["start_step", "start_step_count"]
+FIXED_START_SWEEP_FIELDS = ["fixed_start_interval", "fixed_start_offset"]
+PER_MEASUREMENT_SWEEP_FIELDS = [
+    "carrier_sense_duration_ms",
+    "lora_payload_bytes",
+    "lora_spreading_factor",
+    "lora_bandwidth_hz",
+    "lora_coding_rate_denominator",
+    "lora_preamble_symbols",
+]
+
+RUN_COLUMN_LABELS = {
+    "run_id": "run ID(Run ID)",
+    "coupling_function": "結合関数(Coupling function)",
+    "coupling_strength": "結合強度(Coupling strength)",
+    "strength_ratio": "強度倍率(Strength ratio)",
+    "cycle_time": "周期時間(Cycle time)",
+    "listening_rate": "待機率(Listening rate)",
+    "device_count": "デバイス数(Device count)",
+    "start_timing_mode": "開始タイミング(Start timing)",
+    "random_sampling_method": "ランダム抽出方式(Random sampling)",
+    "random_seed": "ランダムseed(Random seed)",
+    "random_run_index": "ランダムrun番号(Random run index)",
+    "random_start_min": "候補開始最小[ms](Candidate min [ms])",
+    "random_start_max": "候補開始最大[ms](Candidate max [ms])",
+    "start_step": "候補刻み[ms](Candidate step [ms])",
+    "start_step_count": "候補ステップ数(Candidate step count)",
+    "random_start_candidate_count": "候補数(Candidates)",
+    "selected_start_times": "選択開始時刻[ms](Selected starts [ms])",
+    "simulation_mode": "シミュレーションモード(Simulation mode)",
+    "carrier_sense_duration_ms": "キャリアセンス時間[ms](Carrier-sense [ms])",
+    "transmission_time_ms": "送信時間[ms](Transmission time [ms])",
+    "tags": "タグ(Tags)",
+    "status": "状態(Status)",
+    "path": "パス(Path)",
+}
+
+FIGURE_COLUMN_LABELS = {
+    "figure_scope": "データ区分(Data scope)",
+    "graph_type": "グラフ種類(Graph type)",
+    "graph_description": "説明(Description)",
+    "name": "ファイル名(Name)",
+    "relative_path": "相対パス(Relative path)",
+    "extension": "拡張子(Extension)",
+    "source_root": "探索元(Source root)",
+    "size_kb": "サイズ[KB](Size [KB])",
+    "path": "パス(Path)",
+}
+
+CONTRACT_COLUMN_LABELS = {
+    "file": "ファイル(File)",
+    "column": "列(Column)",
+    "type": "型(Type)",
+    "required": "必須(Required)",
+    "unit": "単位(Unit)",
+    "aliases": "別名(Aliases)",
+    "description": "説明(Description)",
+}
+
+CLEANUP_COLUMN_LABELS = {
+    "path": "パス(Path)",
+    "kind": "種類(Kind)",
+    "size_kb": "サイズ[KB](Size [KB])",
+}
+
+NUMERIC_FIELD_LABELS = {
+    "coupling_strength": "結合強度(Coupling strength)",
+    "strength_ratio": "強度倍率(Strength ratio)",
+    "cycle_time": "周期時間(Cycle time)",
+    "listening_rate": "待機率(Listening rate)",
+}
+
+CLEANUP_TARGET_LABELS = {
+    "runs": "runデータ(Runs)",
+    "aggregated": "集約データ(Aggregated)",
+    "figures": "画像(Figures)",
+    "reports": "レポート(Reports)",
+    "raw_real": "実機元データ(Raw real-device data)",
+    "raw_simulation": "シミュレーション元データ(Raw simulation data)",
+}
+
+PREPROCESS_COMMANDS = {
+    "calculate-cycle-data": {
+        "label": "周期データ作成(Calculate cycle data)",
+        "output": "data/runs/*/calculated_Cycle_data.csv",
+    },
+}
+
+GRAPH_CREATION_COMMANDS = {
+    "plot-phase-diff": {
+        "label": "位相差グラフ(Phase-difference graphs)",
+        "output": "outputs/figures/phase_diff_graphs/*.pdf",
+    },
+    "plot-per": {
+        "label": "PERグラフ(PER graphs)",
+        "output": "outputs/figures/per_graphs/*.pdf",
+    },
+    "plot-per-aligned": {
+        "label": "基準周期そろえPERグラフ(Aligned PER graphs)",
+        "output": "outputs/figures/per_aligned_graphs/*",
+    },
+    "compare-per": {
+        "label": "台数・送信間隔別PER比較(PER comparison by devices and interval)",
+        "output": "outputs/figures/compare_per_graphs/*.pdf",
+    },
+    "compare-per-by-coupling-strength": {
+        "label": "PER vs K by coupling function",
+        "output": "outputs/figures/per_by_coupling_strength_graphs/*.pdf",
+    },
+    "compare-per-by-coupling-strength-interval": {
+        "label": "Interval PER vs K by coupling function",
+        "output": "outputs/figures/per_by_coupling_strength_interval_graphs/*.pdf",
+    },
+    "plot-per-timing-k-heatmap": {
+        "label": "PER timing × K heatmap",
+        "output": "outputs/figures/per_timing_k_heatmaps/*.pdf",
+    },
+}
+
+ARCHIVED_GRAPH_CREATION_COMMANDS = {
+    "archive-plot-phase-gap-error": {
+        "label": "アーカイブ: 位相ギャップ誤差グラフ(Archived phase-gap error graphs)",
+        "output": "outputs/figures/phase_gap_error_graphs/*.pdf",
+    },
+    "archive-plot-aggregated-phase-gap-error": {
+        "label": "アーカイブ: 集約位相ギャップ誤差グラフ(Archived aggregated phase-gap error graphs)",
+        "output": "outputs/figures/aggregated_stats_graphs/*.pdf",
+    },
+    "archive-plot-aggregated-phase-gap-error-overlay": {
+        "label": "アーカイブ: 集約位相ギャップ誤差重ね描き(Archived aggregated phase-gap error overlay)",
+        "output": "outputs/figures/aggregated_stats_overlay_graphs/*",
+    },
+    "archive-plot-convergence-summary": {
+        "label": "アーカイブ: 収束サマリーグラフ(Archived convergence summary graph)",
+        "output": "outputs/figures/convergence_graphs/*",
+    },
+}
+
+GRAPH_COMMAND_LABELS = {
+    **{command: info["label"] for command, info in GRAPH_CREATION_COMMANDS.items()},
+    **{command: info["label"] for command, info in ARCHIVED_GRAPH_CREATION_COMMANDS.items()},
+}
+
+GRAPH_CREATION_PAGE_PREFIX = "graph_create::"
+STYLE_ONLY_REDRAW_GRAPH_COMMANDS = {
+    "compare-per",
+    "compare-per-by-coupling-strength",
+    "compare-per-by-coupling-strength-interval",
+    "plot-per-timing-k-heatmap",
+}
+STYLE_ONLY_SOURCE_FIELDS_BY_GRAPH_COMMAND: dict[str, tuple[str, ...]] = {
+    "compare-per": ("target_cycle", "per_window_width_cycles"),
+    "compare-per-by-coupling-strength": ("target_time_ms", "per_window_width_cycles"),
+    "plot-per-timing-k-heatmap": (
+        "timing_min_ms",
+        "timing_max_ms",
+        "timing_step_ms",
+        "per_window_width_cycles",
+    ),
+}
+
+GRAPH_PREPROCESS_REQUIREMENTS: dict[str, tuple[str, ...]] = {
+    "plot-phase-diff": ("calculate-cycle-data",),
+    "plot-per": ("calculate-cycle-data",),
+    "plot-per-aligned": ("calculate-cycle-data",),
+    "compare-per": ("calculate-cycle-data",),
+    "compare-per-by-coupling-strength": ("calculate-cycle-data",),
+    "compare-per-by-coupling-strength-interval": ("calculate-cycle-data",),
+    "plot-per-timing-k-heatmap": ("calculate-cycle-data",),
+}
+
+PLOT_CONFIG_BY_GRAPH_COMMAND: dict[str, tuple[str, Any]] = {
+    "plot-phase-diff": ("VISUALIZE_PHASE_DIFF_CONFIG", VISUALIZE_PHASE_DIFF_CONFIG),
+    "plot-per": ("PER_PLOT_CONFIG", PER_PLOT_CONFIG),
+    "plot-per-aligned": ("PER_ALIGNED_PLOT_CONFIG", PER_ALIGNED_PLOT_CONFIG),
+    "compare-per": ("COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG", COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG),
+    "compare-per-by-coupling-strength": (
+        "PER_BY_COUPLING_STRENGTH_PLOT_CONFIG",
+        PER_BY_COUPLING_STRENGTH_PLOT_CONFIG,
+    ),
+    "compare-per-by-coupling-strength-interval": (
+        "PER_BY_COUPLING_STRENGTH_INTERVAL_PLOT_CONFIG",
+        PER_BY_COUPLING_STRENGTH_INTERVAL_PLOT_CONFIG,
+    ),
+    "plot-per-timing-k-heatmap": (
+        "PER_TIMING_K_HEATMAP_CONFIG",
+        PER_TIMING_K_HEATMAP_CONFIG,
+    ),
+}
+
+PLOT_RANGE_FIELD_PAIRS = [
+    ("color_min", "color_max", "PER color scale range"),
+    ("interval_start_ms", "interval_end_ms", "PER interval"),
+    ("xlim_min", "xlim_max", "x軸範囲(X-axis range)"),
+    ("ylim_min", "ylim_max", "y軸範囲(Y-axis range)"),
+    ("per_ylim_min", "per_ylim_max", "PER y軸範囲(PER Y-axis range)"),
+    ("per_change_ylim_min", "per_change_ylim_max", "PER変化量 y軸範囲(PER-change Y-axis range)"),
+    ("ylim_left_min", "ylim_left_max", "左y軸範囲(Left Y-axis range)"),
+    ("ylim_right_min", "ylim_right_max", "右y軸範囲(Right Y-axis range)"),
+]
+
+GRAPH_TYPE_BY_OUTPUT_DIR = {
+    "phase_diff_graphs": GRAPH_COMMAND_LABELS["plot-phase-diff"],
+    "phase_gap_error_graphs": GRAPH_COMMAND_LABELS["archive-plot-phase-gap-error"],
+    "per_graphs": GRAPH_COMMAND_LABELS["plot-per"],
+    "per_aligned_graphs": GRAPH_COMMAND_LABELS["plot-per-aligned"],
+    "compare_per_graphs": GRAPH_COMMAND_LABELS["compare-per"],
+    "per_by_coupling_strength_graphs": GRAPH_COMMAND_LABELS["compare-per-by-coupling-strength"],
+    "per_by_coupling_strength_interval_graphs": GRAPH_COMMAND_LABELS["compare-per-by-coupling-strength-interval"],
+    "per_timing_k_heatmaps": GRAPH_COMMAND_LABELS["plot-per-timing-k-heatmap"],
+    "aggregated_stats_graphs": GRAPH_COMMAND_LABELS["archive-plot-aggregated-phase-gap-error"],
+    "aggregated_stats_overlay_graphs": GRAPH_COMMAND_LABELS["archive-plot-aggregated-phase-gap-error-overlay"],
+    "convergence_graphs": GRAPH_COMMAND_LABELS["archive-plot-convergence-summary"],
+}
+
+FIGURE_SCOPE_LABELS = {
+    "single": "単体データ(Single data)",
+    "multiple": "複数データ/平均・集約(Multiple data / average)",
+    "other": "その他(Other)",
+}
+
+FIGURE_SCOPE_BY_OUTPUT_DIR = {
+    "phase_diff_graphs": "single",
+    "phase_gap_error_graphs": "single",
+    "per_graphs": "single",
+    "per_aligned_graphs": "single",
+    "compare_per_graphs": "multiple",
+    "per_by_coupling_strength_graphs": "multiple",
+    "per_by_coupling_strength_interval_graphs": "multiple",
+    "per_timing_k_heatmaps": "multiple",
+    "aggregated_stats_graphs": "multiple",
+    "aggregated_stats_overlay_graphs": "multiple",
+    "convergence_graphs": "multiple",
+}
+
+GRAPH_DESCRIPTION_BY_OUTPUT_DIR = {
+    "per_by_coupling_strength_graphs": "Compares PER at a target time by coupling strength K, separated by coupling function",
+    "per_by_coupling_strength_interval_graphs": "Compares PER over a selected time interval by coupling strength K, separated by coupling function",
+    "per_timing_k_heatmaps": "Shows PER as color over coupling strength K and PER timing",
+    "phase_diff_graphs": "1つのrunの送信時刻から位相差を表示(Uses one run to show phase differences)",
+    "phase_gap_error_graphs": "アーカイブ済み: 1つのrunの位相ギャップ誤差を表示(Archived phase-gap error figure)",
+    "per_graphs": "1つのrunのPERを表示(Uses one run to show PER)",
+    "per_aligned_graphs": "1つのrunのPERを基準周期にそろえて表示(Uses one run aligned to a base cycle)",
+    "compare_per_graphs": "複数runを台数・送信間隔で平均して比較(Compares averages by devices and interval)",
+    "aggregated_stats_graphs": "アーカイブ済み: 複数runの位相ギャップ誤差統計を表示(Archived aggregated phase-gap error statistics)",
+    "aggregated_stats_overlay_graphs": "アーカイブ済み: 複数runの集約統計を重ね描き(Archived aggregated statistics overlay)",
+    "convergence_graphs": "アーカイブ済み: 複数runの集約統計から収束傾向を表示(Archived convergence summary)",
+}
+
+FIGURE_SCOPE_SORT_ORDER = {
+    "single": 0,
+    "multiple": 1,
+    "other": 2,
+}
+
+GRAPH_TABLE_COLUMN_LABELS = {
+    "command": "コマンド(Command)",
+    "scope": "データ区分(Data scope)",
+    "label": "種類(Type)",
+    "description": "説明(Description)",
+    "output": "出力先(Output)",
+}
+
+COMMAND_RESULT_COLUMN_LABELS = {
+    "command": "コマンド(Command)",
+    "status": "状態(Status)",
+    "started_at": "開始時刻(Started)",
+    "finished_at": "終了時刻(Finished)",
+    "duration": "所要時間(Duration)",
+    "message": "メッセージ(Message)",
+}
+
+
+def _cache_token(name: str) -> int:
+    return int(st.session_state.get(f"{name}_refresh_token", 0))
+
+
+def _bump_cache_token(name: str) -> None:
+    key = f"{name}_refresh_token"
+    st.session_state[key] = int(st.session_state.get(key, 0)) + 1
+
+
+def _path_values(value: Any) -> list[str | Path]:
+    if isinstance(value, str | Path):
+        return [value]
+    if isinstance(value, list | tuple):
+        return [item for item in value if isinstance(item, str | Path)]
+    return []
+
+
+def _ensure_gitkeep(directory: Path) -> None:
+    try:
+        directory.resolve().relative_to(PROJECT_ROOT.resolve())
+    except ValueError:
+        return
+
+    gitkeep_path = directory / ".gitkeep"
+    if not gitkeep_path.exists():
+        gitkeep_path.write_text("", encoding="utf-8")
+
+
+def _ensure_server_directories(web_config: dict[str, Any]) -> None:
+    paths_config = web_config.get("paths", {})
+    directory_values: list[str | Path] = [
+        "data",
+        "data/runs",
+        "data/run",
+        "data/aggregated",
+        "data/archives",
+        "data/archives/temp",
+        "data/raw",
+        "data/raw/real",
+        "data/raw/simulation",
+        "outputs",
+        "outputs/figures",
+        "outputs/reports",
+        "outputs/reports/simulation_jobs",
+        "outputs/reports/graph_creation_jobs",
+        "outputs/settings",
+    ]
+    gitkeep_directory_values: list[str | Path] = [
+        "data/runs",
+        "data/run",
+        "data/aggregated",
+        "data/archives",
+        "data/archives/temp",
+        "data/raw/real",
+        "data/raw/simulation",
+        "outputs/figures",
+        "outputs/reports",
+        "outputs/reports/simulation_jobs",
+        "outputs/reports/graph_creation_jobs",
+        "outputs/settings",
+    ]
+    for key in ["runs_dirs", "aggregated_dirs", "figure_dirs"]:
+        configured_directories = _path_values(paths_config.get(key, []))
+        directory_values.extend(configured_directories)
+        gitkeep_directory_values.extend(configured_directories)
+
+    seen_paths: set[Path] = set()
+    for directory_value in directory_values:
+        directory = resolve_project_path(directory_value)
+        if directory in seen_paths:
+            continue
+        directory.mkdir(parents=True, exist_ok=True)
+        seen_paths.add(directory)
+
+    seen_gitkeep_paths: set[Path] = set()
+    for directory_value in gitkeep_directory_values:
+        directory = resolve_project_path(directory_value)
+        if directory in seen_gitkeep_paths:
+            continue
+        directory.mkdir(parents=True, exist_ok=True)
+        _ensure_gitkeep(directory)
+        seen_gitkeep_paths.add(directory)
+
+
+@st.cache_data(show_spinner=False)
+def _load_runtime(web_config_path: str | Path = DEFAULT_WEB_CONFIG) -> tuple[dict[str, Any], RunDataContract]:
+    web_config = load_toml(web_config_path)
+    _ensure_server_directories(web_config)
+    contract = load_data_contract(web_config["paths"]["data_format_config"])
+    return web_config, contract
+
+
+@st.cache_data(show_spinner="run一覧を読み込み中(Loading runs)...", ttl=10)
+def _discover_records_cached(
+    runs_dirs: tuple[str, ...],
+    data_format_config: str,
+    refresh_token: int,
+    force_rescan: bool,
+) -> list[RunRecord]:
+    contract = load_data_contract(data_format_config)
+    return discover_runs_with_index(runs_dirs, contract, force_rescan=force_rescan)
+
+
+def _discover_records(
+    web_config: dict[str, Any],
+    contract: RunDataContract,
+    refresh_token: int = 0,
+    force_rescan: bool = False,
+) -> list[RunRecord]:
+    return _discover_records_cached(
+        tuple(str(path) for path in web_config["paths"].get("runs_dirs", [])),
+        str(web_config["paths"]["data_format_config"]),
+        refresh_token,
+        force_rescan,
+    )
+
+
+@st.cache_data(show_spinner="画像一覧を読み込み中(Loading figures)...", ttl=10)
+def _discover_figures_cached(
+    figure_dirs: tuple[str, ...],
+    extensions: tuple[str, ...],
+    refresh_token: int,
+) -> list[FigureAsset]:
+    return discover_figures(figure_dirs, extensions=extensions)
+
+
+def _discover_figures_for_web(web_config: dict[str, Any], refresh_token: int = 0) -> list[FigureAsset]:
+    figure_config = web_config.get("figures", {})
+    return _discover_figures_cached(
+        tuple(str(path) for path in web_config["paths"].get("figure_dirs", [])),
+        tuple(str(extension) for extension in figure_config.get("extensions", [])),
+        refresh_token,
+    )
+
+
+def _all_tags(records: list[RunRecord]) -> list[str]:
+    return sorted({tag for record in records for tag in record.tags})
+
+
+def _numeric_values(records: list[RunRecord], field_name: str) -> list[float]:
+    values: list[float] = []
+    for record in records:
+        value = record.metadata.get(field_name)
+        if value is None:
+            continue
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
+def _filter_controls(
+    records: list[RunRecord],
+    web_config: dict[str, Any],
+    key_prefix: str = "runs",
+) -> list[RunRecord]:
+    filter_config = web_config.get("filters", {})
+    coupling_options = sorted(
+        {
+            str(record.metadata.get("coupling_function"))
+            for record in records
+            if record.metadata.get("coupling_function") is not None
+        }
+    )
+
+    selected_coupling_functions = st.multiselect(
+        "結合関数(Coupling function)",
+        coupling_options,
+        default=coupling_options,
+        key=f"{key_prefix}_coupling_functions",
+    )
+
+    numeric_ranges: dict[str, tuple[float, float]] = {}
+    for field_name in filter_config.get("numeric_fields", []):
+        values = _numeric_values(records, field_name)
+        if not values:
+            continue
+        min_value = min(values)
+        max_value = max(values)
+        if min_value == max_value:
+            continue
+        selected_range = st.slider(
+            NUMERIC_FIELD_LABELS.get(field_name, f"{field_name}({field_name})"),
+            min_value=float(min_value),
+            max_value=float(max_value),
+            value=(float(min_value), float(max_value)),
+            key=f"{key_prefix}_{field_name}_range",
+        )
+        numeric_ranges[field_name] = (float(selected_range[0]), float(selected_range[1]))
+
+    tag_options = _all_tags(records)
+    selected_tags = st.multiselect("タグ(Tags)", tag_options, key=f"{key_prefix}_tags")
+
+    return filter_records(
+        records=records,
+        coupling_functions=selected_coupling_functions,
+        numeric_ranges=numeric_ranges,
+        required_tags=selected_tags,
+    )
+
+
+def _render_runs_tab(records: list[RunRecord], web_config: dict[str, Any]) -> None:
+    filtered_records = _filter_controls(records, web_config)
+    filtered_df = records_to_frame(filtered_records)
+
+    st.metric("実行数(Runs)", len(filtered_records))
+    if filtered_df.empty:
+        st.dataframe(pd.DataFrame())
+        return
+
+    visible_columns = [
+        column
+        for column in [
+            "run_id",
+            "coupling_function",
+            "coupling_strength",
+            "strength_ratio",
+            "cycle_time",
+            "listening_rate",
+            "device_count",
+            "start_timing_mode",
+            "random_sampling_method",
+            "random_seed",
+            "random_run_index",
+            "random_start_min",
+            "random_start_max",
+            "start_step",
+            "start_step_count",
+            "random_start_candidate_count",
+            "selected_start_times",
+            "simulation_mode",
+            "carrier_sense_duration_ms",
+            "transmission_time_ms",
+            "tags",
+            "status",
+            "path",
+        ]
+        if column in filtered_df.columns
+    ]
+    st.dataframe(
+        filtered_df[visible_columns].rename(columns=RUN_COLUMN_LABELS),
+        width="stretch",
+        hide_index=True,
+    )
+
+
+def _manual_tags_tuple(tags: tuple[str, ...]) -> tuple[str, ...]:
+    sweep_prefixes = tuple(f"{field_name}_" for field_name in SWEEP_PARAMETER_SPECS) + (
+        "coupling_function_",
+    )
+    auto_tag_values = {
+        "sweep",
+        "start_random",
+        "start_fixed",
+        "mode_standard",
+        "mode_per_measurement",
+    }
+    manual_tags = [
+        tag.strip()
+        for tag in tags
+        if tag.strip()
+    ]
+    manual_tags = [
+        tag
+        for tag in manual_tags
+        if not (tag.endswith("dai") and tag[:-3].isdigit())
+        and tag not in auto_tag_values
+        and not tag.startswith(sweep_prefixes)
+    ]
+    return tuple(manual_tags)
+
+
+def _manual_tags_text(tags: tuple[str, ...]) -> str:
+    return ";".join(_manual_tags_tuple(tags))
+
+
+def _display_project_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(PROJECT_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _default_sqlite_output_text(
+    defaults: SimulationRequest,
+    config_defaults: SimulationRequest,
+) -> str:
+    if is_sqlite_run_store(defaults.output_root):
+        return _display_project_path(defaults.output_root)
+    if is_sqlite_run_store(config_defaults.output_root):
+        return _display_project_path(config_defaults.output_root)
+    return "data/run/simulation_runs.sqlite"
+
+
+def _default_csv_output_text(defaults: SimulationRequest) -> str:
+    if not is_sqlite_run_store(defaults.output_root):
+        return _display_project_path(defaults.output_root)
+    return "data/runs"
+
+
+def _simulation_request_to_dict(request: SimulationRequest) -> dict[str, Any]:
+    return {
+        "num_runs": request.num_runs,
+        "seed": request.seed,
+        "coupling_function": request.coupling_function,
+        "coupling_strength": request.coupling_strength,
+        "strength_ratio": request.strength_ratio,
+        "cycle_time": request.cycle_time,
+        "listening_rate": request.listening_rate,
+        "device_count": request.device_count,
+        "duration": request.duration,
+        "start_step_count": request.start_step_count,
+        "start_step": request.start_step,
+        "tags": list(request.tags),
+        "output_root": _display_project_path(request.output_root),
+        "max_workers": request.max_workers,
+        "start_timing_mode": request.start_timing_mode,
+        "fixed_start_times": list(request.fixed_start_times),
+        "fixed_start_interval": request.fixed_start_interval,
+        "fixed_start_offset": request.fixed_start_offset,
+        "simulation_mode": request.simulation_mode,
+        "carrier_sense_duration_ms": request.carrier_sense_duration_ms,
+        "lora_payload_bytes": request.lora_payload_bytes,
+        "lora_spreading_factor": request.lora_spreading_factor,
+        "lora_bandwidth_hz": request.lora_bandwidth_hz,
+        "lora_coding_rate_denominator": request.lora_coding_rate_denominator,
+        "lora_preamble_symbols": request.lora_preamble_symbols,
+        "lora_explicit_header": request.lora_explicit_header,
+        "lora_crc_enabled": request.lora_crc_enabled,
+        "lora_low_data_rate_optimize": request.lora_low_data_rate_optimize,
+        "save_asleep_log": request.save_asleep_log,
+        "save_carrier_sense_log": request.save_carrier_sense_log,
+    }
+
+
+def _simulation_request_from_dict(data: dict[str, Any], fallback: SimulationRequest) -> SimulationRequest:
+    return SimulationRequest(
+        num_runs=int(data.get("num_runs", fallback.num_runs)),
+        seed=int(data.get("seed", fallback.seed)),
+        coupling_function=str(data.get("coupling_function", fallback.coupling_function)),
+        coupling_strength=int(data.get("coupling_strength", fallback.coupling_strength)),
+        strength_ratio=float(data.get("strength_ratio", fallback.strength_ratio)),
+        cycle_time=int(data.get("cycle_time", fallback.cycle_time)),
+        listening_rate=int(data.get("listening_rate", fallback.listening_rate)),
+        device_count=int(data.get("device_count", fallback.device_count)),
+        duration=int(data.get("duration", fallback.duration)),
+        start_step_count=int(data.get("start_step_count", fallback.start_step_count)),
+        start_step=int(data.get("start_step", fallback.start_step)),
+        tags=tuple(str(tag) for tag in data.get("tags", fallback.tags)),
+        output_root=resolve_project_path(data.get("output_root", _display_project_path(fallback.output_root))),
+        max_workers=int(data.get("max_workers", fallback.max_workers)),
+        start_timing_mode=str(data.get("start_timing_mode", fallback.start_timing_mode)),  # type: ignore[arg-type]
+        fixed_start_times=tuple(int(value) for value in data.get("fixed_start_times", fallback.fixed_start_times)),
+        fixed_start_interval=int(data.get("fixed_start_interval", fallback.fixed_start_interval)),
+        fixed_start_offset=int(data.get("fixed_start_offset", fallback.fixed_start_offset)),
+        simulation_mode=str(data.get("simulation_mode", fallback.simulation_mode)),  # type: ignore[arg-type]
+        carrier_sense_duration_ms=float(data.get("carrier_sense_duration_ms", fallback.carrier_sense_duration_ms)),
+        lora_payload_bytes=int(data.get("lora_payload_bytes", fallback.lora_payload_bytes)),
+        lora_spreading_factor=int(data.get("lora_spreading_factor", fallback.lora_spreading_factor)),
+        lora_bandwidth_hz=int(data.get("lora_bandwidth_hz", fallback.lora_bandwidth_hz)),
+        lora_coding_rate_denominator=int(data.get("lora_coding_rate_denominator", fallback.lora_coding_rate_denominator)),
+        lora_preamble_symbols=int(data.get("lora_preamble_symbols", fallback.lora_preamble_symbols)),
+        lora_explicit_header=bool(data.get("lora_explicit_header", fallback.lora_explicit_header)),
+        lora_crc_enabled=bool(data.get("lora_crc_enabled", fallback.lora_crc_enabled)),
+        lora_low_data_rate_optimize=data.get("lora_low_data_rate_optimize", fallback.lora_low_data_rate_optimize),
+        save_asleep_log=bool(data.get("save_asleep_log", fallback.save_asleep_log)),
+        save_carrier_sense_log=bool(data.get("save_carrier_sense_log", fallback.save_carrier_sense_log)),
+    )
+
+
+def _load_last_simulation_request(fallback: SimulationRequest) -> SimulationRequest:
+    cached_request = st.session_state.get("last_simulation_request_defaults")
+    if isinstance(cached_request, SimulationRequest):
+        return cached_request
+
+    request_path = LAST_SIMULATION_REQUEST_PATH
+    if not request_path.exists() and OLD_LAST_SIMULATION_REQUEST_PATH.exists():
+        request_path = OLD_LAST_SIMULATION_REQUEST_PATH
+    if not request_path.exists():
+        return fallback
+
+    try:
+        data = json.loads(request_path.read_text(encoding="utf-8"))
+        request = _simulation_request_from_dict(data, fallback)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return fallback
+
+    if request_path != LAST_SIMULATION_REQUEST_PATH:
+        try:
+            LAST_SIMULATION_REQUEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LAST_SIMULATION_REQUEST_PATH.write_text(
+                json.dumps(_simulation_request_to_dict(request), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    st.session_state["last_simulation_request_defaults"] = request
+    return request
+
+
+def _save_last_simulation_request(request: SimulationRequest) -> None:
+    LAST_SIMULATION_REQUEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LAST_SIMULATION_REQUEST_PATH.write_text(
+        json.dumps(_simulation_request_to_dict(request), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    st.session_state["last_simulation_request_defaults"] = request
+
+
+def _normalize_plot_overrides(data: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(data, dict):
+        return {}
+    normalized: dict[str, dict[str, Any]] = {}
+    for config_name, values in data.items():
+        if not isinstance(values, dict):
+            continue
+        normalized[str(config_name)] = {
+            str(field_name): value
+            for field_name, value in values.items()
+            if value is None or isinstance(value, (str, int, float, bool))
+        }
+    return normalized
+
+
+def _load_last_graph_plot_overrides() -> dict[str, dict[str, Any]]:
+    cached_overrides = st.session_state.get("last_graph_plot_overrides")
+    if isinstance(cached_overrides, dict):
+        return _normalize_plot_overrides(cached_overrides)
+
+    overrides_path = LAST_GRAPH_PLOT_OVERRIDES_PATH
+    if not overrides_path.exists() and OLD_LAST_GRAPH_PLOT_OVERRIDES_PATH.exists():
+        overrides_path = OLD_LAST_GRAPH_PLOT_OVERRIDES_PATH
+    if not overrides_path.exists():
+        return {}
+
+    try:
+        data = json.loads(overrides_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+    overrides = _normalize_plot_overrides(data)
+    if overrides_path != LAST_GRAPH_PLOT_OVERRIDES_PATH:
+        try:
+            LAST_GRAPH_PLOT_OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LAST_GRAPH_PLOT_OVERRIDES_PATH.write_text(
+                json.dumps(overrides, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+    st.session_state["last_graph_plot_overrides"] = overrides
+    return overrides
+
+
+def _save_last_graph_plot_overrides(overrides: dict[str, dict[str, Any]]) -> None:
+    normalized = _normalize_plot_overrides(overrides)
+    merged = {**_load_last_graph_plot_overrides(), **normalized}
+    LAST_GRAPH_PLOT_OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LAST_GRAPH_PLOT_OVERRIDES_PATH.write_text(
+        json.dumps(merged, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    st.session_state["last_graph_plot_overrides"] = merged
+
+
+def _clear_last_graph_plot_overrides() -> None:
+    for path in [LAST_GRAPH_PLOT_OVERRIDES_PATH, OLD_LAST_GRAPH_PLOT_OVERRIDES_PATH]:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    st.session_state.pop("last_graph_plot_overrides", None)
+    for key in list(st.session_state):
+        key_text = str(key)
+        if key_text == "graph_plot_use_web_parameters" or key_text.startswith("plot_override_"):
+            st.session_state.pop(key, None)
+
+
+def _start_simulation_job(requests: list[SimulationRequest]) -> tuple[str, Path]:
+    job_id, job_path = create_simulation_job(requests)
+    log_path = job_path.with_suffix(".log")
+    log_file = log_path.open("ab")
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        subprocess.Popen(
+            [sys.executable, "-m", "research_program.simulation.jobs", str(job_path)],
+            cwd=PROJECT_ROOT,
+            env=_python_subprocess_env(),
+            stdin=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            creationflags=creationflags,
+        )
+    finally:
+        log_file.close()
+    return job_id, job_path
+
+
+def _parse_job_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    value_text = str(value).strip()
+    if not value_text or value_text.lower() in {"nan", "nat", "none"}:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value_text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _job_time_text(value: Any) -> str:
+    parsed = _parse_job_datetime(value)
+    if parsed is None:
+        return "-"
+    return parsed.astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+
+
+def _job_duration_seconds(status: dict[str, Any]) -> float | None:
+    started_at = _parse_job_datetime(status.get("started_at"))
+    if started_at is None:
+        return None
+    finished_at = _parse_job_datetime(status.get("finished_at"))
+    if finished_at is None:
+        finished_at = datetime.now(timezone.utc)
+    return (finished_at - started_at).total_seconds()
+
+
+def _job_duration_text(status: dict[str, Any]) -> str:
+    duration_seconds = _job_duration_seconds(status)
+    if duration_seconds is None:
+        return "-"
+    return _format_duration(duration_seconds)
+
+
+def _job_timing_caption(status: dict[str, Any]) -> str:
+    return (
+        f"Status: {status.get('status', '')} / "
+        f"PID: {status.get('pid', '')} / "
+        f"Started: {_job_time_text(status.get('started_at'))} / "
+        f"Finished: {_job_time_text(status.get('finished_at'))} / "
+        f"Duration: {_job_duration_text(status)} / "
+        f"Updated: {_job_time_text(status.get('updated_at'))}"
+    )
+
+
+def _job_timing_frame(status: dict[str, Any]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "Created": _job_time_text(status.get("created_at")),
+                "Started": _job_time_text(status.get("started_at")),
+                "Finished": _job_time_text(status.get("finished_at")),
+                "Duration": _job_duration_text(status),
+                "Updated": _job_time_text(status.get("updated_at")),
+            }
+        ]
+    )
+
+
+def _job_progress_text(status: dict[str, Any]) -> str:
+    completed = int(status.get("completed_runs") or 0)
+    total = int(status.get("total_runs") or 0)
+    started_at = _parse_job_datetime(status.get("started_at") or status.get("created_at"))
+    elapsed_seconds: float | None = None
+    remaining_seconds: float | None = None
+    finish_text = "計算中(Calculating)"
+    if started_at is not None:
+        elapsed_seconds = (datetime.now(timezone.utc) - started_at).total_seconds()
+        if completed > 0 and total > completed:
+            remaining_seconds = (elapsed_seconds / completed) * (total - completed)
+            finish_at = datetime.now() + timedelta(seconds=remaining_seconds)
+            finish_text = finish_at.strftime("%H:%M:%S")
+        elif total > 0 and completed >= total:
+            remaining_seconds = 0.0
+            finish_text = "完了(Done)"
+
+    current_run_id = str(status.get("current_run_id") or "")
+    parts = [
+        f"{completed}/{total} 完了(Completed)",
+        f"経過(Elapsed): {_format_duration(elapsed_seconds)}",
+        f"残り(ETA): {_format_duration(remaining_seconds)}",
+        f"終了予測(Finish): {finish_text}",
+    ]
+    if current_run_id:
+        parts.append(f"直近run(Latest run): {current_run_id}")
+    return " | ".join(parts)
+
+
+def _simulation_job_summary_frame(statuses: list[dict[str, Any]]) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for status in statuses:
+        rows.append(
+            {
+                "ジョブID(Job ID)": status.get("job_id", ""),
+                "状態(Status)": status.get("status", ""),
+                "進捗(Progress)": f"{status.get('completed_runs', 0)}/{status.get('total_runs', 0)}",
+                "条件数(Conditions)": status.get("total_conditions", 0),
+                "作成時刻(Created)": _job_time_text(status.get("created_at")),
+                "開始時刻(Started)": _job_time_text(status.get("started_at")),
+                "終了時刻(Finished)": _job_time_text(status.get("finished_at")),
+                "所要時間(Duration)": _job_duration_text(status),
+                "更新時刻(Updated)": _job_time_text(status.get("updated_at")),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _render_simulation_job_monitor() -> None:
+    statuses = load_simulation_job_statuses(limit=20)
+    active_statuses = [
+        status
+        for status in statuses
+        if status.get("status") in {"queued", "running"}
+    ]
+
+    st.subheader("進行中ジョブ(Running jobs)")
+    col_refresh, col_count = st.columns([1, 3])
+    if col_refresh.button("ジョブ状況を更新(Refresh jobs)"):
+        st.rerun()
+    col_count.metric("進行中ジョブ数(Active jobs)", len(active_statuses))
+
+    if not active_statuses:
+        st.caption("進行中のシミュレーションジョブはありません(No running simulation jobs).")
+
+    for status in active_statuses:
+        job_id = str(status.get("job_id", ""))
+        completed = int(status.get("completed_runs") or 0)
+        total = int(status.get("total_runs") or 0)
+        with st.container(border=True):
+            st.write(f"**{job_id}**")
+            st.progress(_progress_ratio(completed, total), text=_job_progress_text(status))
+            st.caption(_job_timing_caption(status))
+            results = status.get("results") or []
+            if results:
+                st.dataframe(pd.DataFrame(results[-20:]), width="stretch", hide_index=True)
+
+    with st.expander("最近のジョブ(Recent jobs)", expanded=bool(statuses)):
+        if statuses:
+            st.dataframe(_simulation_job_summary_frame(statuses), width="stretch", hide_index=True)
+            selected_job_id = st.selectbox(
+                "詳細を見るジョブ(Job details)",
+                options=[str(status.get("job_id", "")) for status in statuses],
+            )
+            selected_status = next(
+                (status for status in statuses if str(status.get("job_id", "")) == selected_job_id),
+                None,
+            )
+            if selected_status is not None:
+                st.dataframe(_job_timing_frame(selected_status), width="stretch", hide_index=True)
+                if selected_status.get("error"):
+                    st.error(str(selected_status["error"]).splitlines()[0])
+                results = selected_status.get("results") or []
+                if results:
+                    st.dataframe(pd.DataFrame(results), width="stretch", hide_index=True)
+        else:
+            st.caption("まだジョブ履歴はありません(No job history yet).")
+
+
+def _start_graph_creation_job(
+    *,
+    commands_to_run: list[str],
+    selected_graph_commands: list[str],
+    selected_target_records: list[RunRecord],
+    all_run_count: int,
+    env_overrides: dict[str, str],
+    web_config: dict[str, Any],
+) -> tuple[str, Path]:
+    figure_config = web_config.get("figures", {})
+    job_id, job_path = create_graph_creation_job(
+        commands=commands_to_run,
+        selected_graph_commands=selected_graph_commands,
+        selected_run_paths=[record.record_key for record in selected_target_records],
+        all_run_count=all_run_count,
+        env_overrides=env_overrides,
+        figure_dirs=[str(path) for path in web_config["paths"].get("figure_dirs", [])],
+        figure_extensions=[str(extension) for extension in figure_config.get("extensions", [])],
+    )
+    log_path = job_path.with_suffix(".log")
+    log_file = log_path.open("ab")
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        subprocess.Popen(
+            [sys.executable, "-m", "research_program.plotting.jobs", str(job_path)],
+            cwd=PROJECT_ROOT,
+            env=_python_subprocess_env(),
+            stdin=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            creationflags=creationflags,
+        )
+    finally:
+        log_file.close()
+    return job_id, job_path
+
+
+def _start_interval_per_vs_k_pipeline_process(status_path: Path) -> None:
+    log_path = status_path.with_suffix(".log")
+    log_file = log_path.open("ab")
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        subprocess.Popen(
+            [sys.executable, "-m", "research_program.pipelines.interval_per_vs_k", str(status_path)],
+            cwd=PROJECT_ROOT,
+            env=_python_subprocess_env(),
+            stdin=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            creationflags=creationflags,
+        )
+    finally:
+        log_file.close()
+
+
+def _interval_per_vs_k_progress_text(status: dict[str, Any]) -> str:
+    state = str(status.get("status") or "unknown")
+    if state == "running_simulations":
+        completed = int(status.get("completed_runs") or 0)
+        total = int(status.get("total_runs") or 0)
+        return f"simulations {completed}/{total}"
+    if state == "rendering_graph":
+        return "rendering graph"
+    return state
+
+
+def _graph_job_progress_text(status: dict[str, Any]) -> str:
+    completed = int(status.get("completed_commands") or 0)
+    total = int(status.get("total_commands") or 0)
+    started_at = _parse_job_datetime(status.get("started_at") or status.get("created_at"))
+    elapsed_seconds: float | None = None
+    remaining_seconds: float | None = None
+    finish_text = "計算中(Calculating)"
+    if started_at is not None:
+        elapsed_seconds = (datetime.now(timezone.utc) - started_at).total_seconds()
+        if completed > 0 and total > completed:
+            remaining_seconds = (elapsed_seconds / completed) * (total - completed)
+            finish_at = datetime.now() + timedelta(seconds=remaining_seconds)
+            finish_text = finish_at.strftime("%H:%M:%S")
+        elif total > 0 and completed >= total:
+            remaining_seconds = 0.0
+            finish_text = "完了(Done)"
+
+    current_command = str(status.get("current_command") or "")
+    parts = [
+        f"{completed}/{total} コマンド完了(Commands completed)",
+        f"対象run(Target runs): {status.get('selected_run_count', 0)}",
+        f"経過(Elapsed): {_format_duration(elapsed_seconds)}",
+        f"残り(ETA): {_format_duration(remaining_seconds)}",
+        f"終了予測(Finish): {finish_text}",
+    ]
+    if current_command:
+        parts.append(f"実行中(Current): {current_command}")
+    return " | ".join(parts)
+
+
+def _graph_creation_job_summary_frame(statuses: list[dict[str, Any]]) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for status in statuses:
+        rows.append(
+            {
+                "ジョブID(Job ID)": status.get("job_id", ""),
+                "状態(Status)": status.get("status", ""),
+                "進捗(Progress)": f"{status.get('completed_commands', 0)}/{status.get('total_commands', 0)}",
+                "対象run(Target runs)": status.get("selected_run_count", 0),
+                "作成/更新画像(Generated/updated figures)": status.get("generated_or_updated_figures", 0),
+                "作成時刻(Created)": _job_time_text(status.get("created_at")),
+                "開始時刻(Started)": _job_time_text(status.get("started_at")),
+                "終了時刻(Finished)": _job_time_text(status.get("finished_at")),
+                "所要時間(Duration)": _job_duration_text(status),
+                "更新時刻(Updated)": _job_time_text(status.get("updated_at")),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _render_graph_creation_job_monitor() -> None:
+    statuses = load_graph_creation_job_statuses(limit=20)
+    active_statuses = [
+        status
+        for status in statuses
+        if status.get("status") in {"queued", "running"}
+    ]
+
+    st.subheader("進行中のグラフ作成ジョブ(Running graph jobs)")
+    col_refresh, col_count = st.columns([1, 3])
+    if col_refresh.button("グラフジョブ状況を更新(Refresh graph jobs)"):
+        st.rerun()
+    col_count.metric("進行中ジョブ数(Active jobs)", len(active_statuses))
+
+    if not active_statuses:
+        st.caption("進行中のグラフ作成ジョブはありません(No running graph creation jobs).")
+
+    for status in active_statuses:
+        job_id = str(status.get("job_id", ""))
+        completed = int(status.get("completed_commands") or 0)
+        total = int(status.get("total_commands") or 0)
+        with st.container(border=True):
+            st.write(f"**{job_id}**")
+            st.progress(_progress_ratio(completed, total), text=_graph_job_progress_text(status))
+            st.caption(_job_timing_caption(status))
+            results = status.get("results") or []
+            if results:
+                st.dataframe(_command_result_frame(results), width="stretch", hide_index=True)
+
+    with st.expander("最近のグラフ作成ジョブ(Recent graph jobs)", expanded=bool(statuses)):
+        if statuses:
+            st.dataframe(_graph_creation_job_summary_frame(statuses), width="stretch", hide_index=True)
+            selected_job_id = st.selectbox(
+                "詳細を見るジョブ(Job details)",
+                options=[str(status.get("job_id", "")) for status in statuses],
+                key="graph_job_details",
+            )
+            selected_status = next(
+                (status for status in statuses if str(status.get("job_id", "")) == selected_job_id),
+                None,
+            )
+            if selected_status is not None:
+                st.dataframe(_job_timing_frame(selected_status), width="stretch", hide_index=True)
+                if selected_status.get("error"):
+                    st.error(str(selected_status["error"]).splitlines()[0])
+                results = selected_status.get("results") or []
+                if results:
+                    st.dataframe(_command_result_frame(results), width="stretch", hide_index=True)
+        else:
+            st.caption("まだグラフ作成ジョブ履歴はありません(No graph job history yet).")
+
+
+def _simulation_review_frame(request: SimulationRequest) -> pd.DataFrame:
+    effective_tags = normalize_simulation_tags(
+        tags=request.tags,
+        device_count=request.device_count,
+        start_timing_mode=request.start_timing_mode,
+        simulation_mode=request.simulation_mode,
+    )
+    effective_workers = resolve_max_workers(request.num_runs, request.max_workers)
+    requested_workers = "自動(Auto)" if request.max_workers <= 0 else str(request.max_workers)
+    start_timing_mode = "ランダム(Random)" if request.start_timing_mode == "random" else "固定(Fixed)"
+    simulation_mode = (
+        "PER測定(PER measurement)"
+        if request.simulation_mode == "per_measurement"
+        else "標準(Standard)"
+    )
+    output_storage = "SQLite" if is_sqlite_run_store(request.output_root) else "CSV"
+    if request.start_timing_mode == "fixed":
+        start_times = fixed_start_times_for_request(request)
+        start_timing_detail = ",".join(str(value) for value in start_times)
+    else:
+        start_timing_detail = (
+            f"0..{request.start_step_count * request.start_step} ms, "
+            f"step={request.start_step} ms, candidates={request.start_step_count + 1}, "
+            f"sample={request.device_count} unique values"
+        )
+
+    rows = [
+        ("run数(Runs)", request.num_runs),
+        ("乱数シード(Seed)", request.seed),
+        ("結合関数(Coupling function)", request.coupling_function),
+        ("結合強度(Coupling strength)", request.coupling_strength),
+        ("強度倍率(Strength ratio)", request.strength_ratio),
+        ("周期時間[ms](Cycle time [ms])", request.cycle_time),
+        ("待機率[%](Listening rate [%])", request.listening_rate),
+        ("デバイス数(Devices)", request.device_count),
+        ("シミュレーション時間[ms](Duration [ms])", request.duration),
+        ("シミュレーションモード(Simulation mode)", simulation_mode),
+        ("開始タイミング(Start timing)", start_timing_mode),
+        ("開始タイミング詳細(Start timing detail)", start_timing_detail),
+        ("手動タグ(Manual tags)", ";".join(request.tags)),
+        ("実際に使うタグ(Effective tags)", ";".join(effective_tags)),
+        ("保存形式(Output storage)", output_storage),
+        ("出力先(Output runs dir / SQLite file)", _display_project_path(request.output_root)),
+        ("asleep_log.csvを保存(Save asleep_log.csv)", request.save_asleep_log),
+        ("carrier_sense_log.csvを保存(Save carrier_sense_log.csv)", request.save_carrier_sense_log),
+        ("指定ワーカー数(Requested max workers)", requested_workers),
+        ("実際に使うワーカー数(Effective max workers)", effective_workers),
+    ]
+    if request.start_timing_mode == "random":
+        rows.insert(11, ("ランダム抽出方式(Random sampling)", "一様・重複なし(Uniform without replacement)"))
+        rows.insert(11, ("開始時刻ステップ数(Start step count)", request.start_step_count))
+        rows.insert(11, ("開始時刻ステップ[ms](Start step [ms])", request.start_step))
+    if request.simulation_mode == "per_measurement":
+        lora_config = lora_airtime_config_from_request(request)
+        rows.extend(
+            [
+                ("有効キャリアセンス時間[ms](Effective carrier-sense duration [ms])", round(effective_carrier_sense_duration_for_request(request), 6)),
+                ("LoRa送信時間[ms](LoRa airtime [ms])", round(lora_airtime_ms_for_request(request), 6)),
+                ("LoRaペイロード[bytes](LoRa payload [bytes])", lora_config.payload_bytes),
+                ("LoRa SF(LoRa spreading factor)", lora_config.spreading_factor),
+                ("LoRa帯域[Hz](LoRa bandwidth [Hz])", lora_config.bandwidth_hz),
+                ("LoRa符号化率(LoRa coding rate)", f"4/{lora_config.coding_rate_denominator}"),
+                ("LoRaプリアンブル[symbols](LoRa preamble [symbols])", lora_config.preamble_symbols),
+                ("LoRa明示ヘッダー(LoRa explicit header)", lora_config.explicit_header),
+                ("LoRa CRC(LoRa CRC)", lora_config.crc_enabled),
+                ("LoRa LDRO(LoRa low-data-rate optimize)", "自動(Auto)" if request.lora_low_data_rate_optimize is None else request.lora_low_data_rate_optimize),
+            ]
+        )
+    return pd.DataFrame(
+        [
+            {"項目(Parameter)": str(parameter), "値(Value)": str(value)}
+            for parameter, value in rows
+        ]
+    )
+
+
+def _available_sweep_fields(start_timing_mode: str, fixed_start_preset: str, simulation_mode: str) -> list[str]:
+    fields = list(COMMON_SWEEP_FIELDS)
+    if start_timing_mode == "random":
+        fields.extend(RANDOM_START_SWEEP_FIELDS)
+    elif fixed_start_preset == "even_interval":
+        fields.extend(FIXED_START_SWEEP_FIELDS)
+    if simulation_mode == "per_measurement":
+        fields.extend(PER_MEASUREMENT_SWEEP_FIELDS)
+    return fields
+
+
+def _format_sweep_field(field_name: str) -> str:
+    return str(SWEEP_PARAMETER_SPECS.get(field_name, {}).get("label", field_name))
+
+
+def _sweep_number_input(
+    label: str,
+    value: int | float,
+    key: str,
+    spec: dict[str, Any],
+    *,
+    is_step: bool = False,
+) -> int | float:
+    kwargs: dict[str, Any] = {"label": label, "value": value, "key": key}
+    if "min" in spec:
+        kwargs["min_value"] = spec["min"]
+    if "max" in spec:
+        kwargs["max_value"] = spec["max"]
+    if "format" in spec:
+        kwargs["format"] = spec["format"]
+
+    if spec.get("type") == "int":
+        kwargs["step"] = max(1, int(spec.get("step", 1)))
+        if is_step:
+            kwargs["min_value"] = 1
+        return int(st.number_input(**kwargs))
+
+    kwargs["step"] = float(spec.get("step", 1.0))
+    if is_step:
+        kwargs["min_value"] = 0.00000001
+    return float(st.number_input(**kwargs))
+
+
+def _build_sweep_values(
+    field_name: str,
+    start_value: int | float,
+    stop_value: int | float,
+    step_value: int | float,
+) -> list[int | float]:
+    spec = SWEEP_PARAMETER_SPECS[field_name]
+    if step_value <= 0:
+        raise ValueError(f"{_format_sweep_field(field_name)} の刻み幅は正の値にしてください(step must be positive)")
+    if start_value > stop_value:
+        raise ValueError(f"{_format_sweep_field(field_name)} は開始値を終了値以下にしてください(start must be <= end)")
+
+    if spec.get("type") == "int":
+        return list(range(int(start_value), int(stop_value) + 1, int(step_value)))
+
+    values: list[float] = []
+    current = float(start_value)
+    stop = float(stop_value)
+    step = float(step_value)
+    epsilon = abs(step) * 1e-9
+    while current <= stop + epsilon:
+        values.append(round(current, 10))
+        current += step
+    return values
+
+
+def _sweep_value_label(value: Any) -> str:
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
+
+
+def _sweep_tag(field_name: str, value: Any) -> str:
+    safe_value = _sweep_value_label(value).replace("-", "m").replace(".", "p")
+    return f"{field_name}_{safe_value}"
+
+
+def _build_sweep_requests(
+    base_request: SimulationRequest,
+    coupling_functions: list[str],
+    sweep_values_by_field: dict[str, list[int | float]],
+) -> list[SimulationRequest]:
+    if not coupling_functions:
+        raise ValueError("結合関数を1つ以上選んでください(Select at least one coupling function)")
+
+    field_names = list(sweep_values_by_field)
+    value_lists = [sweep_values_by_field[field_name] for field_name in field_names]
+    requests: list[SimulationRequest] = []
+
+    for coupling_function in coupling_functions:
+        combinations = product(*value_lists) if value_lists else [tuple()]
+        for combination in combinations:
+            updates = dict(zip(field_names, combination))
+            tags = [*base_request.tags]
+            if field_names or len(coupling_functions) > 1:
+                tags.append("sweep")
+            for field_name, value in updates.items():
+                tags.append(_sweep_tag(field_name, value))
+            if len(coupling_functions) > 1:
+                tags.append(_sweep_tag("coupling_function", coupling_function))
+
+            requests.append(
+                replace(
+                    base_request,
+                    coupling_function=coupling_function,
+                    tags=tuple(tags),
+                    **updates,
+                )
+            )
+
+    return requests
+
+
+def _simulation_requests_summary_frame(requests: list[SimulationRequest]) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for index, request in enumerate(requests, start=1):
+        rows.append(
+            {
+                "条件(Condition)": index,
+                "run数(Runs)": request.num_runs,
+                "結合関数(Coupling function)": request.coupling_function,
+                "結合強度(Coupling strength)": request.coupling_strength,
+                "強度倍率(Strength ratio)": request.strength_ratio,
+                "周期時間[ms](Cycle time [ms])": request.cycle_time,
+                "待機率[%](Listening rate [%])": request.listening_rate,
+                "デバイス数(Devices)": request.device_count,
+                "シミュレーション時間[ms](Duration [ms])": request.duration,
+                "開始タイミング(Start timing)": request.start_timing_mode,
+                "モード(Mode)": request.simulation_mode,
+                "ワーカー数(Workers)": resolve_max_workers(request.num_runs, request.max_workers),
+                "タグ(Tags)": ";".join(
+                    normalize_simulation_tags(
+                        request.tags,
+                        request.device_count,
+                        request.start_timing_mode,
+                        request.simulation_mode,
+                    )
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _render_simulation_tab(web_config: dict[str, Any]) -> None:
+    simulation_config_path = web_config["paths"].get(
+        "simulation_config",
+        "configs/experiments/default_simulation.toml",
+    )
+    simulation_config = load_toml(simulation_config_path)
+    config_defaults = request_from_config(simulation_config)
+    defaults = _load_last_simulation_request(config_defaults)
+    start_timing_mode = st.radio(
+        "開始タイミング(Start timing)",
+        options=["random", "fixed"],
+        index=0 if defaults.start_timing_mode == "random" else 1,
+        format_func=lambda value: "ランダム(Random)" if value == "random" else "固定(Fixed)",
+        horizontal=True,
+        help="ランダムはrunごとに範囲内で異なる開始時刻を作ります。固定は全runで同じ開始時刻を使います(Random creates different start timings per run within the range. Fixed uses the same timings for all runs).",
+    )
+    fixed_start_preset = "even_interval"
+    if start_timing_mode == "fixed":
+        fixed_start_preset = st.selectbox(
+            "固定開始プリセット(Fixed start preset)",
+            options=["even_interval", "custom"],
+            format_func=lambda value: "一定間隔(Even interval)" if value == "even_interval" else "手入力(Custom)",
+        )
+    simulation_mode = st.radio(
+        "シミュレーションモード(Simulation mode)",
+        options=["standard", "per_measurement"],
+        index=0 if defaults.simulation_mode == "standard" else 1,
+        format_func=lambda value: "標準(Standard)" if value == "standard" else "PER測定(PER measurement)",
+        horizontal=True,
+        help="PER測定ではLoRa送信時間とキャリアセンスを使い、チャネルが忙しいサイクルの送信をスキップします(PER measurement uses LoRa airtime and carrier sense to skip busy-channel transmissions).",
+    )
+    _render_simulation_job_monitor()
+
+    with st.form("simulation"):
+        coupling_function = st.selectbox(
+            "結合関数(Coupling function)",
+            COUPLING_FUNCTION_OPTIONS,
+            index=COUPLING_FUNCTION_OPTIONS.index(defaults.coupling_function)
+            if defaults.coupling_function in COUPLING_FUNCTION_OPTIONS
+            else 1,
+        )
+        col_left, col_right = st.columns(2)
+        with col_left:
+            num_runs = st.number_input("run数(Runs)", min_value=1, value=defaults.num_runs)
+            seed = st.number_input("乱数シード(Seed)", min_value=0, value=defaults.seed)
+            coupling_strength = st.number_input(
+                "結合強度(Coupling strength)",
+                value=defaults.coupling_strength,
+            )
+            strength_ratio = st.number_input(
+                "強度倍率(Strength ratio)",
+                value=defaults.strength_ratio,
+                format="%.8f",
+            )
+            max_workers = st.number_input(
+                "最大ワーカー数(Max workers)",
+                min_value=0,
+                max_value=32,
+                value=max(0, defaults.max_workers),
+                help="0にするとrun数に応じた最大ワーカー数を使います(0 uses the maximum worker count for the number of runs).",
+            )
+        with col_right:
+            cycle_time = st.number_input("周期時間[ms](Cycle time [ms])", min_value=1, value=defaults.cycle_time)
+            listening_rate = st.number_input(
+                "待機率[%](Listening rate [%])",
+                min_value=1,
+                max_value=99,
+                value=defaults.listening_rate,
+            )
+            device_count = st.number_input("デバイス数(Devices)", min_value=1, value=defaults.device_count)
+            duration = st.number_input("シミュレーション時間[ms](Duration [ms])", min_value=1, value=defaults.duration)
+
+        start_step = defaults.start_step
+        start_step_count = defaults.start_step_count
+        if start_timing_mode == "random":
+            start_step = st.number_input("開始時刻ステップ[ms](Start step [ms])", min_value=1, value=defaults.start_step)
+            start_step_count = st.number_input(
+                "開始時刻ステップ数(Start step count)",
+                min_value=1,
+                value=defaults.start_step_count,
+            )
+
+        carrier_sense_duration_ms = defaults.carrier_sense_duration_ms
+        lora_payload_bytes = defaults.lora_payload_bytes
+        lora_spreading_factor = defaults.lora_spreading_factor
+        lora_bandwidth_hz = defaults.lora_bandwidth_hz
+        lora_coding_rate_denominator = defaults.lora_coding_rate_denominator
+        lora_preamble_symbols = defaults.lora_preamble_symbols
+        lora_explicit_header = defaults.lora_explicit_header
+        lora_crc_enabled = defaults.lora_crc_enabled
+        lora_low_data_rate_optimize = defaults.lora_low_data_rate_optimize
+        if simulation_mode == "per_measurement":
+            st.subheader("PER測定設定(PER measurement settings)")
+            carrier_sense_duration_ms = st.number_input(
+                "キャリアセンス時間[ms](Carrier-sense duration [ms])",
+                min_value=0.0,
+                value=float(defaults.carrier_sense_duration_ms),
+                help="0は0msとして扱い、送信前のキャリアセンス区間を見ません(0 is used as 0 ms and does not look back before transmission).",
+            )
+            lora_col_left, lora_col_right = st.columns(2)
+            with lora_col_left:
+                lora_payload_bytes = st.number_input(
+                    "LoRaペイロード[bytes](LoRa payload [bytes])",
+                    min_value=0,
+                    value=defaults.lora_payload_bytes,
+                )
+                lora_spreading_factor = st.number_input(
+                    "LoRa SF(LoRa spreading factor)",
+                    min_value=6,
+                    max_value=12,
+                    value=defaults.lora_spreading_factor,
+                )
+                lora_bandwidth_hz = st.number_input(
+                    "LoRa帯域[Hz](LoRa bandwidth [Hz])",
+                    min_value=1,
+                    value=defaults.lora_bandwidth_hz,
+                )
+                lora_coding_rate_denominator = st.number_input(
+                    "LoRa符号化率 denominator(LoRa coding-rate denominator)",
+                    min_value=5,
+                    max_value=8,
+                    value=defaults.lora_coding_rate_denominator,
+                    help="5=4/5, 8=4/8",
+                )
+            with lora_col_right:
+                lora_preamble_symbols = st.number_input(
+                    "LoRaプリアンブル[symbols](LoRa preamble [symbols])",
+                    min_value=0,
+                    value=defaults.lora_preamble_symbols,
+                )
+                lora_explicit_header = st.checkbox(
+                    "LoRa明示ヘッダー(LoRa explicit header)",
+                    value=defaults.lora_explicit_header,
+                )
+                lora_crc_enabled = st.checkbox(
+                    "LoRa CRC(LoRa CRC)",
+                    value=defaults.lora_crc_enabled,
+                )
+                ldro_options = ["auto", "on", "off"]
+                if defaults.lora_low_data_rate_optimize is True:
+                    ldro_index = 1
+                elif defaults.lora_low_data_rate_optimize is False:
+                    ldro_index = 2
+                else:
+                    ldro_index = 0
+                ldro_value = st.selectbox(
+                    "LoRa LDRO(LoRa low-data-rate optimize)",
+                    options=ldro_options,
+                    index=ldro_index,
+                    format_func=lambda value: {
+                        "auto": "自動(Auto)",
+                        "on": "有効(On)",
+                        "off": "無効(Off)",
+                    }[value],
+                )
+                lora_low_data_rate_optimize = (
+                    None if ldro_value == "auto" else ldro_value == "on"
+                )
+
+        fixed_start_interval = defaults.fixed_start_interval
+        fixed_start_offset = defaults.fixed_start_offset
+        fixed_start_times_text = ""
+        if start_timing_mode == "fixed":
+            default_fixed_start_times = defaults.fixed_start_times or tuple(
+                generate_even_interval_start_times(
+                    k=defaults.device_count,
+                    interval=defaults.fixed_start_interval,
+                    start_time=defaults.fixed_start_offset,
+                )
+            )
+            if fixed_start_preset == "even_interval":
+                fixed_col_left, fixed_col_right = st.columns(2)
+                with fixed_col_left:
+                    fixed_start_interval = st.number_input(
+                        "固定開始間隔[ms](Fixed start interval [ms])",
+                        min_value=0,
+                        value=defaults.fixed_start_interval,
+                    )
+                with fixed_col_right:
+                    fixed_start_offset = st.number_input(
+                        "固定開始オフセット[ms](Fixed start offset [ms])",
+                        min_value=0,
+                        value=defaults.fixed_start_offset,
+                    )
+            else:
+                fixed_start_times_text = st.text_area(
+                    "固定開始時刻[ms](Fixed start times [ms])",
+                    value=",".join(str(value) for value in default_fixed_start_times),
+                    help="手入力の場合に使います。カンマ、セミコロン、改行で区切れます(Used for custom mode. Separate values with commas, semicolons, or newlines).",
+                )
+        tags = st.text_input(
+            "手動タグ(Manual tags)",
+            value=_manual_tags_text(defaults.tags),
+            help="台数タグはデバイス数から自動で付与されます(Device-count tag is added automatically).",
+        )
+        output_storage_format = st.radio(
+            "保存形式(Output storage)",
+            options=["sqlite", "csv"],
+            index=0,
+            horizontal=True,
+            format_func=lambda value: {
+                "sqlite": "SQLite",
+                "csv": "CSV",
+            }[value],
+            key="simulation_output_storage_format",
+        )
+        if output_storage_format == "sqlite":
+            output_root = st.text_input(
+                "SQLiteファイル(SQLite file)",
+                value=_default_sqlite_output_text(defaults, config_defaults),
+                key="simulation_output_sqlite_path",
+            )
+        else:
+            output_root = st.text_input(
+                "CSV run出力ディレクトリ(CSV run output dir)",
+                value=_default_csv_output_text(defaults),
+                key="simulation_output_csv_dir",
+            )
+        st.subheader("追加ログ出力(Optional CSV logs)")
+        log_col_left, log_col_right = st.columns(2)
+        with log_col_left:
+            save_carrier_sense_log = st.checkbox(
+                "carrier_sense_log.csvを保存(Save carrier_sense_log.csv)",
+                value=defaults.save_carrier_sense_log,
+                help="キャリアセンス結果の詳細ログです。位相差グラフでskip_busyを表示したい場合に使います(Carrier-sense details; useful when phase-difference graphs should include skip_busy events).",
+            )
+        with log_col_right:
+            save_asleep_log = st.checkbox(
+                "asleep_log.csvを保存(Save asleep_log.csv)",
+                value=defaults.save_asleep_log,
+                help="各振動子の睡眠遷移と次回覚醒時刻のデバッグ用ログです(Debug log for asleep transitions and next awake times).",
+            )
+
+        sweep_enabled = st.checkbox(
+            "パラメータ範囲を一括実行(Sweep parameter ranges)",
+            value=False,
+            help="選んだパラメータの開始・終了・刻み幅から全組み合わせを作ります(Creates all combinations from start/end/step values).",
+        )
+        sweep_coupling_functions = [coupling_function]
+        selected_sweep_fields: list[str] = []
+        sweep_ranges: dict[str, tuple[int | float, int | float, int | float]] = {}
+        if sweep_enabled:
+            sweep_coupling_functions = st.multiselect(
+                "一括実行する結合関数(Coupling functions to sweep)",
+                options=COUPLING_FUNCTION_OPTIONS,
+                default=[coupling_function],
+            )
+            available_sweep_fields = _available_sweep_fields(
+                start_timing_mode,
+                fixed_start_preset,
+                simulation_mode,
+            )
+            selected_sweep_fields = st.multiselect(
+                "範囲で変化させる数値パラメータ(Numeric parameters to sweep)",
+                options=available_sweep_fields,
+                format_func=_format_sweep_field,
+            )
+            current_sweep_values: dict[str, int | float] = {
+                "coupling_strength": int(coupling_strength),
+                "strength_ratio": float(strength_ratio),
+                "cycle_time": int(cycle_time),
+                "listening_rate": int(listening_rate),
+                "device_count": int(device_count),
+                "duration": int(duration),
+                "start_step": int(start_step),
+                "start_step_count": int(start_step_count),
+                "fixed_start_interval": int(fixed_start_interval),
+                "fixed_start_offset": int(fixed_start_offset),
+                "carrier_sense_duration_ms": float(carrier_sense_duration_ms),
+                "lora_payload_bytes": int(lora_payload_bytes),
+                "lora_spreading_factor": int(lora_spreading_factor),
+                "lora_bandwidth_hz": int(lora_bandwidth_hz),
+                "lora_coding_rate_denominator": int(lora_coding_rate_denominator),
+                "lora_preamble_symbols": int(lora_preamble_symbols),
+            }
+            for field_name in selected_sweep_fields:
+                spec = SWEEP_PARAMETER_SPECS[field_name]
+                current_value = current_sweep_values[field_name]
+                st.markdown(f"**{_format_sweep_field(field_name)}**")
+                col_start, col_stop, col_step = st.columns(3)
+                with col_start:
+                    start_value = _sweep_number_input(
+                        "開始(Start)",
+                        current_value,
+                        f"sweep_{field_name}_start",
+                        spec,
+                    )
+                with col_stop:
+                    stop_value = _sweep_number_input(
+                        "終了(End)",
+                        current_value,
+                        f"sweep_{field_name}_stop",
+                        spec,
+                    )
+                with col_step:
+                    step_value = _sweep_number_input(
+                        "刻み幅(Step)",
+                        spec.get("step", 1),
+                        f"sweep_{field_name}_step",
+                        spec,
+                        is_step=True,
+                    )
+                sweep_ranges[field_name] = (start_value, stop_value, step_value)
+
+        submitted = st.form_submit_button("パラメーターを確認(Review parameters)")
+
+    if submitted:
+        try:
+            if start_timing_mode == "fixed" and fixed_start_preset == "even_interval":
+                fixed_start_times = tuple()
+            elif start_timing_mode == "fixed":
+                fixed_start_times = tuple(parse_start_times_text(fixed_start_times_text))
+            else:
+                fixed_start_times = tuple()
+        except ValueError as exc:
+            st.error(f"固定開始時刻を読み取れませんでした(Could not parse fixed start times): {exc}")
+            return
+
+        pending_request = SimulationRequest(
+            num_runs=int(num_runs),
+            seed=int(seed),
+            coupling_function=coupling_function,
+            coupling_strength=int(coupling_strength),
+            strength_ratio=float(strength_ratio),
+            cycle_time=int(cycle_time),
+            listening_rate=int(listening_rate),
+            device_count=int(device_count),
+            duration=int(duration),
+            start_step_count=int(start_step_count),
+            start_step=int(start_step),
+            tags=tuple(tag.strip() for tag in tags.split(";") if tag.strip()),
+            output_root=resolve_project_path(output_root),
+            max_workers=int(max_workers),
+            start_timing_mode=start_timing_mode,
+            fixed_start_times=fixed_start_times,
+            fixed_start_interval=int(fixed_start_interval),
+            fixed_start_offset=int(fixed_start_offset),
+            simulation_mode=simulation_mode,
+            carrier_sense_duration_ms=float(carrier_sense_duration_ms),
+            lora_payload_bytes=int(lora_payload_bytes),
+            lora_spreading_factor=int(lora_spreading_factor),
+            lora_bandwidth_hz=int(lora_bandwidth_hz),
+            lora_coding_rate_denominator=int(lora_coding_rate_denominator),
+            lora_preamble_symbols=int(lora_preamble_symbols),
+            lora_explicit_header=bool(lora_explicit_header),
+            lora_crc_enabled=bool(lora_crc_enabled),
+            lora_low_data_rate_optimize=lora_low_data_rate_optimize,
+            save_asleep_log=bool(save_asleep_log),
+            save_carrier_sense_log=bool(save_carrier_sense_log),
+        )
+        try:
+            sweep_values_by_field = {
+                field_name: _build_sweep_values(field_name, *range_values)
+                for field_name, range_values in sweep_ranges.items()
+            }
+            pending_requests = (
+                _build_sweep_requests(
+                    pending_request,
+                    coupling_functions=list(sweep_coupling_functions),
+                    sweep_values_by_field=sweep_values_by_field,
+                )
+                if sweep_enabled
+                else [pending_request]
+            )
+            for request in pending_requests:
+                if request.start_timing_mode == "fixed":
+                    fixed_start_times_for_request(request)
+                if request.simulation_mode == "per_measurement":
+                    lora_airtime_ms_for_request(request)
+        except ValueError as exc:
+            st.error(f"設定を確認してください(Please check settings): {exc}")
+            return
+
+        st.session_state["pending_simulation_requests"] = pending_requests
+        st.session_state["pending_simulation_base_request"] = pending_request
+        st.session_state.pop("pending_simulation_request", None)
+        st.session_state.pop("last_simulation_results", None)
+
+    pending_requests = st.session_state.get("pending_simulation_requests")
+    legacy_pending_request = st.session_state.get("pending_simulation_request")
+    if pending_requests is None and legacy_pending_request is not None:
+        pending_requests = [legacy_pending_request]
+    if pending_requests:
+        st.subheader("実行前確認(Parameter review)")
+        try:
+            if len(pending_requests) == 1:
+                review_df = _simulation_review_frame(pending_requests[0])
+            else:
+                total_runs = sum(request.num_runs for request in pending_requests)
+                st.metric("一括実行の総run数(Total sweep runs)", total_runs)
+                review_df = _simulation_requests_summary_frame(pending_requests)
+        except ValueError as exc:
+            st.error(f"設定を確認してください(Please check settings): {exc}")
+            return
+        st.dataframe(review_df, width="stretch", hide_index=True)
+
+        col_run, col_cancel = st.columns(2)
+        run_confirmed = col_run.button("この条件で実行(Run with these parameters)", type="primary")
+        cancel_confirmed = col_cancel.button("確認を取り消す(Cancel review)")
+
+        if cancel_confirmed:
+            st.session_state.pop("pending_simulation_requests", None)
+            st.session_state.pop("pending_simulation_base_request", None)
+            st.session_state.pop("pending_simulation_request", None)
+            st.session_state.pop("last_simulation_results", None)
+            st.rerun()
+
+        if run_confirmed:
+            try:
+                job_id, job_path = _start_simulation_job(pending_requests)
+            except Exception as exc:
+                st.error(f"ジョブを開始できませんでした(Could not start job): {exc}")
+                return
+            st.session_state["last_started_simulation_job_id"] = job_id
+            st.session_state.pop("pending_simulation_requests", None)
+            base_request = st.session_state.pop("pending_simulation_base_request", None)
+            st.session_state.pop("pending_simulation_request", None)
+            _bump_cache_token("runs")
+            if not isinstance(base_request, SimulationRequest):
+                base_request = replace(
+                    pending_requests[-1],
+                    tags=_manual_tags_tuple(pending_requests[-1].tags),
+                )
+            _save_last_simulation_request(base_request)
+            st.success(
+                f"シミュレーションジョブを開始しました(Started simulation job): {job_id}"
+            )
+            st.caption(f"ジョブ状態ファイル(Job status file): {_display_project_path(job_path)}")
+            st.rerun()
+
+    last_results = st.session_state.get("last_simulation_results")
+    if last_results:
+        st.subheader("直近の実行結果(Latest simulation results)")
+        st.dataframe(pd.DataFrame(last_results), width="stretch", hide_index=True)
+
+
+def _python_subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH")
+    pythonpath_parts = [str(SRC_ROOT)]
+    if existing_pythonpath:
+        pythonpath_parts.append(existing_pythonpath)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
+    env["MPLBACKEND"] = "Agg"
+    return env
+
+
+def _run_research_program_command(command_name: str) -> str:
+    return _run_research_program_command_with_env(command_name, env_overrides={})
+
+
+def _run_research_program_command_with_env(command_name: str, env_overrides: dict[str, str]) -> str:
+    env = _python_subprocess_env()
+    env.update(env_overrides)
+    completed = subprocess.run(
+        [sys.executable, "-m", "research_program.cli", command_name],
+        cwd=PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    output = "\n".join(part.strip() for part in [completed.stdout, completed.stderr] if part.strip())
+    if completed.returncode != 0:
+        raise RuntimeError(output or f"command failed: {command_name}")
+    return output or "完了しました(Completed)."
+
+
+def _copy_selected_runs_to_temp(records: list[RunRecord], temp_runs_dir: Path) -> None:
+    temp_runs_dir.mkdir(parents=True, exist_ok=True)
+    used_names: set[str] = set()
+    for index, record in enumerate(records):
+        run_dir_name = record.run_id if record.storage_kind == "sqlite" else record.path.name
+        if run_dir_name in used_names:
+            run_dir_name = f"{run_dir_name}_{index:04d}"
+        used_names.add(run_dir_name)
+        target_dir = temp_runs_dir / run_dir_name
+        if record.storage_kind == "sqlite" and record.sqlite_path is not None:
+            export_run_to_directory(record.sqlite_path, record.run_id, target_dir)
+        else:
+            shutil.copytree(record.path, target_dir)
+
+
+def _record_coupling_function(record: RunRecord) -> str | None:
+    value = record.metadata.get("coupling_function")
+    if value is None or str(value).strip() == "":
+        return None
+    return str(value).strip()
+
+
+def _selected_coupling_functions(records: list[RunRecord]) -> set[str]:
+    return {
+        coupling_function
+        for record in records
+        if (coupling_function := _record_coupling_function(record)) is not None
+    }
+
+
+def _estimated_figure_count(command_name: str, records: list[RunRecord]) -> tuple[int, str]:
+    run_count = len(records)
+    coupling_functions = _selected_coupling_functions(records)
+
+    if command_name == "plot-phase-diff":
+        return run_count, "対象runごとに1枚(1 figure per target run)"
+    if command_name == "plot-per":
+        per_figures_per_run = 1 + (1 if PER_PLOT_CONFIG.show_per_change_plot else 0)
+        return run_count * per_figures_per_run, f"対象runごとに{per_figures_per_run}枚({per_figures_per_run} figure(s) per target run)"
+    if command_name == "plot-per-aligned":
+        count = 0
+        parts: list[str] = []
+        if PER_ALIGNED_PLOT_CONFIG.save_individual_plots:
+            count += run_count
+            parts.append(f"個別{run_count}枚(individual {run_count})")
+        if PER_ALIGNED_PLOT_CONFIG.save_overlay_plot and run_count > 0:
+            count += 1
+            parts.append("重ね描き1枚(overlay 1)")
+        return count, " + ".join(parts) if parts else "設定上は出力なし(No output enabled)"
+    if command_name == "compare-per":
+        count = len(coupling_functions)
+        target_functions = set(COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG.target_coupling_functions)
+        has_combined_target = bool(coupling_functions) if not target_functions else bool(coupling_functions.intersection(target_functions))
+        if COMPARE_PER_BY_DEVICES_INTERVAL_CONFIG.show_combined_method_plot and has_combined_target:
+            count += 1
+        return count, "結合関数ごとの図 + 条件に合えば手法比較1枚(per coupling function plus optional combined plot)"
+    if command_name == "compare-per-by-coupling-strength":
+        target_functions = set(PER_BY_COUPLING_STRENGTH_PLOT_CONFIG.target_coupling_functions)
+        count = len(coupling_functions) if not target_functions else len(coupling_functions.intersection(target_functions))
+        return count, "1 figure per coupling function"
+    if command_name == "compare-per-by-coupling-strength-interval":
+        target_functions = set(PER_BY_COUPLING_STRENGTH_INTERVAL_PLOT_CONFIG.target_coupling_functions)
+        count = len(coupling_functions) if not target_functions else len(coupling_functions.intersection(target_functions))
+        return count, "1 figure per coupling function"
+    if command_name == "plot-per-timing-k-heatmap":
+        target_functions = set(PER_TIMING_K_HEATMAP_CONFIG.target_coupling_functions)
+        count = len(coupling_functions) if not target_functions else len(coupling_functions.intersection(target_functions))
+        return count, "1 heatmap per coupling function"
+    return 0, "予測対象外(Not estimated)"
+
+
+def _estimated_figure_frame(commands: list[str], records: list[RunRecord]) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for command_name in commands:
+        count, basis = _estimated_figure_count(command_name, records)
+        rows.append(
+            {
+                "種類(Type)": GRAPH_CREATION_COMMANDS[command_name]["label"],
+                "予測枚数(Estimated figures)": count,
+                "根拠(Basis)": basis,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _plot_config_value(
+    config: Any,
+    field_name: str,
+    saved_values: dict[str, Any] | None = None,
+    default: Any = None,
+) -> Any:
+    if saved_values is not None and field_name in saved_values:
+        return saved_values[field_name]
+    return getattr(config, field_name, default)
+
+
+def _nullable_float_plot_input(label: str, current_value: float | int | None, key: str) -> float | None:
+    auto = st.checkbox(
+        f"{label} を自動(Auto)",
+        value=current_value is None,
+        key=f"{key}_auto",
+    )
+    if auto:
+        return None
+    default_value = 0.0 if current_value is None else float(current_value)
+    return float(
+        st.number_input(
+            label,
+            value=default_value,
+            step=1.0,
+            key=key,
+        )
+    )
+
+
+def _int_plot_input(
+    label: str,
+    current_value: int | None,
+    key: str,
+    min_value: int = 0,
+    *,
+    disabled: bool = False,
+) -> int:
+    default_value = min_value if current_value is None else int(current_value)
+    return int(
+        st.number_input(
+            label,
+            value=default_value,
+            min_value=min_value,
+            step=1,
+            key=key,
+            disabled=disabled,
+        )
+    )
+
+
+def _float_plot_input(
+    label: str,
+    current_value: float | int | None,
+    key: str,
+    *,
+    min_value: float | None = None,
+    step: float = 0.01,
+    disabled: bool = False,
+) -> float:
+    default_value = 0.0 if current_value is None else float(current_value)
+    return float(
+        st.number_input(
+            label,
+            value=default_value,
+            min_value=min_value,
+            step=step,
+            key=key,
+            disabled=disabled,
+        )
+    )
+
+
+TIME_UNIT_TO_MS = {
+    "ms": 1.0,
+    "s": 1000.0,
+    "min": 60000.0,
+}
+
+
+def _time_unit_label(unit: str) -> str:
+    return {
+        "ms": "milliseconds [ms]",
+        "s": "seconds [s]",
+        "min": "minutes [min]",
+    }.get(unit, unit)
+
+
+def _time_plot_input(
+    label: str,
+    current_value_ms: float | int | None,
+    key: str,
+    *,
+    min_value_ms: float | None = None,
+    step_ms: float = 1000.0,
+    default_unit: str = "s",
+) -> float:
+    unit_options = ["ms", "s", "min"]
+    if default_unit not in unit_options:
+        default_unit = "s"
+    unit = st.selectbox(
+        f"{label} unit",
+        options=unit_options,
+        index=unit_options.index(default_unit),
+        format_func=_time_unit_label,
+        key=f"{key}_unit",
+    )
+    factor = TIME_UNIT_TO_MS[unit]
+    default_value_ms = 0.0 if current_value_ms is None else float(current_value_ms)
+    min_value = None if min_value_ms is None else float(min_value_ms) / factor
+    value = st.number_input(
+        f"{label} [{unit}]",
+        value=default_value_ms / factor,
+        min_value=min_value,
+        step=max(float(step_ms) / factor, 0.000001),
+        key=f"{key}_value",
+    )
+    return float(value) * factor
+
+
+def _add_range_plot_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    *,
+    title: str,
+    min_field: str,
+    max_field: str,
+    min_label: str,
+    max_label: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    if not hasattr(config, min_field) or not hasattr(config, max_field):
+        return
+    st.markdown(f"**{title}**")
+    col_min, col_max = st.columns(2)
+    with col_min:
+        values[min_field] = _nullable_float_plot_input(
+            min_label,
+            _plot_config_value(config, min_field, saved_values),
+            f"{prefix}_{min_field}",
+        )
+    with col_max:
+        values[max_field] = _nullable_float_plot_input(
+            max_label,
+            _plot_config_value(config, max_field, saved_values),
+            f"{prefix}_{max_field}",
+        )
+
+
+def _add_common_plot_size_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    if not all(hasattr(config, field_name) for field_name in ["figure_width", "figure_height", "save_dpi"]):
+        return
+    st.markdown("**画像サイズ(Image size)**")
+    col_width, col_height, col_dpi = st.columns(3)
+    with col_width:
+        values["figure_width"] = _float_plot_input(
+            "幅[inch](Width [inch])",
+            _plot_config_value(config, "figure_width", saved_values),
+            f"{prefix}_figure_width",
+            min_value=1.0,
+            step=0.5,
+        )
+    with col_height:
+        values["figure_height"] = _float_plot_input(
+            "高さ[inch](Height [inch])",
+            _plot_config_value(config, "figure_height", saved_values),
+            f"{prefix}_figure_height",
+            min_value=1.0,
+            step=0.5,
+        )
+    with col_dpi:
+        values["save_dpi"] = _int_plot_input(
+            "保存DPI(Save DPI)",
+            _plot_config_value(config, "save_dpi", saved_values),
+            f"{prefix}_save_dpi",
+            min_value=1,
+        )
+
+
+def _add_common_plot_text_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    display_fields = [field_name for field_name in ["show_title", "show_legend"] if hasattr(config, field_name)]
+    font_fields = [
+        field_name
+        for field_name in ["font_size_label", "font_size_title", "font_size_legend", "font_size_ticks"]
+        if hasattr(config, field_name)
+    ]
+    if not display_fields and not font_fields:
+        return
+
+    st.markdown("**表示とフォント(Display and fonts)**")
+    if display_fields:
+        display_columns = st.columns(len(display_fields))
+        for column, field_name in zip(display_columns, display_fields):
+            label = {
+                "show_title": "タイトル表示(Show title)",
+                "show_legend": "凡例表示(Show legend)",
+            }.get(field_name, field_name)
+            with column:
+                values[field_name] = bool(
+                    st.checkbox(
+                        label,
+                        value=bool(_plot_config_value(config, field_name, saved_values, False)),
+                        key=f"{prefix}_{field_name}",
+                    )
+                )
+
+    if font_fields:
+        font_columns = st.columns(min(4, len(font_fields)))
+        labels = {
+            "font_size_label": "軸ラベル(Label font)",
+            "font_size_title": "タイトル(Title font)",
+            "font_size_legend": "凡例(Legend font)",
+            "font_size_ticks": "目盛(Tick font)",
+        }
+        for index, field_name in enumerate(font_fields):
+            with font_columns[index % len(font_columns)]:
+                values[field_name] = _int_plot_input(
+                    labels.get(field_name, field_name),
+                    _plot_config_value(config, field_name, saved_values),
+                    f"{prefix}_{field_name}",
+                    min_value=1,
+                )
+
+
+def _add_axis_label_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    label_fields = [
+        (field_name, label)
+        for field_name, label in [("x_label", "X label"), ("y_label", "Y label")]
+        if hasattr(config, field_name)
+    ]
+    if not label_fields:
+        return
+
+    st.markdown("**Axis labels**")
+    columns = st.columns(len(label_fields))
+    for column, (field_name, label) in zip(columns, label_fields):
+        with column:
+            values[field_name] = st.text_input(
+                label,
+                value=str(_plot_config_value(config, field_name, saved_values, "")),
+                key=f"{prefix}_{field_name}",
+            )
+
+
+def _add_plot_style_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    style_fields = [
+        ("scatter_size", "Scatter size", 0.1, 1.0),
+        ("marker_size", "Marker size", 0.1, 0.5),
+        ("line_width", "Line width", 0.0, 0.1),
+        ("error_bar_capsize", "Error-bar cap size", 0.0, 0.5),
+        ("min_per_marker_size", "Min PER marker size", 0.1, 0.5),
+    ]
+    available_fields = [
+        (field_name, label, min_value, step)
+        for field_name, label, min_value, step in style_fields
+        if hasattr(config, field_name)
+    ]
+    if not available_fields:
+        return
+
+    st.markdown("**Plot style**")
+    columns = st.columns(min(3, len(available_fields)))
+    for index, (field_name, label, min_value, step) in enumerate(available_fields):
+        with columns[index % len(columns)]:
+            values[field_name] = _float_plot_input(
+                label,
+                _plot_config_value(config, field_name, saved_values),
+                f"{prefix}_{field_name}",
+                min_value=min_value,
+                step=step,
+            )
+
+
+def _add_common_plot_presentation_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    _add_axis_label_inputs(values, config, prefix, saved_values)
+    _add_common_plot_size_inputs(values, config, prefix, saved_values)
+    _add_common_plot_text_inputs(values, config, prefix, saved_values)
+    _add_plot_style_inputs(values, config, prefix, saved_values)
+
+
+def _add_min_per_annotation_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    if not hasattr(config, "show_min_per_annotation"):
+        return
+
+    st.markdown("**minPER表示(Min PER display)**")
+    col_show_min, col_min_font = st.columns(2)
+    with col_show_min:
+        values["show_min_per_annotation"] = bool(
+            st.checkbox(
+                "minPERを表示(Show min PER)",
+                value=bool(_plot_config_value(config, "show_min_per_annotation", saved_values, True)),
+                key=f"{prefix}_show_min_per_annotation",
+            )
+        )
+    with col_min_font:
+        values["min_per_annotation_font_size"] = _int_plot_input(
+            "minPER表示フォント(Min PER font)",
+            _plot_config_value(config, "min_per_annotation_font_size", saved_values),
+            f"{prefix}_min_per_annotation_font_size",
+            min_value=1,
+            disabled=not values["show_min_per_annotation"],
+        )
+
+
+def _add_error_bar_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    if not hasattr(config, "show_error_bars"):
+        return
+
+    st.markdown("**Whiskers / error bars**")
+    col_show, col_mode = st.columns(2)
+    with col_show:
+        values["show_error_bars"] = bool(
+            st.checkbox(
+                "Show whiskers",
+                value=bool(_plot_config_value(config, "show_error_bars", saved_values, True)),
+                key=f"{prefix}_show_error_bars",
+            )
+        )
+    if hasattr(config, "error_bar_mode"):
+        mode_options = ["std", "min_max"]
+        current_mode = _plot_config_value(config, "error_bar_mode", saved_values, "std")
+        with col_mode:
+            values["error_bar_mode"] = st.selectbox(
+                "Whisker type",
+                options=mode_options,
+                index=mode_options.index(current_mode) if current_mode in mode_options else 0,
+                format_func=lambda value: {
+                    "std": "Standard deviation",
+                    "min_max": "Min-Max range",
+                }.get(value, value),
+                key=f"{prefix}_error_bar_mode",
+                disabled=not values["show_error_bars"],
+            )
+
+
+def _add_per_level_marker_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    if not hasattr(config, "show_per_contour_line"):
+        return
+
+    st.markdown("**PER level markers**")
+    values["show_per_contour_line"] = bool(
+        st.checkbox(
+            "Show minimum timing markers for PER<=N",
+            value=bool(_plot_config_value(config, "show_per_contour_line", saved_values, False)),
+            key=f"{prefix}_show_per_contour_line",
+        )
+    )
+
+    col_level, col_color, col_size, col_marker = st.columns(4)
+    with col_level:
+        values["per_contour_level"] = _float_plot_input(
+            "PER threshold N [%]",
+            _plot_config_value(config, "per_contour_level", saved_values, 0.0),
+            f"{prefix}_per_contour_level",
+            min_value=0.0,
+            step=1.0,
+        )
+    with col_color:
+        values["per_contour_color"] = st.text_input(
+            "Marker color",
+            value=str(_plot_config_value(config, "per_contour_color", saved_values, "white")),
+            key=f"{prefix}_per_contour_color",
+        )
+    with col_size:
+        values["per_level_marker_size"] = _float_plot_input(
+            "Marker size",
+            _plot_config_value(config, "per_level_marker_size", saved_values, 42.0),
+            f"{prefix}_per_level_marker_size",
+            min_value=1.0,
+            step=1.0,
+        )
+    with col_marker:
+        marker_options = ["o", "s", "^", "D", "x", "+"]
+        current_marker = str(_plot_config_value(config, "per_level_marker_style", saved_values, "o"))
+        values["per_level_marker_style"] = st.selectbox(
+            "Marker",
+            options=marker_options,
+            index=marker_options.index(current_marker) if current_marker in marker_options else 0,
+            key=f"{prefix}_per_level_marker_style",
+        )
+
+    col_label, col_label_font = st.columns(2)
+    with col_label:
+        values["show_per_contour_label"] = bool(
+            st.checkbox(
+                "Show marker legend",
+                value=bool(_plot_config_value(config, "show_per_contour_label", saved_values, True)),
+                key=f"{prefix}_show_per_contour_label",
+            )
+        )
+    with col_label_font:
+        values["per_contour_label_font_size"] = _int_plot_input(
+            "Legend font",
+            _plot_config_value(config, "per_contour_label_font_size", saved_values, 18),
+            f"{prefix}_per_contour_label_font_size",
+            min_value=1,
+            disabled=not values["show_per_contour_label"],
+        )
+
+    if hasattr(config, "show_min_per_timing_annotation"):
+        st.markdown("**Minimum PER timing annotation**")
+        values["show_min_per_timing_annotation"] = bool(
+            st.checkbox(
+                "Show K and timing at minimum PER timing",
+                value=bool(_plot_config_value(config, "show_min_per_timing_annotation", saved_values, True)),
+                key=f"{prefix}_show_min_per_timing_annotation",
+            )
+        )
+        col_font, col_marker_size, col_marker_color = st.columns(3)
+        with col_font:
+            values["min_per_timing_annotation_font_size"] = _int_plot_input(
+                "Annotation font",
+                _plot_config_value(config, "min_per_timing_annotation_font_size", saved_values, 14),
+                f"{prefix}_min_per_timing_annotation_font_size",
+                min_value=1,
+                disabled=not values["show_min_per_timing_annotation"],
+            )
+        with col_marker_size:
+            values["min_per_timing_marker_size"] = _float_plot_input(
+                "Min marker size",
+                _plot_config_value(config, "min_per_timing_marker_size", saved_values, 120.0),
+                f"{prefix}_min_per_timing_marker_size",
+                min_value=1.0,
+                step=1.0,
+                disabled=not values["show_min_per_timing_annotation"],
+            )
+        with col_marker_color:
+            values["min_per_timing_marker_color"] = st.text_input(
+                "Min marker color",
+                value=str(_plot_config_value(config, "min_per_timing_marker_color", saved_values, "tab:red")),
+                key=f"{prefix}_min_per_timing_marker_color",
+                disabled=not values["show_min_per_timing_annotation"],
+            )
+
+    if hasattr(config, "show_zero_per_markers"):
+        st.markdown("**0% PER markers**")
+        values["show_zero_per_markers"] = bool(
+            st.checkbox(
+                "Show markers only where PER is 0%",
+                value=bool(_plot_config_value(config, "show_zero_per_markers", saved_values, False)),
+                key=f"{prefix}_show_zero_per_markers",
+            )
+        )
+        col_tolerance, col_color, col_size, col_marker = st.columns(4)
+        with col_tolerance:
+            values["zero_per_marker_tolerance"] = _float_plot_input(
+                "Zero tolerance",
+                _plot_config_value(config, "zero_per_marker_tolerance", saved_values, 1e-9),
+                f"{prefix}_zero_per_marker_tolerance",
+                min_value=0.0,
+                step=0.000001,
+                disabled=not values["show_zero_per_markers"],
+            )
+        with col_color:
+            values["zero_per_marker_color"] = st.text_input(
+                "Marker color",
+                value=str(_plot_config_value(config, "zero_per_marker_color", saved_values, "black")),
+                key=f"{prefix}_zero_per_marker_color",
+                disabled=not values["show_zero_per_markers"],
+            )
+        with col_size:
+            values["zero_per_marker_size"] = _float_plot_input(
+                "Marker size",
+                _plot_config_value(config, "zero_per_marker_size", saved_values, 30.0),
+                f"{prefix}_zero_per_marker_size",
+                min_value=1.0,
+                step=1.0,
+                disabled=not values["show_zero_per_markers"],
+            )
+        with col_marker:
+            marker_options = ["x", "+", "o", "s", "^", "D"]
+            current_marker = str(_plot_config_value(config, "zero_per_marker_style", saved_values, "x"))
+            values["zero_per_marker_style"] = st.selectbox(
+                "Marker",
+                options=marker_options,
+                index=marker_options.index(current_marker) if current_marker in marker_options else 0,
+                key=f"{prefix}_zero_per_marker_style",
+                disabled=not values["show_zero_per_markers"],
+            )
+        values["show_zero_per_marker_label"] = bool(
+            st.checkbox(
+                "Show 0% marker legend",
+                value=bool(_plot_config_value(config, "show_zero_per_marker_label", saved_values, True)),
+                key=f"{prefix}_show_zero_per_marker_label",
+                disabled=not values["show_zero_per_markers"],
+            )
+        )
+
+
+def _add_standard_xy_plot_inputs(
+    values: dict[str, Any],
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> None:
+    _add_range_plot_inputs(
+        values,
+        config,
+        prefix,
+        title="x軸範囲(X-axis range)",
+        min_field="xlim_min",
+        max_field="xlim_max",
+        min_label="x軸下限(X min)",
+        max_label="x軸上限(X max)",
+        saved_values=saved_values,
+    )
+    _add_range_plot_inputs(
+        values,
+        config,
+        prefix,
+        title="y軸範囲(Y-axis range)",
+        min_field="ylim_min",
+        max_field="ylim_max",
+        min_label="y軸下限(Y min)",
+        max_label="y軸上限(Y max)",
+        saved_values=saved_values,
+    )
+
+
+def _collect_plot_parameter_values(
+    command_name: str,
+    config: Any,
+    prefix: str,
+    saved_values: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+
+    if command_name == "plot-phase-diff":
+        _add_range_plot_inputs(
+            values,
+            config,
+            prefix,
+            title="x軸範囲(X-axis range)",
+            min_field="xlim_min",
+            max_field="xlim_max",
+            min_label="x軸下限(X min)",
+            max_label="x軸上限(X max)",
+            saved_values=saved_values,
+        )
+        y_mode_options = ["minus_pi_to_pi", "0_to_2pi"]
+        current_mode = _plot_config_value(config, "y_range_mode", saved_values, "minus_pi_to_pi")
+        values["y_range_mode"] = st.selectbox(
+            "y軸範囲モード(Y-axis range mode)",
+            options=y_mode_options,
+            index=y_mode_options.index(current_mode) if current_mode in y_mode_options else 0,
+            format_func=lambda value: {
+                "minus_pi_to_pi": "-pi から pi(-pi to pi)",
+                "0_to_2pi": "0 から 2pi(0 to 2pi)",
+            }.get(value, value),
+            key=f"{prefix}_y_range_mode",
+        )
+        values["include_skipped_send_times"] = bool(
+            st.checkbox(
+                "スキップした送信予定時刻を含める(Include skipped scheduled send times)",
+                value=bool(_plot_config_value(config, "include_skipped_send_times", saved_values, False)),
+                key=f"{prefix}_include_skipped_send_times",
+            )
+        )
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "plot-per":
+        _add_range_plot_inputs(
+            values,
+            config,
+            prefix,
+            title="x軸範囲(X-axis range)",
+            min_field="xlim_min",
+            max_field="xlim_max",
+            min_label="x軸下限(X min)",
+            max_label="x軸上限(X max)",
+            saved_values=saved_values,
+        )
+        _add_range_plot_inputs(
+            values,
+            config,
+            prefix,
+            title="PER y軸範囲(PER Y-axis range)",
+            min_field="per_ylim_min",
+            max_field="per_ylim_max",
+            min_label="PER y軸下限(PER Y min)",
+            max_label="PER y軸上限(PER Y max)",
+            saved_values=saved_values,
+        )
+        _add_range_plot_inputs(
+            values,
+            config,
+            prefix,
+            title="PER変化量 y軸範囲(PER-change Y-axis range)",
+            min_field="per_change_ylim_min",
+            max_field="per_change_ylim_max",
+            min_label="PER変化量 y軸下限(PER-change Y min)",
+            max_label="PER変化量 y軸上限(PER-change Y max)",
+            saved_values=saved_values,
+        )
+        st.markdown("**PER計算(PER calculation)**")
+        col_window, col_change = st.columns(2)
+        with col_window:
+            values["per_window_width_cycles"] = _int_plot_input(
+                "PER計算窓幅[cycle](PER window width [cycles])",
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
+                f"{prefix}_per_window_width_cycles",
+                min_value=1,
+            )
+        with col_change:
+            values["per_change_width_cycles"] = _int_plot_input(
+                "PER変化量幅[cycle](PER-change width [cycles])",
+                _plot_config_value(config, "per_change_width_cycles", saved_values),
+                f"{prefix}_per_change_width_cycles",
+                min_value=1,
+            )
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "plot-per-aligned":
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+        st.markdown("**PER整列(PER alignment)**")
+        col_window, col_mode, col_cycle = st.columns(3)
+        with col_window:
+            values["per_window_width_cycles"] = _int_plot_input(
+                "PER計算窓幅[cycle](PER window width [cycles])",
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
+                f"{prefix}_per_window_width_cycles",
+                min_value=1,
+            )
+        base_mode_options = ["fixed", "best_per", "largest_improvement", "first_available"]
+        current_mode = _plot_config_value(config, "base_cycle_mode", saved_values, "fixed")
+        with col_mode:
+            values["base_cycle_mode"] = st.selectbox(
+                "基準周期の決め方(Base-cycle mode)",
+                options=base_mode_options,
+                index=base_mode_options.index(current_mode) if current_mode in base_mode_options else 0,
+                format_func=lambda value: {
+                    "fixed": "固定(Fixed)",
+                    "best_per": "PER最小(Best PER)",
+                    "largest_improvement": "改善最大(Largest improvement)",
+                    "first_available": "最初の有効周期(First available)",
+                }.get(value, value),
+                key=f"{prefix}_base_cycle_mode",
+            )
+        with col_cycle:
+            if values["base_cycle_mode"] == "fixed":
+                values["fixed_base_cycle"] = _int_plot_input(
+                    "固定基準周期(Fixed base cycle)",
+                    _plot_config_value(config, "fixed_base_cycle", saved_values),
+                    f"{prefix}_fixed_base_cycle",
+                    min_value=0,
+                )
+            elif values["base_cycle_mode"] == "largest_improvement":
+                values["per_change_width_cycles"] = _int_plot_input(
+                    "改善判定幅[cycle](Improvement width [cycles])",
+                    _plot_config_value(config, "per_change_width_cycles", saved_values),
+                    f"{prefix}_per_change_width_cycles",
+                    min_value=1,
+                )
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "compare-per":
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+        st.markdown("**PER比較(PER comparison)**")
+        col_cycle, col_window = st.columns(2)
+        with col_cycle:
+            values["target_cycle"] = _int_plot_input(
+                "比較対象周期(Target cycle)",
+                _plot_config_value(config, "target_cycle", saved_values),
+                f"{prefix}_target_cycle",
+                min_value=0,
+            )
+        with col_window:
+            values["per_window_width_cycles"] = _int_plot_input(
+                "PER計算窓幅[cycle](PER window width [cycles])",
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
+                f"{prefix}_per_window_width_cycles",
+                min_value=1,
+            )
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "compare-per-by-coupling-strength":
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+        st.markdown("**PER vs K**")
+        col_time, col_window = st.columns(2)
+        with col_time:
+            values["target_time_ms"] = _time_plot_input(
+                "PER timing",
+                _plot_config_value(config, "target_time_ms", saved_values),
+                f"{prefix}_target_time_ms",
+                min_value_ms=0.0,
+                step_ms=1000.0,
+            )
+        with col_window:
+            values["per_window_width_cycles"] = _int_plot_input(
+                "PER window width [cycles]",
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
+                f"{prefix}_per_window_width_cycles",
+                min_value=1,
+            )
+        _add_min_per_annotation_inputs(values, config, prefix, saved_values)
+        _add_error_bar_inputs(values, config, prefix, saved_values)
+        st.caption("PER vs K uses the PER value at the cycle containing the specified timing.")
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "compare-per-by-coupling-strength-interval":
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+        st.markdown("**Interval PER vs K**")
+        col_start, col_end = st.columns(2)
+        with col_start:
+            values["interval_start_ms"] = _time_plot_input(
+                "Interval start",
+                _plot_config_value(config, "interval_start_ms", saved_values),
+                f"{prefix}_interval_start_ms",
+                min_value_ms=0.0,
+                step_ms=1000.0,
+            )
+        with col_end:
+            values["interval_end_ms"] = _time_plot_input(
+                "Interval end",
+                _plot_config_value(config, "interval_end_ms", saved_values),
+                f"{prefix}_interval_end_ms",
+                min_value_ms=0.0,
+                step_ms=1000.0,
+            )
+        _add_min_per_annotation_inputs(values, config, prefix, saved_values)
+        _add_error_bar_inputs(values, config, prefix, saved_values)
+        st.caption("Counts packets assigned to cycles whose start time is in [start, end). Values are saved internally in ms.")
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "plot-per-timing-k-heatmap":
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+        _add_range_plot_inputs(
+            values,
+            config,
+            prefix,
+            title="PER color scale range",
+            min_field="color_min",
+            max_field="color_max",
+            min_label="PER color scale min [%]",
+            max_label="PER color scale max [%]",
+            saved_values=saved_values,
+        )
+        st.markdown("**PER timing × K heatmap**")
+        col_start, col_end, col_step, col_window = st.columns(4)
+        with col_start:
+            values["timing_min_ms"] = _time_plot_input(
+                "Timing min",
+                _plot_config_value(config, "timing_min_ms", saved_values),
+                f"{prefix}_timing_min_ms",
+                min_value_ms=0.0,
+                step_ms=1000.0,
+            )
+        with col_end:
+            values["timing_max_ms"] = _time_plot_input(
+                "Timing max",
+                _plot_config_value(config, "timing_max_ms", saved_values),
+                f"{prefix}_timing_max_ms",
+                min_value_ms=0.0,
+                step_ms=1000.0,
+            )
+        with col_step:
+            values["timing_step_ms"] = _time_plot_input(
+                "Timing step",
+                _plot_config_value(config, "timing_step_ms", saved_values),
+                f"{prefix}_timing_step_ms",
+                min_value_ms=1.0,
+                step_ms=1000.0,
+            )
+        with col_window:
+            values["per_window_width_cycles"] = _int_plot_input(
+                "PER window width [cycles]",
+                _plot_config_value(config, "per_window_width_cycles", saved_values),
+                f"{prefix}_per_window_width_cycles",
+                min_value=1,
+            )
+        values["colormap"] = st.text_input(
+            "Colormap",
+            value=str(_plot_config_value(config, "colormap", saved_values, "viridis")),
+            key=f"{prefix}_colormap",
+        )
+        timing_display_unit_options = ["ms", "s", "min"]
+        current_timing_display_unit = str(_plot_config_value(config, "timing_display_unit", saved_values, "ms"))
+        values["timing_display_unit"] = st.selectbox(
+            "Timing display unit",
+            options=timing_display_unit_options,
+            index=(
+                timing_display_unit_options.index(current_timing_display_unit)
+                if current_timing_display_unit in timing_display_unit_options
+                else 0
+            ),
+            format_func=lambda value: {"ms": "milliseconds [ms]", "s": "seconds [s]", "min": "minutes [min]"}.get(value, value),
+            key=f"{prefix}_timing_display_unit",
+        )
+        _add_per_level_marker_inputs(values, config, prefix, saved_values)
+        st.caption("Each timing uses the PER value at the cycle containing that time, then averages runs by method, K, and timing.")
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "plot-aggregated-phase-gap-error-overlay":
+        _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+        st.markdown("**収束表示(Convergence marker)**")
+        col_window, col_threshold = st.columns(2)
+        with col_window:
+            values["convergence_window_cycles"] = _int_plot_input(
+                "収束判定窓幅[cycle](Convergence window [cycles])",
+                _plot_config_value(config, "convergence_window_cycles", saved_values),
+                f"{prefix}_convergence_window_cycles",
+                min_value=1,
+            )
+        with col_threshold:
+            values["convergence_threshold"] = _float_plot_input(
+                "収束しきい値(Convergence threshold)",
+                _plot_config_value(config, "convergence_threshold", saved_values),
+                f"{prefix}_convergence_threshold",
+                min_value=0.0,
+                step=0.001,
+            )
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    if command_name == "plot-convergence-summary":
+        _add_range_plot_inputs(
+            values,
+            config,
+            prefix,
+            title="x軸範囲(X-axis range)",
+            min_field="xlim_min",
+            max_field="xlim_max",
+            min_label="x軸下限(X min)",
+            max_label="x軸上限(X max)",
+            saved_values=saved_values,
+        )
+        _add_range_plot_inputs(
+            values,
+            config,
+            prefix,
+            title="左y軸範囲(Left Y-axis range)",
+            min_field="ylim_left_min",
+            max_field="ylim_left_max",
+            min_label="左y軸下限(Left Y min)",
+            max_label="左y軸上限(Left Y max)",
+            saved_values=saved_values,
+        )
+        _add_range_plot_inputs(
+            values,
+            config,
+            prefix,
+            title="右y軸範囲(Right Y-axis range)",
+            min_field="ylim_right_min",
+            max_field="ylim_right_max",
+            min_label="右y軸下限(Right Y min)",
+            max_label="右y軸上限(Right Y max)",
+            saved_values=saved_values,
+        )
+        st.markdown("**収束判定(Convergence detection)**")
+        col_window, col_threshold = st.columns(2)
+        with col_window:
+            values["convergence_window_cycles"] = _int_plot_input(
+                "収束判定窓幅[cycle](Convergence window [cycles])",
+                _plot_config_value(config, "convergence_window_cycles", saved_values),
+                f"{prefix}_convergence_window_cycles",
+                min_value=1,
+            )
+        with col_threshold:
+            values["convergence_threshold"] = _float_plot_input(
+                "収束しきい値(Convergence threshold)",
+                _plot_config_value(config, "convergence_threshold", saved_values),
+                f"{prefix}_convergence_threshold",
+                min_value=0.0,
+                step=0.001,
+            )
+        _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+        return values
+
+    _add_standard_xy_plot_inputs(values, config, prefix, saved_values)
+    _add_common_plot_presentation_inputs(values, config, prefix, saved_values)
+    return values
+
+
+def _render_plot_parameter_controls(selected_graph_commands: list[str]) -> dict[str, dict[str, Any]]:
+    st.subheader("グラフパラメーター(Graph parameters)")
+    saved_overrides = _load_last_graph_plot_overrides()
+    if not selected_graph_commands:
+        st.info("画像種類を選ぶと、変更できるグラフパラメーターが表示されます(Select graph types to edit plot parameters).")
+        if saved_overrides and st.button(
+            "保存済みグラフパラメーターをリセット(Reset saved graph parameters)",
+            key="reset_graph_plot_overrides_empty",
+        ):
+            _clear_last_graph_plot_overrides()
+            st.rerun()
+        return {}
+
+    selected_config_names = [
+        config_pair[0]
+        for command_name in selected_graph_commands
+        if (config_pair := PLOT_CONFIG_BY_GRAPH_COMMAND.get(command_name)) is not None
+    ]
+    has_saved_for_selection = any(config_name in saved_overrides for config_name in selected_config_names)
+    use_web_parameters = st.checkbox(
+        "Web上の値でグラフ設定を上書き(Override graph settings from Web)",
+        value=has_saved_for_selection,
+        key="graph_plot_use_web_parameters",
+    )
+    if saved_overrides:
+        st.caption(
+            "最後に使ったグラフパラメーターを読み込めます。グラフ作成を開始すると、その時の値が次回用に保存されます"
+            "(Last used graph parameters can be reused and are saved when graph creation starts)."
+        )
+        if st.button(
+            "保存済みグラフパラメーターをリセット(Reset saved graph parameters)",
+            key="reset_graph_plot_overrides",
+        ):
+            _clear_last_graph_plot_overrides()
+            st.rerun()
+
+    if not use_web_parameters:
+        st.caption("チェックを入れると、軸範囲などをWeb入力値で上書きします(Enable this to override plot settings from Web values).")
+        return {}
+
+    st.caption(
+        "各範囲で自動(Auto)を選ぶと、その軸はMatplotlibの自動範囲になります。グラフ作成開始時にこの値を保存します"
+        "(Auto lets Matplotlib choose that axis range; values are saved when graph creation starts)."
+    )
+    overrides: dict[str, dict[str, Any]] = {}
+    for command_name in selected_graph_commands:
+        config_pair = PLOT_CONFIG_BY_GRAPH_COMMAND.get(command_name)
+        if config_pair is None:
+            continue
+        config_name, config = config_pair
+        with st.expander(GRAPH_CREATION_COMMANDS[command_name]["label"], expanded=False):
+            values = _collect_plot_parameter_values(
+                command_name,
+                config,
+                f"plot_override_{command_name}",
+                saved_overrides.get(config_name),
+            )
+            if values:
+                overrides[config_name] = values
+    return overrides
+
+
+def _render_single_plot_parameter_controls(command_name: str) -> dict[str, dict[str, Any]]:
+    config_pair = PLOT_CONFIG_BY_GRAPH_COMMAND.get(command_name)
+    if config_pair is None:
+        return {}
+
+    config_name, config = config_pair
+    saved_overrides = _load_last_graph_plot_overrides()
+    saved_values = saved_overrides.get(config_name)
+
+    st.subheader("グラフ設定(Graph settings)")
+    if saved_values is not None:
+        st.caption(
+            "最後に使った設定を初期値として読み込んでいます。グラフ作成を開始すると、この画面の値を次回用に保存します"
+            "(Last used settings are loaded and saved again when graph creation starts)."
+        )
+        if st.button(
+            "保存済みグラフ設定をリセット(Reset saved graph settings)",
+            key=f"reset_graph_plot_overrides_{command_name}",
+        ):
+            _clear_last_graph_plot_overrides()
+            st.rerun()
+    else:
+        st.caption("現在の設定値を使ってグラフを作成します(Current values are used for graph creation).")
+
+    values = _collect_plot_parameter_values(
+        command_name,
+        config,
+        f"plot_override_{command_name}",
+        saved_values,
+    )
+    return {config_name: values} if values else {}
+
+
+def _render_style_only_plot_parameter_controls(command_name: str) -> dict[str, dict[str, Any]]:
+    config_pair = PLOT_CONFIG_BY_GRAPH_COMMAND.get(command_name)
+    if config_pair is None:
+        return {}
+
+    config_name, config = config_pair
+    saved_overrides = _load_last_graph_plot_overrides()
+    saved_values = saved_overrides.get(config_name)
+    values: dict[str, Any] = {}
+
+    for field_name in STYLE_ONLY_SOURCE_FIELDS_BY_GRAPH_COMMAND.get(command_name, tuple()):
+        if hasattr(config, field_name):
+            values[field_name] = _plot_config_value(config, field_name, saved_values)
+
+    source_values = {
+        field_name: values[field_name]
+        for field_name in STYLE_ONLY_SOURCE_FIELDS_BY_GRAPH_COMMAND.get(command_name, tuple())
+        if field_name in values
+    }
+    if source_values:
+        source_text = ", ".join(f"{field_name}={value}" for field_name, value in source_values.items())
+        st.caption(f"Existing CSV lookup uses: {source_text}")
+
+    _add_standard_xy_plot_inputs(
+        values,
+        config,
+        f"redraw_plot_override_{command_name}",
+        saved_values,
+    )
+    if command_name == "compare-per-by-coupling-strength-interval":
+        st.markdown("**Interval PER vs K**")
+        col_start, col_end = st.columns(2)
+        with col_start:
+            values["interval_start_ms"] = _time_plot_input(
+                "Interval start",
+                _plot_config_value(config, "interval_start_ms", saved_values),
+                f"redraw_plot_override_{command_name}_interval_start_ms",
+                min_value_ms=0.0,
+                step_ms=1000.0,
+            )
+        with col_end:
+            values["interval_end_ms"] = _time_plot_input(
+                "Interval end",
+                _plot_config_value(config, "interval_end_ms", saved_values),
+                f"redraw_plot_override_{command_name}_interval_end_ms",
+                min_value_ms=0.0,
+                step_ms=1000.0,
+            )
+        st.caption("This redraw recalculates interval PER from run logs, then saves a new per-graph CSV/PDF for the selected time range.")
+    if command_name == "plot-per-timing-k-heatmap":
+        _add_range_plot_inputs(
+            values,
+            config,
+            f"redraw_plot_override_{command_name}",
+            title="PER color scale range",
+            min_field="color_min",
+            max_field="color_max",
+            min_label="PER color scale min [%]",
+            max_label="PER color scale max [%]",
+            saved_values=saved_values,
+        )
+        timing_display_unit_options = ["ms", "s", "min"]
+        current_timing_display_unit = str(_plot_config_value(config, "timing_display_unit", saved_values, "ms"))
+        values["timing_display_unit"] = st.selectbox(
+            "Timing display unit",
+            options=timing_display_unit_options,
+            index=(
+                timing_display_unit_options.index(current_timing_display_unit)
+                if current_timing_display_unit in timing_display_unit_options
+                else 0
+            ),
+            format_func=lambda value: {"ms": "milliseconds [ms]", "s": "seconds [s]", "min": "minutes [min]"}.get(value, value),
+            key=f"redraw_plot_override_{command_name}_timing_display_unit",
+        )
+        _add_per_level_marker_inputs(
+            values,
+            config,
+            f"redraw_plot_override_{command_name}",
+            saved_values,
+        )
+    _add_min_per_annotation_inputs(
+        values,
+        config,
+        f"redraw_plot_override_{command_name}",
+        saved_values,
+    )
+    _add_error_bar_inputs(
+        values,
+        config,
+        f"redraw_plot_override_{command_name}",
+        saved_values,
+    )
+    _add_common_plot_presentation_inputs(
+        values,
+        config,
+        f"redraw_plot_override_{command_name}",
+        saved_values,
+    )
+    return {config_name: values} if values else {}
+
+
+def _invalid_plot_override_ranges(plot_overrides: dict[str, dict[str, Any]]) -> list[str]:
+    messages: list[str] = []
+    command_by_config_name = {
+        config_name: command_name
+        for command_name, (config_name, _) in PLOT_CONFIG_BY_GRAPH_COMMAND.items()
+    }
+    for config_name, values in plot_overrides.items():
+        command_name = command_by_config_name.get(config_name)
+        graph_label = GRAPH_CREATION_COMMANDS.get(command_name or "", {}).get("label", config_name)
+        for min_field, max_field, range_label in PLOT_RANGE_FIELD_PAIRS:
+            min_value = values.get(min_field)
+            max_value = values.get(max_field)
+            if min_value is None or max_value is None:
+                continue
+            if float(min_value) >= float(max_value):
+                messages.append(
+                    f"{graph_label}: {range_label} は下限を上限より小さくしてください(Min must be smaller than max)."
+                )
+    return messages
+
+
+def _style_only_redraw_supported(commands: list[str]) -> bool:
+    return bool(commands) and set(commands).issubset(STYLE_ONLY_REDRAW_GRAPH_COMMANDS)
+
+
+def _render_style_only_redraw_option(commands: list[str], key: str) -> bool:
+    if not _style_only_redraw_supported(commands):
+        return False
+    if "compare-per-by-coupling-strength-interval" in commands:
+        st.caption(
+            "Interval PER vs K の時間範囲変更は、左メニューの Graph redraw から実行できます"
+            "(Use Graph redraw to change the interval and recalculate this graph)."
+        )
+        return False
+    return bool(
+        st.checkbox(
+            "見た目だけ再描画(既存CSVを使う / Style-only redraw from existing CSV)",
+            value=False,
+            key=key,
+            help=(
+                "既に作成済みの描画用CSVから再描画し、runの再集計と前処理を行いません。"
+                "軸ラベル、フォント、画像サイズ、マーカーサイズなどだけを変える時に使ってください。"
+                "PER timing や window など計算条件を変える場合はOFFにしてください。"
+            ),
+        )
+    )
+
+
+def _target_records_for_style_mode(
+    selected_records: list[RunRecord],
+    all_records: list[RunRecord],
+    style_only_redraw: bool,
+) -> list[RunRecord]:
+    if selected_records or not style_only_redraw:
+        return selected_records
+    return all_records
+
+
+def _figure_snapshot(web_config: dict[str, Any]) -> dict[Path, tuple[int, int]]:
+    figure_config = web_config.get("figures", {})
+    assets = discover_figures(
+        web_config["paths"].get("figure_dirs", []),
+        extensions=figure_config.get("extensions", []),
+    )
+    return {
+        asset.path.resolve(): (asset.path.stat().st_mtime_ns, asset.size_bytes)
+        for asset in assets
+    }
+
+
+def _changed_figure_assets(
+    web_config: dict[str, Any],
+    before_snapshot: dict[Path, tuple[int, int]],
+) -> list[FigureAsset]:
+    figure_config = web_config.get("figures", {})
+    assets = discover_figures(
+        web_config["paths"].get("figure_dirs", []),
+        extensions=figure_config.get("extensions", []),
+    )
+    return [
+        asset
+        for asset in assets
+        if before_snapshot.get(asset.path.resolve()) != (asset.path.stat().st_mtime_ns, asset.size_bytes)
+    ]
+
+
+def _figure_output_dir(asset: FigureAsset) -> str:
+    try:
+        relative_path = asset.path.relative_to(asset.source_root)
+        return relative_path.parts[0] if len(relative_path.parts) > 1 else ""
+    except ValueError:
+        return asset.path.parent.name
+
+
+def _figure_graph_type(asset: FigureAsset) -> str:
+    graph_dir = _figure_output_dir(asset)
+    if not graph_dir:
+        return "その他(Other)"
+    return GRAPH_TYPE_BY_OUTPUT_DIR.get(graph_dir, f"その他(Other): {graph_dir}")
+
+
+def _figure_scope_key(asset: FigureAsset) -> str:
+    graph_dir = _figure_output_dir(asset)
+    if graph_dir == "per_aligned_graphs" and asset.name.startswith("overlay_"):
+        return "multiple"
+    return FIGURE_SCOPE_BY_OUTPUT_DIR.get(graph_dir, "other")
+
+
+def _figure_scope_label(asset: FigureAsset) -> str:
+    return FIGURE_SCOPE_LABELS[_figure_scope_key(asset)]
+
+
+def _figure_graph_description(asset: FigureAsset) -> str:
+    graph_dir = _figure_output_dir(asset)
+    if graph_dir == "per_aligned_graphs" and asset.name.startswith("overlay_"):
+        return "複数runのPERを基準周期にそろえて重ね描き(Overlays multiple runs aligned to a base cycle)"
+    return GRAPH_DESCRIPTION_BY_OUTPUT_DIR.get(graph_dir, "保存先フォルダから自動分類(Auto-classified from output folder)")
+
+
+def _figure_sort_key(asset: FigureAsset, sort_by: str) -> tuple[Any, ...]:
+    scope_key = _figure_scope_key(asset)
+    scope_order = FIGURE_SCOPE_SORT_ORDER.get(scope_key, FIGURE_SCOPE_SORT_ORDER["other"])
+    scope_label = _figure_scope_label(asset)
+    graph_type = _figure_graph_type(asset)
+    if sort_by == "figure_scope":
+        return (scope_order, graph_type, asset.relative_path.lower())
+    if sort_by == "name":
+        return (asset.name.lower(), scope_order, graph_type, asset.relative_path.lower())
+    if sort_by == "extension":
+        return (asset.extension, scope_order, graph_type, asset.name.lower())
+    if sort_by == "size_kb":
+        return (asset.size_bytes, scope_order, graph_type, asset.name.lower())
+    if sort_by == "relative_path":
+        return (asset.relative_path.lower(), scope_order, graph_type, asset.name.lower())
+    return (graph_type, scope_label, asset.relative_path.lower(), asset.name.lower())
+
+
+def _figures_to_display_frame(assets: list[FigureAsset]) -> pd.DataFrame:
+    df = figures_to_frame(assets)
+    if df.empty:
+        return pd.DataFrame(columns=list(FIGURE_COLUMN_LABELS))
+    df.insert(0, "figure_scope", [_figure_scope_label(asset) for asset in assets])
+    df.insert(1, "graph_type", [_figure_graph_type(asset) for asset in assets])
+    df.insert(2, "graph_description", [_figure_graph_description(asset) for asset in assets])
+    return df
+
+
+def _style_figure_display_frame(df: pd.DataFrame) -> pd.io.formats.style.Styler:
+    display_df = df.rename(columns=FIGURE_COLUMN_LABELS)
+    scope_column = FIGURE_COLUMN_LABELS["figure_scope"]
+    single_label = FIGURE_SCOPE_LABELS["single"]
+    multiple_label = FIGURE_SCOPE_LABELS["multiple"]
+
+    def style_row(row: pd.Series) -> list[str]:
+        scope = row.get(scope_column, "")
+        if scope == single_label:
+            style = "background-color: #eaf4ff; color: #17324d;"
+        elif scope == multiple_label:
+            style = "background-color: #fff3d6; color: #493300;"
+        else:
+            style = "background-color: #f4f4f5; color: #27272a;"
+        return [style for _ in row]
+
+    return display_df.style.apply(style_row, axis=1)
+
+
+FIGURE_PARAMETER_FIELDS = [
+    ("coupling_function", "結合関数(Coupling function)"),
+    ("coupling_strength", "結合強度(Coupling strength)"),
+    ("strength_ratio", "強度倍率(Strength ratio)"),
+    ("cycle_time", "周期時間[ms](Cycle time [ms])"),
+    ("listening_rate", "待機率[%](Listening rate [%])"),
+    ("device_count", "デバイス数(Device count)"),
+    ("start_timing_mode", "開始タイミング(Start timing)"),
+    ("simulation_mode", "シミュレーションモード(Simulation mode)"),
+    ("save_asleep_log", "asleep_log保存(Save asleep_log)"),
+    ("save_carrier_sense_log", "carrier_sense_log保存(Save carrier_sense_log)"),
+    ("carrier_sense_duration_ms", "キャリアセンス時間[ms](Carrier-sense [ms])"),
+    ("transmission_time_ms", "送信時間[ms](Transmission time [ms])"),
+    ("lora_payload_bytes", "LoRa payload [bytes]"),
+    ("lora_spreading_factor", "LoRa SF"),
+    ("lora_bandwidth_hz", "LoRa bandwidth [Hz]"),
+]
+
+
+def _is_missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip() == ""
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _metadata_value(record: RunRecord, field_name: str) -> Any:
+    if field_name == "device_count":
+        value = record.metadata.get(field_name)
+        if not _is_missing_value(value):
+            return value
+        return next(
+            (int(tag[:-3]) for tag in record.tags if tag.endswith("dai") and tag[:-3].isdigit()),
+            None,
+        )
+    return record.metadata.get(field_name)
+
+
+def _format_scalar_value(value: Any) -> str:
+    if _is_missing_value(value):
+        return "-"
+    if isinstance(value, float):
+        return f"{value:g}"
+    if isinstance(value, (list, tuple)):
+        return ";".join(str(item) for item in value)
+    return str(value)
+
+
+def _format_value_summary(values: list[Any]) -> str:
+    clean_values = [value for value in values if not _is_missing_value(value)]
+    if not clean_values:
+        return "-"
+
+    numeric_values: list[float] = []
+    numeric = True
+    for value in clean_values:
+        if isinstance(value, bool):
+            numeric = False
+            break
+        try:
+            numeric_values.append(float(value))
+        except (TypeError, ValueError):
+            numeric = False
+            break
+
+    if numeric and numeric_values:
+        unique_numbers = sorted(set(numeric_values))
+        if len(unique_numbers) == 1:
+            return f"{unique_numbers[0]:g}"
+        return f"{min(numeric_values):g} - {max(numeric_values):g} ({len(unique_numbers)} values)"
+
+    unique_texts = list(dict.fromkeys(_format_scalar_value(value) for value in clean_values))
+    if len(unique_texts) <= 6:
+        return ", ".join(unique_texts)
+    return f"{len(unique_texts)} values: {', '.join(unique_texts[:6])}, ..."
+
+
+def _selected_start_times(record: RunRecord) -> list[float]:
+    raw_value = record.metadata.get("selected_start_times")
+    if isinstance(raw_value, list):
+        values = raw_value
+    elif _is_missing_value(raw_value):
+        values = []
+    else:
+        values = [item.strip() for item in str(raw_value).replace(",", ";").split(";") if item.strip()]
+
+    result: list[float] = []
+    for value in values:
+        try:
+            result.append(float(value))
+        except (TypeError, ValueError):
+            pass
+    return result
+
+
+def _format_number_range(values: list[float], unit: str = "") -> str:
+    if not values:
+        return "-"
+    suffix = f" {unit}" if unit else ""
+    if min(values) == max(values):
+        return f"{min(values):g}{suffix}"
+    return f"{min(values):g} - {max(values):g}{suffix}"
+
+
+def _numeric_metadata_values(records: list[RunRecord], field_name: str) -> list[float]:
+    values: list[float] = []
+    for record in records:
+        value = _metadata_value(record, field_name)
+        if _is_missing_value(value):
+            continue
+        try:
+            values.append(float(value))
+        except (TypeError, ValueError):
+            pass
+    return values
+
+
+def _metadata_number_equals(record: RunRecord, field_name: str, expected: float) -> bool:
+    value = _metadata_value(record, field_name)
+    if _is_missing_value(value):
+        return False
+    try:
+        return float(value) == float(expected)
+    except (TypeError, ValueError):
+        return False
+
+
+def _phase_values_from_start_times(records: list[RunRecord]) -> list[float]:
+    phases: list[float] = []
+    for record in records:
+        cycle_time = _metadata_value(record, "cycle_time")
+        try:
+            cycle_time_float = float(cycle_time)
+        except (TypeError, ValueError):
+            continue
+        if cycle_time_float <= 0:
+            continue
+        for start_time in _selected_start_times(record):
+            phases.append(float((start_time % cycle_time_float) / cycle_time_float * 2.0 * math.pi))
+    return phases
+
+
+def _candidate_phase_range(records: list[RunRecord]) -> str:
+    phase_values: list[float] = []
+    for record in records:
+        start_min = _metadata_value(record, "random_start_min")
+        start_max = _metadata_value(record, "random_start_max")
+        cycle_time = _metadata_value(record, "cycle_time")
+        try:
+            start_min_float = float(start_min)
+            start_max_float = float(start_max)
+            cycle_time_float = float(cycle_time)
+        except (TypeError, ValueError):
+            continue
+        if cycle_time_float <= 0:
+            continue
+        phase_values.extend(
+            [
+                float((start_min_float % cycle_time_float) / cycle_time_float * 2.0 * math.pi),
+                float((start_max_float % cycle_time_float) / cycle_time_float * 2.0 * math.pi),
+            ]
+        )
+    return _format_number_range(phase_values, "rad")
+
+
+def _initial_phase_summary_rows(records: list[RunRecord]) -> list[dict[str, str]]:
+    selected_start_values = [
+        start_time
+        for record in records
+        for start_time in _selected_start_times(record)
+    ]
+    selected_phase_values = _phase_values_from_start_times(records)
+    random_min_values = _numeric_metadata_values(records, "random_start_min")
+    random_max_values = _numeric_metadata_values(records, "random_start_max")
+    candidate_range_values = []
+    if random_min_values:
+        candidate_range_values.append(min(random_min_values))
+    if random_max_values:
+        candidate_range_values.append(max(random_max_values))
+
+    selected_patterns = {
+        tuple(_selected_start_times(record))
+        for record in records
+        if _selected_start_times(record)
+    }
+    rows = [
+        {
+            "項目(Item)": "初期位相の選択方法(Start timing mode)",
+            "値(Value)": _format_value_summary([_metadata_value(record, "start_timing_mode") for record in records]),
+        },
+        {
+            "項目(Item)": "候補開始時刻範囲[ms](Candidate start range [ms])",
+            "値(Value)": _format_number_range(candidate_range_values, "ms"),
+        },
+        {
+            "項目(Item)": "候補位相範囲[rad](Candidate phase range [rad])",
+            "値(Value)": _candidate_phase_range(records),
+        },
+        {
+            "項目(Item)": "候補刻み[ms](Candidate step [ms])",
+            "値(Value)": _format_value_summary([_metadata_value(record, "start_step") for record in records]),
+        },
+        {
+            "項目(Item)": "候補数(Candidate count)",
+            "値(Value)": _format_value_summary([_metadata_value(record, "random_start_candidate_count") for record in records]),
+        },
+        {
+            "項目(Item)": "選択済み開始時刻範囲[ms](Selected start range [ms])",
+            "値(Value)": _format_number_range(selected_start_values, "ms"),
+        },
+        {
+            "項目(Item)": "選択済み位相範囲[rad](Selected phase range [rad])",
+            "値(Value)": _format_number_range(selected_phase_values, "rad"),
+        },
+        {
+            "項目(Item)": "初期位相パターン数(Selected pattern count)",
+            "値(Value)": str(len(selected_patterns)) if selected_patterns else "-",
+        },
+    ]
+    return rows
+
+
+def _run_lookup_keys(record: RunRecord) -> set[str]:
+    return {record.run_id, record.path.name, str(record.metadata.get("run_id") or "")} - {""}
+
+
+def _single_run_id_candidates(asset: FigureAsset) -> list[str]:
+    stem = asset.path.stem
+    candidates = [stem]
+    for suffix in ["_ratio", "_change", "_aligned"]:
+        if stem.endswith(suffix):
+            candidates.append(stem[: -len(suffix)])
+    return list(dict.fromkeys(candidates))
+
+
+def _aggregate_filename_filter(asset: FigureAsset, records: list[RunRecord]) -> tuple[list[RunRecord], str]:
+    graph_dir = _figure_output_dir(asset)
+    stem = asset.path.stem
+    if graph_dir == "aggregated_stats_graphs":
+        match = re.fullmatch(r"(.+)_(\d+)", stem)
+        if match is not None:
+            coupling_function, coupling_strength_text = match.groups()
+            coupling_strength = int(coupling_strength_text)
+            matched = [
+                record for record in records
+                if str(_metadata_value(record, "coupling_function")) == coupling_function
+                and _metadata_number_equals(record, "coupling_strength", float(coupling_strength))
+            ]
+            return matched, f"{coupling_function}, K={coupling_strength} のrunから推定"
+
+    if graph_dir in {"per_by_coupling_strength_graphs", "per_by_coupling_strength_interval_graphs"} and "_per_by_k_" in stem:
+        coupling_function = stem.split("_per_by_k_", 1)[0]
+        matched = [
+            record for record in records
+            if str(_metadata_value(record, "coupling_function")) == coupling_function
+        ]
+        return matched, f"{coupling_function} のrunから推定"
+
+    if graph_dir == "compare_per_graphs" and stem.startswith("combined_methods_cycle_"):
+        return records, "複数手法の比較グラフとして、読み込み済みrun全体の範囲として表示"
+
+    if graph_dir == "compare_per_graphs":
+        match = re.fullmatch(r"(.+)_cycle_\d+", stem)
+        if match is not None:
+            coupling_function = match.group(1)
+            matched = [
+                record for record in records
+                if str(_metadata_value(record, "coupling_function")) == coupling_function
+            ]
+            return matched, f"{coupling_function} のrunから推定"
+
+    return records, "画像ファイル名から条件を特定できないため、読み込み済みrun全体の範囲として表示"
+
+
+def _records_for_figure(asset: FigureAsset, records: list[RunRecord]) -> tuple[list[RunRecord], str]:
+    scope_key = _figure_scope_key(asset)
+    graph_dir = _figure_output_dir(asset)
+    if scope_key == "single":
+        candidates = set(_single_run_id_candidates(asset))
+        matched = [
+            record
+            for record in records
+            if candidates.intersection(_run_lookup_keys(record))
+        ]
+        if matched:
+            return matched[:1], f"ファイル名からrun IDを推定: {next(iter(candidates))}"
+        return [], "ファイル名に対応するrunが見つかりませんでした"
+
+    if graph_dir in {
+        "aggregated_stats_graphs",
+        "per_by_coupling_strength_graphs",
+        "per_by_coupling_strength_interval_graphs",
+        "compare_per_graphs",
+    }:
+        return _aggregate_filename_filter(asset, records)
+
+    return records, "複数runを使うグラフとして、読み込み済みrun全体の範囲として表示"
+
+
+def _figure_parameter_summary_frame(records: list[RunRecord]) -> pd.DataFrame:
+    rows = [
+        {"項目(Item)": "対象run数(Target runs)", "値(Value)": str(len(records))},
+    ]
+    rows.extend(
+        {
+            "項目(Item)": label,
+            "値(Value)": _format_value_summary([_metadata_value(record, field_name) for record in records]),
+        }
+        for field_name, label in FIGURE_PARAMETER_FIELDS
+    )
+    return _display_rows_frame(rows)
+
+
+def _render_figure_parameter_summary(asset: FigureAsset, records: list[RunRecord]) -> None:
+    matched_records, note = _records_for_figure(asset, records)
+    st.subheader("実験パラメーター(Experiment parameters)")
+    st.caption(note)
+    if not matched_records:
+        st.warning("この画像に対応するrun metadataを見つけられませんでした(Could not find matching run metadata for this figure).")
+        return
+
+    st.dataframe(_figure_parameter_summary_frame(matched_records), width="stretch", hide_index=True)
+    st.subheader("初期位相/開始時刻(Initial phase / start timing)")
+    st.dataframe(pd.DataFrame(_initial_phase_summary_rows(matched_records)), width="stretch", hide_index=True)
+
+    if len(matched_records) <= 20:
+        with st.expander("対象run一覧(Target runs)", expanded=False):
+            run_rows = [
+                {
+                    "run_id": record.run_id,
+                    "path": str(record.path),
+                    "selected_start_times": _format_scalar_value(_selected_start_times(record)),
+                }
+                for record in matched_records
+            ]
+            st.dataframe(pd.DataFrame(run_rows), width="stretch", hide_index=True)
+
+
+def _graph_command_output_dir(command_info: dict[str, str]) -> str:
+    output = command_info.get("output", "")
+    parts = Path(output).parts
+    try:
+        figures_index = parts.index("figures")
+    except ValueError:
+        return ""
+    next_index = figures_index + 1
+    if next_index >= len(parts):
+        return ""
+    return parts[next_index]
+
+
+def _graph_command_scope_label(command_info: dict[str, str]) -> str:
+    output_dir = _graph_command_output_dir(command_info)
+    scope_key = FIGURE_SCOPE_BY_OUTPUT_DIR.get(output_dir, "other")
+    return FIGURE_SCOPE_LABELS[scope_key]
+
+
+def _graph_command_description(command_info: dict[str, str]) -> str:
+    output_dir = _graph_command_output_dir(command_info)
+    return GRAPH_DESCRIPTION_BY_OUTPUT_DIR.get(output_dir, "保存先フォルダから自動分類(Auto-classified from output folder)")
+
+
+def _style_graph_command_frame(df: pd.DataFrame) -> pd.io.formats.style.Styler:
+    display_df = df.rename(columns=GRAPH_TABLE_COLUMN_LABELS)
+    scope_column = GRAPH_TABLE_COLUMN_LABELS["scope"]
+    single_label = FIGURE_SCOPE_LABELS["single"]
+    multiple_label = FIGURE_SCOPE_LABELS["multiple"]
+
+    def style_row(row: pd.Series) -> list[str]:
+        scope = row.get(scope_column, "")
+        if scope == single_label:
+            style = "background-color: #eaf4ff; color: #17324d;"
+        elif scope == multiple_label:
+            style = "background-color: #fff3d6; color: #493300;"
+        else:
+            style = "background-color: #f4f4f5; color: #27272a;"
+        return [style for _ in row]
+
+    return display_df.style.apply(style_row, axis=1)
+
+
+def _duration_value_text(value: Any) -> str:
+    if value in (None, ""):
+        return "-"
+    try:
+        duration_seconds = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return _format_duration(duration_seconds)
+
+
+def _command_result_frame(results: list[dict[str, Any]]) -> pd.DataFrame:
+    frame = pd.DataFrame(results)
+    if frame.empty:
+        return frame
+
+    for column in ("started_at", "finished_at"):
+        if column in frame.columns:
+            frame[column] = frame[column].map(_job_time_text)
+    if "duration_seconds" in frame.columns:
+        frame["duration"] = frame["duration_seconds"].map(_duration_value_text)
+        frame = frame.drop(columns=["duration_seconds"])
+
+    preferred_columns = [
+        "command",
+        "status",
+        "started_at",
+        "finished_at",
+        "duration",
+        "message",
+    ]
+    ordered_columns = [column for column in preferred_columns if column in frame.columns]
+    ordered_columns.extend(column for column in frame.columns if column not in set(ordered_columns))
+    return frame[ordered_columns].rename(columns=COMMAND_RESULT_COLUMN_LABELS)
+
+
+def _format_duration(seconds: float | None) -> str:
+    if seconds is None or not math.isfinite(seconds):
+        return "計算中(Calculating)"
+    seconds = max(0, int(round(seconds)))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}時間{minutes}分{secs}秒({hours}h {minutes}m {secs}s)"
+    if minutes:
+        return f"{minutes}分{secs}秒({minutes}m {secs}s)"
+    return f"{secs}秒({secs}s)"
+
+
+def _progress_status_text(
+    completed: int,
+    total: int,
+    started_at: float,
+    *,
+    current_label: str | None = None,
+) -> str:
+    elapsed = time.perf_counter() - started_at
+    remaining_seconds: float | None = None
+    if completed > 0 and total > completed:
+        remaining_seconds = (elapsed / completed) * (total - completed)
+    elif total > 0 and completed >= total:
+        remaining_seconds = 0.0
+
+    if remaining_seconds is None:
+        finish_text = "計算中(Calculating)"
+    else:
+        finish_at = datetime.now() + timedelta(seconds=remaining_seconds)
+        finish_text = finish_at.strftime("%H:%M:%S")
+
+    parts = [
+        f"{completed}/{total} 完了(Completed)",
+        f"経過(Elapsed): {_format_duration(elapsed)}",
+        f"残り(ETA): {_format_duration(remaining_seconds)}",
+        f"終了予測(Finish): {finish_text}",
+    ]
+    if current_label:
+        parts.append(f"実行中(Current): {current_label}")
+    return " | ".join(parts)
+
+
+def _progress_ratio(completed: int, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return min(1.0, max(0.0, completed / total))
+
+
+def _run_simulation_requests_with_progress(requests: list[SimulationRequest]) -> list[dict[str, Any]]:
+    total_runs = sum(request.num_runs for request in requests)
+    started_at = time.perf_counter()
+    progress_bar = st.progress(
+        0.0,
+        text=_progress_status_text(0, total_runs, started_at, current_label="準備中(Preparing)"),
+    )
+    status_placeholder = st.empty()
+    partial_results_placeholder = st.empty()
+    completed_results: list[dict[str, Any]] = []
+    all_results: list[dict[str, Any]] = []
+    total_completed = 0
+
+    try:
+        for request_index, request in enumerate(requests, start=1):
+            condition_label = f"条件 {request_index}/{len(requests)}"
+
+            def on_progress(completed: int, total: int, result: dict[str, Any]) -> None:
+                nonlocal total_completed
+                total_completed += 1
+                result_row = {
+                    "condition_index": request_index,
+                    "condition_count": len(requests),
+                    **result,
+                }
+                completed_results.append(result_row)
+                run_label = str(result.get("run_id", "run"))
+                status_text = _progress_status_text(
+                    total_completed,
+                    total_runs,
+                    started_at,
+                    current_label=f"{condition_label}: {run_label} 完了(done)",
+                )
+                progress_bar.progress(_progress_ratio(total_completed, total_runs), text=status_text)
+                status_placeholder.info(status_text)
+                partial_results_placeholder.dataframe(
+                    pd.DataFrame(completed_results),
+                    width="stretch",
+                    hide_index=True,
+                )
+
+            request_results = run_simulation_request(request, progress_callback=on_progress)
+            for result in request_results:
+                all_results.append(
+                    {
+                        "condition_index": request_index,
+                        "condition_count": len(requests),
+                        **result,
+                    }
+                )
+    except Exception:
+        failed_text = _progress_status_text(
+            total_completed,
+            total_runs,
+            started_at,
+            current_label="失敗(Failed)",
+        )
+        progress_bar.progress(_progress_ratio(total_completed, total_runs), text=failed_text)
+        status_placeholder.error(failed_text)
+        raise
+
+    done_text = _progress_status_text(total_runs, total_runs, started_at, current_label="完了(Done)")
+    progress_bar.progress(1.0, text=done_text)
+    status_placeholder.success(done_text)
+    return all_results
+
+
+def _run_simulation_request_with_progress(request: SimulationRequest) -> list[dict[str, Any]]:
+    return _run_simulation_requests_with_progress([request])
+
+
+def _render_graph_target_selection(
+    records: list[RunRecord],
+    web_config: dict[str, Any],
+    *,
+    key_prefix: str,
+) -> list[RunRecord]:
+    st.subheader("対象データ(Target data)")
+    filtered_target_records = _filter_controls(records, web_config, key_prefix=key_prefix)
+    target_selection_mode = st.radio(
+        "対象runの選び方(Target run selection)",
+        options=["filtered_all", "manual"],
+        horizontal=True,
+        key=f"{key_prefix}_selection_mode",
+        format_func=lambda value: {
+            "filtered_all": "フィルタ結果をすべて使う(Use all filtered runs)",
+            "manual": "個別に選択(Select individually)",
+        }[value],
+    )
+    if target_selection_mode == "filtered_all":
+        st.caption("個別runリストは表示せず、フィルタ後のrunをすべて対象にします(The individual run list is skipped for speed).")
+        return filtered_target_records
+
+    search_text = st.text_input(
+        "run検索(Run search)",
+        key=f"{key_prefix}_run_search",
+        help="run IDまたはパスの一部で候補を絞ります(Filter candidates by run ID or path).",
+    )
+    candidate_records = filtered_target_records
+    if search_text.strip():
+        keywords = [keyword.lower() for keyword in search_text.split() if keyword.strip()]
+        candidate_records = [
+            record
+            for record in filtered_target_records
+            if all(keyword in f"{record.run_id} {record.path}".lower() for keyword in keywords)
+        ]
+
+    max_candidates = st.number_input(
+        "選択候補の最大表示数(Max displayed candidates)",
+        min_value=1,
+        value=500,
+        key=f"{key_prefix}_max_candidates",
+    )
+    displayed_candidates = candidate_records[: int(max_candidates)]
+    record_by_key = {record.record_key: record for record in displayed_candidates}
+    selected_target_keys = st.multiselect(
+        "画像作成に使うrun(Target runs)",
+        options=list(record_by_key),
+        default=[],
+        key=f"{key_prefix}_target_runs",
+        format_func=lambda key: f"{record_by_key[key].run_id} ({_display_project_path(record_by_key[key].path)})",
+    )
+    st.caption(
+        f"候補: {len(candidate_records)} 件中 {len(displayed_candidates)} 件を表示中"
+        f"(Showing {len(displayed_candidates)} of {len(candidate_records)} candidates)."
+    )
+    return [record_by_key[key] for key in selected_target_keys if key in record_by_key]
+
+
+def _records_missing_required_file(records: list[RunRecord], filename: str) -> list[RunRecord]:
+    return [record for record in records if filename not in set(record.available_files)]
+
+
+def _aggregated_outputs_exist(web_config: dict[str, Any]) -> bool:
+    for directory in web_config.get("paths", {}).get("aggregated_dirs", []):
+        aggregated_dir = resolve_project_path(directory)
+        if aggregated_dir.exists() and any(aggregated_dir.glob("*.csv")):
+            return True
+    return False
+
+
+def _preprocess_plan_for_graph(
+    command_name: str,
+    selected_records: list[RunRecord],
+    all_records: list[RunRecord],
+    web_config: dict[str, Any],
+    *,
+    force_preprocess: bool,
+) -> tuple[list[str], pd.DataFrame]:
+    requirements = GRAPH_PREPROCESS_REQUIREMENTS.get(command_name, tuple())
+
+    command_reasons: dict[str, str] = {}
+    if force_preprocess:
+        for command in requirements:
+            command_reasons[command] = "強制実行(Forced by option)"
+    else:
+        missing_cycle = _records_missing_required_file(selected_records, "calculated_Cycle_data.csv")
+
+        if "calculate-cycle-data" in requirements and missing_cycle:
+            command_reasons["calculate-cycle-data"] = f"calculated_Cycle_data.csv が不足: {len(missing_cycle)} run"
+
+    ordered_commands = [command for command in PREPROCESS_COMMANDS if command in command_reasons]
+    rows = [
+        {
+            "前処理(Preprocess)": PREPROCESS_COMMANDS[command]["label"],
+            "実行理由(Reason)": command_reasons[command],
+            "出力(Output)": PREPROCESS_COMMANDS[command]["output"],
+        }
+        for command in ordered_commands
+    ]
+    return ordered_commands, pd.DataFrame(rows)
+
+
+def _commands_for_graph_creation(
+    command_name: str,
+    preprocess_commands: list[str],
+) -> list[str]:
+    commands = [*preprocess_commands]
+    if command_name not in commands:
+        commands.append(command_name)
+    return commands
+
+
+def _render_graph_type_creation_page(command_name: str, web_config: dict[str, Any], records: list[RunRecord]) -> None:
+    command_info = GRAPH_CREATION_COMMANDS[command_name]
+    st.header(command_info["label"])
+    st.caption(_graph_command_description(command_info))
+    st.caption(f"出力(Output): {command_info['output']}")
+
+    plot_overrides = _render_single_plot_parameter_controls(command_name)
+    invalid_plot_ranges = _invalid_plot_override_ranges(plot_overrides)
+    for message in invalid_plot_ranges:
+        st.error(message)
+
+    style_only_redraw = False
+
+    selected_target_records = _render_graph_target_selection(
+        records,
+        web_config,
+        key_prefix=f"graph_creation_target_{command_name}",
+    )
+    col_target_count, col_total_count = st.columns(2)
+    col_target_count.metric("対象run数(Target runs)", len(selected_target_records))
+    col_total_count.metric("全run数(All runs)", len(records))
+
+    estimate_records = _target_records_for_style_mode(selected_target_records, records, style_only_redraw)
+    estimated_df = _estimated_figure_frame([command_name], estimate_records)
+    estimated_total = int(estimated_df["予測枚数(Estimated figures)"].sum()) if "予測枚数(Estimated figures)" in estimated_df.columns and not estimated_df.empty else 0
+    if estimated_total == 0 and not estimated_df.empty:
+        estimated_total = int(estimated_df.iloc[:, 1].sum())
+    st.metric("作成・更新される画像の予測枚数(Estimated generated/updated figures)", estimated_total)
+    st.dataframe(estimated_df, width="stretch", hide_index=True)
+
+    force_preprocess = st.checkbox(
+        "前処理を強制実行する(Force preprocessing)",
+        value=False,
+        help="OFFの場合は、必要なデータが無い時だけ前処理を実行します(When off, preprocessing runs only if required data is missing).",
+        key=f"force_preprocess_{command_name}",
+        disabled=style_only_redraw,
+    )
+    preprocess_commands, preprocess_df = _preprocess_plan_for_graph(
+        command_name,
+        selected_target_records,
+        records,
+        web_config,
+        force_preprocess=force_preprocess,
+    )
+    if style_only_redraw:
+        preprocess_commands = []
+        preprocess_df = pd.DataFrame()
+    if preprocess_commands:
+        st.info("このグラフ作成では前処理を先に実行します(Preprocessing will run before graph creation).")
+        st.dataframe(preprocess_df, width="stretch", hide_index=True)
+    else:
+        st.caption("必要な前処理はありません(No preprocessing is required).")
+
+    if not st.button(
+        "この画像データを作成(Create this image data)",
+        disabled=(not style_only_redraw and not selected_target_records) or bool(invalid_plot_ranges),
+        type="primary",
+        key=f"create_graph_{command_name}",
+    ):
+        return
+
+    commands_to_run = _commands_for_graph_creation(command_name, preprocess_commands)
+    base_env_overrides: dict[str, str] = {}
+    if plot_overrides:
+        base_env_overrides["RESEARCH_PROGRAM_PLOT_OVERRIDES"] = json.dumps(plot_overrides, ensure_ascii=False)
+    if style_only_redraw:
+        base_env_overrides["RESEARCH_PROGRAM_STYLE_ONLY_REDRAW"] = "1"
+    elif any(command.startswith("compare-per") for command in commands_to_run):
+        base_env_overrides["RESEARCH_PROGRAM_FORCE_RECALCULATE"] = "1"
+
+    job_target_records = _target_records_for_style_mode(selected_target_records, records, style_only_redraw)
+    try:
+        job_id, job_path = _start_graph_creation_job(
+            commands_to_run=commands_to_run,
+            selected_graph_commands=[command_name],
+            selected_target_records=job_target_records,
+            all_run_count=len(records),
+            env_overrides=base_env_overrides,
+            web_config=web_config,
+        )
+    except Exception as exc:
+        st.error(f"グラフ作成ジョブを開始できませんでした(Could not start graph job): {exc}")
+        return
+
+    if plot_overrides:
+        _save_last_graph_plot_overrides(plot_overrides)
+    _bump_cache_token("figures")
+    if preprocess_commands:
+        _bump_cache_token("runs")
+    st.success(f"グラフ作成ジョブを開始しました(Started graph creation job): {job_id}")
+    st.caption(f"ジョブ状態ファイル(Job status file): {_display_project_path(job_path)}")
+    st.rerun()
+
+
+def _render_graph_creation_tab(web_config: dict[str, Any], records: list[RunRecord]) -> None:
+    _render_graph_creation_job_monitor()
+
+    graph_rows = [
+        {
+            "command": command_name,
+            "scope": _graph_command_scope_label(command_info),
+            "label": command_info["label"],
+            "description": _graph_command_description(command_info),
+            "output": command_info["output"],
+        }
+        for command_name, command_info in GRAPH_CREATION_COMMANDS.items()
+    ]
+    st.dataframe(
+        _style_graph_command_frame(pd.DataFrame(graph_rows)),
+        width="stretch",
+        hide_index=True,
+    )
+
+    selected_graph_commands = st.multiselect(
+        "作成する画像データ(Image data to create)",
+        options=list(GRAPH_CREATION_COMMANDS),
+        default=list(GRAPH_CREATION_COMMANDS),
+        format_func=lambda command: GRAPH_CREATION_COMMANDS[command]["label"],
+    )
+    plot_overrides = _render_plot_parameter_controls(selected_graph_commands)
+    invalid_plot_ranges = _invalid_plot_override_ranges(plot_overrides)
+    for message in invalid_plot_ranges:
+        st.error(message)
+
+    style_only_redraw = False
+
+    st.subheader("対象データ(Target data)")
+    filtered_target_records = _filter_controls(records, web_config, key_prefix="graph_creation_target")
+    target_selection_mode = st.radio(
+        "対象runの選び方(Target run selection)",
+        options=["filtered_all", "manual"],
+        horizontal=True,
+        format_func=lambda value: {
+            "filtered_all": "フィルタ結果をすべて使う(Use all filtered runs)",
+            "manual": "個別に選択(Select individually)",
+        }[value],
+    )
+    if target_selection_mode == "filtered_all":
+        selected_target_records = filtered_target_records
+        st.caption("個別runリストは表示せず、フィルタ後のrunを全て対象にします(The individual run list is skipped for speed).")
+    else:
+        search_text = st.text_input(
+            "run検索(Run search)",
+            help="run IDまたはパスの一部で候補を絞ります(Filter candidates by run ID or path).",
+        )
+        candidate_records = filtered_target_records
+        if search_text.strip():
+            keywords = [keyword.lower() for keyword in search_text.split() if keyword.strip()]
+            candidate_records = [
+                record
+                for record in filtered_target_records
+                if all(
+                    keyword in f"{record.run_id} {record.path}".lower()
+                    for keyword in keywords
+                )
+            ]
+        max_candidates = st.number_input(
+            "選択候補の最大表示数(Max displayed candidates)",
+            min_value=1,
+            value=500,
+        )
+        displayed_candidates = candidate_records[: int(max_candidates)]
+        record_by_key = {record.record_key: record for record in displayed_candidates}
+        selected_target_keys = st.multiselect(
+            "画像作成に使うrun(Target runs)",
+            options=list(record_by_key),
+            default=[],
+            format_func=lambda key: f"{record_by_key[key].run_id} ({_display_project_path(record_by_key[key].path)})",
+        )
+        selected_target_records = [
+            record_by_key[key]
+            for key in selected_target_keys
+            if key in record_by_key
+        ]
+        st.caption(
+            f"候補 {len(candidate_records)} 件中 {len(displayed_candidates)} 件を表示中"
+            f"(Showing {len(displayed_candidates)} of {len(candidate_records)} candidates)."
+        )
+    col_target_count, col_total_count = st.columns(2)
+    col_target_count.metric("対象run数(Target runs)", len(selected_target_records))
+    col_total_count.metric("全run数(All runs)", len(records))
+
+    estimate_records = _target_records_for_style_mode(selected_target_records, records, style_only_redraw)
+    estimated_df = _estimated_figure_frame(selected_graph_commands, estimate_records)
+    estimated_total = int(estimated_df["予測枚数(Estimated figures)"].sum()) if not estimated_df.empty else 0
+    st.metric("作成・更新される画像の予測枚数(Estimated generated/updated figures)", estimated_total)
+    st.dataframe(estimated_df, width="stretch", hide_index=True)
+    st.caption("予測枚数は、対象run数と現在のグラフ設定から計算します。データ不足、対象cycle不足、設定フィルタにより実際の作成枚数が少なくなる場合があります(Actual count may be lower if data is missing, too short, or filtered by plot settings).")
+
+    run_preprocess = st.checkbox(
+        "必要な前処理も実行(Run preprocessing)",
+        value=not style_only_redraw,
+        disabled=style_only_redraw,
+    )
+
+    if not st.button(
+        "選択した画像データを作成(Create selected image data)",
+        disabled=(
+            not selected_graph_commands
+            or (not style_only_redraw and not selected_target_records)
+            or bool(invalid_plot_ranges)
+        ),
+        type="primary",
+    ):
+        return
+
+    commands_to_run = list(selected_graph_commands)
+    if run_preprocess and not style_only_redraw:
+        commands_to_run = [*PREPROCESS_COMMANDS, *commands_to_run]
+
+    base_env_overrides: dict[str, str] = {}
+    if plot_overrides:
+        base_env_overrides["RESEARCH_PROGRAM_PLOT_OVERRIDES"] = json.dumps(
+            plot_overrides,
+            ensure_ascii=False,
+        )
+    if style_only_redraw:
+        base_env_overrides["RESEARCH_PROGRAM_STYLE_ONLY_REDRAW"] = "1"
+    elif any(command.startswith("compare-per") for command in commands_to_run):
+        base_env_overrides["RESEARCH_PROGRAM_FORCE_RECALCULATE"] = "1"
+
+    job_target_records = _target_records_for_style_mode(selected_target_records, records, style_only_redraw)
+    try:
+        job_id, job_path = _start_graph_creation_job(
+            commands_to_run=commands_to_run,
+            selected_graph_commands=list(selected_graph_commands),
+            selected_target_records=job_target_records,
+            all_run_count=len(records),
+            env_overrides=base_env_overrides,
+            web_config=web_config,
+        )
+    except Exception as exc:
+        st.error(f"グラフ作成ジョブを開始できませんでした(Could not start graph job): {exc}")
+        return
+
+    if plot_overrides:
+        _save_last_graph_plot_overrides(plot_overrides)
+    _bump_cache_token("figures")
+    if run_preprocess:
+        _bump_cache_token("runs")
+    st.success(f"グラフ作成ジョブを開始しました(Started graph creation job): {job_id}")
+    st.caption(f"ジョブ状態ファイル(Job status file): {_display_project_path(job_path)}")
+    st.rerun()
+
+
+@st.cache_data(show_spinner=False)
+def _render_pdf_pages(
+    pdf_path_text: str,
+    pdf_mtime_ns: int,
+    max_pages: int,
+    dpi: int,
+) -> tuple[bytes, ...]:
+    renderer = shutil.which("pdftoppm")
+    if renderer is None:
+        return tuple()
+
+    pdf_path = Path(pdf_path_text)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_prefix = Path(temp_dir) / "page"
+        subprocess.run(
+            [
+                renderer,
+                "-f",
+                "1",
+                "-l",
+                str(max_pages),
+                "-r",
+                str(dpi),
+                "-png",
+                str(pdf_path),
+                str(output_prefix),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        page_paths = sorted(Path(temp_dir).glob("page-*.png"))
+        return tuple(path.read_bytes() for path in page_paths)
+
+
+def _render_pdf_preview(pdf_path: Path, max_pages: int = 5, dpi: int = 120) -> None:
+    try:
+        page_images = _render_pdf_pages(
+            pdf_path_text=str(pdf_path),
+            pdf_mtime_ns=pdf_path.stat().st_mtime_ns,
+            max_pages=max_pages,
+            dpi=dpi,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        st.warning(f"PDFプレビューを作成できませんでした(PDF preview could not be generated): {exc}")
+        return
+
+    if not page_images:
+        st.info("PDFプレビューには pdftoppm が必要です。下のダウンロードボタンを使ってください(PDF preview requires pdftoppm. Please use the download button below).")
+        return
+
+    for page_number, page_image in enumerate(page_images, start=1):
+        st.image(
+            page_image,
+            width="stretch",
+            caption=f"{pdf_path.name} - ページ(page) {page_number}",
+        )
+
+
+def _graph_assets_for_command(
+    web_config: dict[str, Any],
+    command_name: str,
+    refresh_token: int = 0,
+) -> list[FigureAsset]:
+    command_info = GRAPH_CREATION_COMMANDS.get(command_name)
+    if command_info is None:
+        return []
+    output_dir = _graph_command_output_dir(command_info)
+    if not output_dir:
+        return []
+    return [
+        asset
+        for asset in _discover_figures_for_web(web_config, refresh_token)
+        if _figure_output_dir(asset) == output_dir
+    ]
+
+
+def _render_figure_asset_preview(asset: FigureAsset, key_prefix: str) -> None:
+    if asset.is_raster or asset.extension == ".svg":
+        st.image(str(asset.path), width="stretch")
+    elif asset.extension == ".pdf":
+        max_pages = st.number_input(
+            "PDFプレビューページ数(PDF preview pages)",
+            min_value=1,
+            max_value=20,
+            value=1,
+            key=f"{key_prefix}_pdf_preview_pages",
+        )
+        _render_pdf_preview(asset.path, max_pages=int(max_pages))
+    else:
+        st.write(asset.name)
+
+
+def _select_redraw_preview_asset(
+    assets: list[FigureAsset],
+    changed_paths: list[str],
+) -> FigureAsset | None:
+    if not assets:
+        return None
+
+    changed_path_set = {str(Path(path).resolve()) for path in changed_paths}
+    default_index = 0
+    for index, asset in enumerate(assets):
+        if str(asset.path.resolve()) in changed_path_set:
+            default_index = index
+            break
+
+    return st.selectbox(
+        "プレビューする画像(Preview figure)",
+        assets,
+        index=default_index,
+        format_func=lambda asset: f"{asset.name} ({asset.extension}, {_format_bytes(asset.size_bytes)})",
+        key="graph_redraw_preview_asset",
+    )
+
+
+def _render_interval_per_vs_k_graph_first_page(web_config: dict[str, Any]) -> None:
+    st.header("Graph-first: Interval PER vs K")
+    st.caption(
+        "作りたいグラフを先に決め、そのグラフに必要なシミュレーションを実行します。"
+        "出力はグラフ1つにつき1フォルダにまとまります。"
+    )
+
+    simulation_config_path = web_config["paths"].get(
+        "simulation_config",
+        "configs/experiments/default_simulation.toml",
+    )
+    simulation_config = load_toml(simulation_config_path)
+    config_defaults = request_from_config(simulation_config)
+    defaults = _load_last_simulation_request(config_defaults)
+
+    st.subheader("Graph Target")
+    col_functions, col_runs = st.columns([1.4, 0.8])
+    with col_functions:
+        default_functions = [
+            function
+            for function in ["LINEAR", "NewSIN"]
+            if function in COUPLING_FUNCTION_OPTIONS
+        ] or [defaults.coupling_function]
+        coupling_functions = st.multiselect(
+            "Coupling functions",
+            options=COUPLING_FUNCTION_OPTIONS,
+            default=default_functions,
+            key="graph_first_interval_per_vs_k_coupling_functions",
+        )
+    with col_runs:
+        num_runs = st.number_input(
+            "Runs per K/function",
+            min_value=1,
+            value=int(defaults.num_runs),
+            step=1,
+            key="graph_first_interval_per_vs_k_num_runs",
+        )
+
+    k_col_start, k_col_stop, k_col_step = st.columns(3)
+    with k_col_start:
+        k_start = st.number_input(
+            "K start",
+            value=int(defaults.coupling_strength),
+            step=1,
+            key="graph_first_interval_per_vs_k_k_start",
+        )
+    with k_col_stop:
+        k_stop = st.number_input(
+            "K stop",
+            value=int(defaults.coupling_strength),
+            step=1,
+            key="graph_first_interval_per_vs_k_k_stop",
+        )
+    with k_col_step:
+        k_step = st.number_input(
+            "K step",
+            min_value=1,
+            value=1,
+            step=1,
+            key="graph_first_interval_per_vs_k_k_step",
+        )
+
+    interval_col_start, interval_col_end = st.columns(2)
+    with interval_col_start:
+        interval_start_ms = _time_plot_input(
+            "Interval start",
+            PER_BY_COUPLING_STRENGTH_INTERVAL_PLOT_CONFIG.interval_start_ms,
+            "graph_first_interval_per_vs_k_interval_start",
+            min_value_ms=0.0,
+            step_ms=1000.0,
+        )
+    with interval_col_end:
+        interval_end_ms = _time_plot_input(
+            "Interval end",
+            PER_BY_COUPLING_STRENGTH_INTERVAL_PLOT_CONFIG.interval_end_ms,
+            "graph_first_interval_per_vs_k_interval_end",
+            min_value_ms=0.0,
+            step_ms=1000.0,
+        )
+
+    st.subheader("Simulation Base")
+    sim_col_seed, sim_col_duration, sim_col_workers = st.columns(3)
+    with sim_col_seed:
+        seed = st.number_input(
+            "Seed",
+            value=int(defaults.seed),
+            step=1,
+            key="graph_first_interval_per_vs_k_seed",
+        )
+    with sim_col_duration:
+        duration = st.number_input(
+            "Duration [ms]",
+            min_value=1,
+            value=int(defaults.duration),
+            step=30000,
+            key="graph_first_interval_per_vs_k_duration",
+        )
+    with sim_col_workers:
+        max_workers = st.number_input(
+            "Workers",
+            min_value=0,
+            value=int(defaults.max_workers),
+            step=1,
+            help="0 uses the default worker count.",
+            key="graph_first_interval_per_vs_k_workers",
+        )
+
+    sim_col_devices, sim_col_cycle, sim_col_listen = st.columns(3)
+    with sim_col_devices:
+        device_count = st.number_input(
+            "Devices",
+            min_value=1,
+            value=int(defaults.device_count),
+            step=1,
+            key="graph_first_interval_per_vs_k_devices",
+        )
+    with sim_col_cycle:
+        cycle_time = st.number_input(
+            "Cycle time [ms]",
+            min_value=1,
+            value=int(defaults.cycle_time),
+            step=1000,
+            key="graph_first_interval_per_vs_k_cycle_time",
+        )
+    with sim_col_listen:
+        listening_rate = st.number_input(
+            "Listening rate [%]",
+            min_value=1,
+            max_value=99,
+            value=int(defaults.listening_rate),
+            step=1,
+            key="graph_first_interval_per_vs_k_listening_rate",
+        )
+
+    k_values: list[int] = []
+    validation_errors: list[str] = []
+    try:
+        k_values = [int(value) for value in _build_sweep_values("coupling_strength", int(k_start), int(k_stop), int(k_step))]
+    except ValueError as exc:
+        validation_errors.append(str(exc))
+    if interval_end_ms <= interval_start_ms:
+        validation_errors.append("Interval end must be larger than interval start.")
+    if not coupling_functions:
+        validation_errors.append("Select at least one coupling function.")
+
+    total_conditions = len(coupling_functions) * len(k_values)
+    total_runs = total_conditions * int(num_runs)
+    metric_conditions, metric_runs = st.columns(2)
+    metric_conditions.metric("Conditions", total_conditions)
+    metric_runs.metric("Total simulations", total_runs)
+    for message in validation_errors:
+        st.error(message)
+
+    base_request = replace(
+        defaults,
+        num_runs=int(num_runs),
+        seed=int(seed),
+        duration=int(duration),
+        device_count=int(device_count),
+        cycle_time=int(cycle_time),
+        listening_rate=int(listening_rate),
+        max_workers=int(max_workers),
+    )
+
+    if st.button(
+        "Create graph folder and run simulations",
+        type="primary",
+        disabled=bool(validation_errors) or total_runs <= 0,
+        key="graph_first_interval_per_vs_k_start",
+    ):
+        try:
+            job_id, graph_dir, status_path = create_interval_per_vs_k_job(
+                base_request=base_request,
+                coupling_functions=[str(value) for value in coupling_functions],
+                coupling_strengths=k_values,
+                interval_start_ms=float(interval_start_ms),
+                interval_end_ms=float(interval_end_ms),
+            )
+            _start_interval_per_vs_k_pipeline_process(status_path)
+        except Exception as exc:
+            st.error(f"Could not start graph-first job: {exc}")
+        else:
+            st.success(f"Started graph-first job: {job_id}")
+            st.caption(f"Graph folder: {_display_project_path(graph_dir)}")
+            st.caption(f"Status file: {_display_project_path(status_path)}")
+            st.rerun()
+
+    st.caption("作成済みグラフの確認と再描画は Graph-first の確認ページで行えます。")
+
+
+def _render_interval_per_vs_k_graph_first_review_page(web_config: dict[str, Any]) -> None:
+    st.header("Graph-first Results: Interval PER vs K")
+    st.caption("Graph-firstで作成したグラフフォルダを確認し、そのフォルダ内のrunsから再描画します。")
+
+    statuses = load_interval_per_vs_k_statuses(limit=50)
+    if not statuses:
+        st.info("Graph-first job is not available yet.")
+        return
+
+    status_by_id = {str(status.get("job_id") or ""): status for status in statuses}
+    selected_job_id = st.selectbox(
+        "Graph folder",
+        options=list(status_by_id),
+        format_func=lambda job_id: f"{job_id} ({status_by_id[job_id].get('status')})",
+        key="graph_first_interval_per_vs_k_review_job",
+    )
+    status = status_by_id[selected_job_id]
+    status_path = Path(str(status.get("_path") or Path(str(status.get("graph_dir", ""))) / "status.json"))
+    outputs = dict(status.get("outputs") or {})
+    completed = int(status.get("completed_runs") or 0)
+    total = int(status.get("total_runs") or 0)
+
+    summary_col, path_col = st.columns([0.7, 1.3])
+    with summary_col:
+        st.metric("Status", str(status.get("status") or ""))
+        st.progress(_progress_ratio(completed, total), text=_interval_per_vs_k_progress_text(status))
+    with path_col:
+        graph_dir = Path(str(status.get("graph_dir") or ""))
+        st.caption(f"Graph folder: {_display_project_path(graph_dir)}")
+        st.caption(f"Status file: {_display_project_path(status_path)}")
+        if outputs.get("aggregated_results_csv"):
+            st.caption(f"Aggregated CSV: {_display_project_path(Path(str(outputs['aggregated_results_csv'])))}")
+
+    if status.get("error"):
+        st.error(str(status["error"]).splitlines()[0])
+
+    st.subheader("Preview")
+    pdfs = [Path(path) for path in outputs.get("pdfs", []) if Path(path).exists()]
+    if pdfs:
+        selected_pdf = st.selectbox(
+            "PDF",
+            options=pdfs,
+            format_func=lambda path: path.name,
+            key="graph_first_interval_per_vs_k_review_pdf",
+        )
+        _render_pdf_preview(selected_pdf, max_pages=1)
+    else:
+        st.info("PDF output is not available yet.")
+
+    st.subheader("Redraw From This Graph Folder")
+    redraw_col_start, redraw_col_end = st.columns(2)
+    with redraw_col_start:
+        interval_start_ms = _time_plot_input(
+            "Interval start",
+            float(status.get("interval_start_ms") or 0.0),
+            "graph_first_interval_per_vs_k_review_interval_start",
+            min_value_ms=0.0,
+            step_ms=1000.0,
+        )
+    with redraw_col_end:
+        interval_end_ms = _time_plot_input(
+            "Interval end",
+            float(status.get("interval_end_ms") or 0.0),
+            "graph_first_interval_per_vs_k_review_interval_end",
+            min_value_ms=0.0,
+            step_ms=1000.0,
+        )
+
+    invalid_redraw = interval_end_ms <= interval_start_ms
+    if invalid_redraw:
+        st.error("Interval end must be larger than interval start.")
+
+    if st.button(
+        "Redraw this graph folder",
+        type="primary",
+        disabled=invalid_redraw or not status_path.exists(),
+        key="graph_first_interval_per_vs_k_review_redraw",
+    ):
+        try:
+            updated_status = redraw_interval_per_vs_k_graph(
+                status_path,
+                interval_start_ms=float(interval_start_ms),
+                interval_end_ms=float(interval_end_ms),
+            )
+        except Exception as exc:
+            st.error(f"Redraw failed: {exc}")
+        else:
+            st.success("Redrawn.")
+            outputs = dict(updated_status.get("outputs") or {})
+            if outputs.get("pdfs"):
+                st.caption(f"Updated PDF: {_display_project_path(Path(str(outputs['pdfs'][0])))}")
+            st.rerun()
+
+
+def _render_graph_redraw_page(web_config: dict[str, Any], records: list[RunRecord]) -> None:
+    st.header("グラフ再描画(Graph redraw)")
+
+    command_name = st.selectbox(
+        "再描画するグラフ(Graph to redraw)",
+        options=sorted(STYLE_ONLY_REDRAW_GRAPH_COMMANDS),
+        format_func=lambda command: GRAPH_CREATION_COMMANDS[command]["label"],
+        key="graph_redraw_command",
+    )
+    recalculates_from_runs = command_name == "compare-per-by-coupling-strength-interval"
+    if recalculates_from_runs:
+        st.caption(
+            "Interval PER vs K は、このページで時間範囲を変更してrunログから再集計できます。"
+            "周期データが未作成の場合は、先に画像作成ページで前処理を実行してください。"
+        )
+    else:
+        st.caption("既存の描画用CSVから再描画します。runの再集計や前処理は行いません。")
+
+    left_col, right_col = st.columns([0.9, 1.1])
+    with left_col:
+        plot_overrides = _render_style_only_plot_parameter_controls(command_name)
+        invalid_plot_ranges = _invalid_plot_override_ranges(plot_overrides)
+        for message in invalid_plot_ranges:
+            st.error(message)
+
+        redraw_clicked = st.button(
+            "再描画してプレビュー(Redraw and preview)",
+            type="primary",
+            disabled=bool(invalid_plot_ranges) or (recalculates_from_runs and not records),
+            key="run_graph_redraw",
+        )
+
+        if redraw_clicked:
+            if recalculates_from_runs:
+                env_overrides: dict[str, str] = {"RESEARCH_PROGRAM_FORCE_RECALCULATE": "1"}
+            else:
+                env_overrides = {"RESEARCH_PROGRAM_STYLE_ONLY_REDRAW": "1"}
+            if plot_overrides:
+                env_overrides["RESEARCH_PROGRAM_PLOT_OVERRIDES"] = json.dumps(
+                    plot_overrides,
+                    ensure_ascii=False,
+                )
+            if recalculates_from_runs:
+                try:
+                    job_id, job_path = _start_graph_creation_job(
+                        commands_to_run=[command_name],
+                        selected_graph_commands=[command_name],
+                        selected_target_records=records,
+                        all_run_count=len(records),
+                        env_overrides=env_overrides,
+                        web_config=web_config,
+                    )
+                except Exception as exc:
+                    st.error(f"Could not start graph job: {exc}")
+                else:
+                    if plot_overrides:
+                        _save_last_graph_plot_overrides(plot_overrides)
+                    _bump_cache_token("figures")
+                    st.session_state["last_graph_redraw"] = {
+                        "command": command_name,
+                        "output": f"Started graph creation job: {job_id}",
+                        "changed_paths": [],
+                    }
+                    st.success(f"Started graph creation job: {job_id}")
+                    st.caption(f"Job status file: {_display_project_path(job_path)}")
+                st.stop()
+            before_snapshot = _figure_snapshot(web_config)
+            try:
+                with st.spinner("再描画中(Redrawing)..."):
+                    output = _run_research_program_command_with_env(command_name, env_overrides)
+            except RuntimeError as exc:
+                st.error("再描画に失敗しました(Redraw failed).")
+                st.code(str(exc))
+            else:
+                if plot_overrides:
+                    _save_last_graph_plot_overrides(plot_overrides)
+                _bump_cache_token("figures")
+                changed_assets = _changed_figure_assets(web_config, before_snapshot)
+                changed_paths = [str(asset.path.resolve()) for asset in changed_assets]
+                st.session_state["last_graph_redraw"] = {
+                    "command": command_name,
+                    "output": output,
+                    "changed_paths": changed_paths,
+                }
+                st.success("再描画しました(Redrawn).")
+                with st.expander("実行ログ(Command output)", expanded=False):
+                    st.code(output)
+
+    last_redraw = st.session_state.get("last_graph_redraw")
+    changed_paths = []
+    if isinstance(last_redraw, dict) and last_redraw.get("command") == command_name:
+        changed_paths = [str(path) for path in last_redraw.get("changed_paths", [])]
+
+    assets = _graph_assets_for_command(web_config, command_name, _cache_token("figures"))
+    assets = sorted(assets, key=lambda asset: asset.path.stat().st_mtime_ns, reverse=True)
+
+    with right_col:
+        st.subheader("プレビュー(Preview)")
+        if not assets:
+            st.info("このグラフの出力画像がまだありません。画像作成ページで一度作成してください。")
+            return
+
+        selected_asset = _select_redraw_preview_asset(assets, changed_paths)
+        if selected_asset is None:
+            return
+        st.caption(_display_project_path(selected_asset.path))
+        _render_figure_asset_preview(selected_asset, "graph_redraw")
+
+
+def _convert_raster_page_bytes(page_bytes: bytes, output_format: str) -> tuple[bytes, str]:
+    image_format = "JPEG" if output_format in {"jpg", "jpeg"} else output_format.upper()
+    mime = "image/jpeg" if image_format == "JPEG" else f"image/{output_format}"
+    with Image.open(BytesIO(page_bytes)) as image:
+        if image_format == "JPEG" and image.mode in {"RGBA", "LA", "P"}:
+            image = image.convert("RGB")
+        buffer = BytesIO()
+        image.save(buffer, format=image_format)
+        return buffer.getvalue(), mime
+
+
+def _rasterize_pdf_for_download(
+    pdf_path: Path,
+    output_format: str,
+    *,
+    max_pages: int,
+    dpi: int = 120,
+) -> tuple[bytes, str, str]:
+    page_images = _render_pdf_pages(
+        pdf_path_text=str(pdf_path),
+        pdf_mtime_ns=pdf_path.stat().st_mtime_ns,
+        max_pages=max_pages,
+        dpi=dpi,
+    )
+    if not page_images:
+        raise RuntimeError("PDF rasterization requires pdftoppm")
+
+    if len(page_images) == 1:
+        data, mime = _convert_raster_page_bytes(page_images[0], output_format)
+        return data, mime, f"{pdf_path.stem}_page_1.{output_format}"
+
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for page_number, page_bytes in enumerate(page_images, start=1):
+            data, _ = _convert_raster_page_bytes(page_bytes, output_format)
+            archive.writestr(f"{pdf_path.stem}_page_{page_number}.{output_format}", data)
+    return zip_buffer.getvalue(), "application/zip", f"{pdf_path.stem}_{output_format}_pages.zip"
+
+
+def _render_figures_tab(web_config: dict[str, Any], contract: RunDataContract) -> None:
+    figure_config = web_config.get("figures", {})
+    if st.button("画像一覧を更新(Refresh figures)"):
+        _bump_cache_token("figures")
+        st.rerun()
+
+    assets = _discover_figures_for_web(web_config, _cache_token("figures"))
+    assets_df = _figures_to_display_frame(assets)
+
+    st.metric("画像数(Figures)", len(assets))
+    if assets_df.empty:
+        st.dataframe(pd.DataFrame())
+        return
+
+    scope_options = list(dict.fromkeys(assets_df["figure_scope"].tolist()))
+    selected_scopes = st.multiselect(
+        "データ区分(Data scope)",
+        scope_options,
+        default=scope_options,
+    )
+    scope_filtered_df = assets_df[assets_df["figure_scope"].isin(selected_scopes)]
+    graph_type_options = list(dict.fromkeys(scope_filtered_df["graph_type"].tolist()))
+    selected_graph_types = st.multiselect(
+        "グラフ種類(Graph type)",
+        graph_type_options,
+        default=graph_type_options,
+    )
+    extension_options = sorted(assets_df["extension"].unique())
+    selected_extensions = st.multiselect(
+        "拡張子(Extensions)",
+        extension_options,
+        default=extension_options,
+    )
+    sort_by = st.selectbox(
+        "並び替え(Sort by)",
+        options=["figure_scope", "graph_type", "name", "extension", "relative_path", "size_kb"],
+        format_func=lambda value: {
+            "figure_scope": "データ区分(Data scope)",
+            "graph_type": "グラフ種類(Graph type)",
+            "name": "ファイル名(Name)",
+            "extension": "拡張子(Extension)",
+            "relative_path": "相対パス(Relative path)",
+            "size_kb": "サイズ(Size)",
+        }[value],
+    )
+    descending = st.checkbox("降順(Descending)", value=False)
+
+    selected_scope_set = set(selected_scopes)
+    selected_graph_type_set = set(selected_graph_types)
+    selected_extension_set = set(selected_extensions)
+    filtered_assets = [
+        asset
+        for asset in assets
+        if _figure_scope_label(asset) in selected_scope_set
+        and _figure_graph_type(asset) in selected_graph_type_set
+        and asset.extension in selected_extension_set
+    ]
+    filtered_assets = sorted(
+        filtered_assets,
+        key=lambda asset: _figure_sort_key(asset, sort_by),
+        reverse=descending,
+    )
+    filtered_df = _figures_to_display_frame(filtered_assets)
+    st.dataframe(_style_figure_display_frame(filtered_df), width="stretch", hide_index=True)
+
+    if not filtered_assets:
+        return
+
+    selected_asset = st.selectbox(
+        "画像(Figure)",
+        filtered_assets,
+        format_func=lambda asset: f"{_figure_graph_type(asset)} / {asset.relative_path} ({asset.extension})",
+    )
+
+    pdf_download_pages = 1
+    if selected_asset.is_raster or selected_asset.extension == ".svg":
+        st.image(str(selected_asset.path), width="stretch")
+    elif selected_asset.extension == ".pdf":
+        max_pages = st.number_input("PDFプレビューページ数(PDF preview pages)", min_value=1, max_value=20, value=5)
+        pdf_download_pages = int(max_pages)
+        _render_pdf_preview(selected_asset.path, max_pages=int(max_pages))
+    else:
+        st.write(selected_asset.name)
+
+    records = _discover_records(
+        web_config,
+        contract,
+        _cache_token("runs"),
+        force_rescan=False,
+    )
+    _render_figure_parameter_summary(selected_asset, records)
+
+    if selected_asset.extension == ".pdf":
+        download_options = figure_config.get("raster_download_formats", ["png", "jpeg", "webp"])
+    else:
+        download_options = ["original"]
+    if selected_asset.is_raster:
+        download_options.extend(figure_config.get("raster_download_formats", ["png", "jpeg", "webp"]))
+    selected_format = st.selectbox(
+        "ダウンロード形式(Download format)",
+        download_options,
+        format_func=lambda value: "元形式(original)" if value == "original" else value,
+    )
+
+    if selected_format == "original":
+        data = read_original_bytes(selected_asset.path)
+        mime = original_mime_type(selected_asset.path)
+        filename = selected_asset.name
+    elif selected_asset.extension == ".pdf":
+        try:
+            data, mime, filename = _rasterize_pdf_for_download(
+                selected_asset.path,
+                selected_format,
+                max_pages=pdf_download_pages,
+            )
+        except RuntimeError as exc:
+            st.warning(f"PDFをラスター化できませんでした(Could not rasterize PDF): {exc}")
+            return
+    else:
+        data, mime, filename = convert_raster_image(selected_asset.path, selected_format)
+
+    st.download_button(
+        "画像をダウンロード(Download figure)",
+        data=data,
+        file_name=filename,
+        mime=mime,
+    )
+
+
+def _render_contract_tab(contract: RunDataContract) -> None:
+    st.write(contract.version)
+    st.json(contract.layout)
+
+    rows: list[dict[str, Any]] = []
+    for file_key, file_spec in contract.files.items():
+        for column in file_spec.columns:
+            rows.append(
+                {
+                    "file": file_key,
+                    "column": column.name,
+                    "type": column.dtype,
+                    "required": column.required,
+                    "unit": column.unit or "",
+                    "aliases": ";".join(column.aliases),
+                    "description": column.description,
+                }
+            )
+    st.dataframe(pd.DataFrame(rows).rename(columns=CONTRACT_COLUMN_LABELS), width="stretch", hide_index=True)
+
+
+def _cleanup_result_to_frame(result: CleanupResult) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "path": str(item.path.relative_to(PROJECT_ROOT)),
+                "kind": "ディレクトリ(directory)" if item.is_dir else "ファイル(file)",
+                "size_kb": round(item.size_bytes / 1024, 1),
+            }
+            for item in result.items
+        ]
+    )
+
+
+def _archive_result_to_frame(result: ArchiveResult) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for item in result.items:
+        source_path = item.source_path
+        archived_path = item.archived_path
+        try:
+            source_text = str(source_path.relative_to(PROJECT_ROOT))
+        except ValueError:
+            source_text = str(source_path)
+        try:
+            archived_text = str(archived_path.relative_to(PROJECT_ROOT))
+        except ValueError:
+            archived_text = str(archived_path)
+        rows.append(
+            {
+                "source_path": source_text,
+                "archived_path": archived_text,
+                "kind": "directory" if item.is_dir else "file",
+                "size_kb": round(item.size_bytes / 1024, 1),
+                "status": item.status,
+                "message": item.message,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _render_archive_restore() -> None:
+    archive_dirs = list_temp_archives()
+    if not archive_dirs:
+        st.caption("一時アーカイブはまだありません(No temporary archives yet).")
+        return
+
+    archive_by_key = {str(path): path for path in archive_dirs}
+    selected_key = st.selectbox(
+        "復元するアーカイブ(Archive to restore)",
+        options=list(archive_by_key),
+        format_func=lambda key: _display_project_path(archive_by_key[key]),
+        key="restore_archive_select",
+    )
+    selected_archive = archive_by_key[selected_key]
+    preview = restore_archive(selected_archive, dry_run=True)
+
+    col_count, col_size = st.columns(2)
+    col_count.metric("復元対象run数(Runs)", preview.item_count)
+    col_size.metric("サイズ[MB](Size [MB])", f"{preview.total_size_mb:.3f}")
+    st.dataframe(_archive_result_to_frame(preview), width="stretch", hide_index=True)
+
+    blocked_items = [item for item in preview.items if item.status != "ok"]
+    if blocked_items:
+        st.warning("元の場所に同名データがあるため、復元できない項目があります(Some items cannot be restored because original paths already exist).")
+
+    confirmation = st.text_input(
+        "復元を有効にするには RESTORE と入力(Type RESTORE to enable restore)",
+        key="restore_archive_confirmation",
+    )
+    restore_disabled = confirmation != "RESTORE" or bool(blocked_items) or preview.item_count == 0
+    if st.button(
+        "選択したアーカイブを復元(Restore selected archive)",
+        disabled=restore_disabled,
+        key="restore_archive_button",
+    ):
+        result = restore_archive(selected_archive, dry_run=False)
+        st.success(
+            f"{result.item_count} 件を復元しました"
+            f"(Restored {result.item_count} item(s))."
+        )
+        _bump_cache_token("runs")
+        st.cache_data.clear()
+        st.rerun()
+
+
+def _render_run_archive(records: list[RunRecord], web_config: dict[str, Any]) -> None:
+    st.subheader("対象runを一時アーカイブ(Temporarily archive target runs)")
+    st.caption(
+        "選択したrunを data/archives/temp に移動します。削除ではなく、後から復元できます"
+        "(Moves selected runs to data/archives/temp; this is not deletion)."
+    )
+
+    directory_records = [record for record in records if record.storage_kind == "directory"]
+    sqlite_count = len(records) - len(directory_records)
+    if sqlite_count:
+        st.caption(
+            f"SQLite-backed runs are not archived here because multiple runs share one DB file: {sqlite_count}"
+        )
+
+    filtered_records = _filter_controls(directory_records, web_config, key_prefix="maintenance_archive")
+    selection_mode = st.radio(
+        "アーカイブ対象の選び方(Target run selection)",
+        options=["filtered_all", "manual"],
+        horizontal=True,
+        key="maintenance_archive_selection_mode",
+        format_func=lambda value: {
+            "filtered_all": "フィルタ結果をすべて使う(Use all filtered runs)",
+            "manual": "個別に選択(Select individually)",
+        }[value],
+    )
+
+    if selection_mode == "filtered_all":
+        target_records = filtered_records
+    else:
+        search_text = st.text_input(
+            "run検索(Run search)",
+            key="maintenance_archive_run_search",
+        )
+        candidate_records = filtered_records
+        if search_text.strip():
+            keywords = [keyword.lower() for keyword in search_text.split() if keyword.strip()]
+            candidate_records = [
+                record
+                for record in filtered_records
+                if all(keyword in f"{record.run_id} {record.path}".lower() for keyword in keywords)
+            ]
+        max_candidates = st.number_input(
+            "選択候補の最大表示数(Max displayed candidates)",
+            min_value=1,
+            value=500,
+            key="maintenance_archive_max_candidates",
+        )
+        displayed_candidates = candidate_records[: int(max_candidates)]
+        record_by_key = {record.record_key: record for record in displayed_candidates}
+        selected_keys = st.multiselect(
+            "アーカイブするrun(Runs to archive)",
+            options=list(record_by_key),
+            default=[],
+            key="maintenance_archive_runs",
+            format_func=lambda key: f"{record_by_key[key].run_id} ({_display_project_path(record_by_key[key].path)})",
+        )
+        target_records = [record_by_key[key] for key in selected_keys if key in record_by_key]
+        st.caption(f"候補 {len(candidate_records)} 件中 {len(displayed_candidates)} 件を表示中(Showing {len(displayed_candidates)} of {len(candidate_records)} candidates).")
+
+    try:
+        preview = archive_run_directories((record.path for record in target_records), dry_run=True)
+        archive_error = ""
+    except ValueError as exc:
+        preview = ArchiveResult(
+            archive_dir=PROJECT_ROOT / "data" / "archives" / "temp",
+            dry_run=True,
+            item_count=0,
+            total_bytes=0,
+            items=tuple(),
+        )
+        archive_error = str(exc)
+
+    if archive_error:
+        st.error(archive_error)
+
+    col_count, col_size = st.columns(2)
+    col_count.metric("アーカイブ対象run数(Target runs)", preview.item_count)
+    col_size.metric("サイズ[MB](Size [MB])", f"{preview.total_size_mb:.3f}")
+    st.dataframe(_archive_result_to_frame(preview), width="stretch", hide_index=True)
+
+    confirmation = st.text_input(
+        "アーカイブを有効にするには ARCHIVE と入力(Type ARCHIVE to enable archive)",
+        key="archive_runs_confirmation",
+    )
+    archive_disabled = confirmation != "ARCHIVE" or preview.item_count == 0 or bool(archive_error)
+    if st.button(
+        "対象runを一時アーカイブ(Archive target runs)",
+        disabled=archive_disabled,
+        type="primary",
+        key="archive_runs_button",
+    ):
+        with st.spinner("対象runを一時アーカイブしています(Archiving target runs)..."):
+            result = archive_run_directories((record.path for record in target_records), dry_run=False)
+        st.success(
+            f"{result.item_count} 件を { _display_project_path(result.archive_dir) } にアーカイブしました"
+            f"(Archived {result.item_count} item(s))."
+        )
+        _bump_cache_token("runs")
+        st.cache_data.clear()
+        st.rerun()
+
+    with st.expander("一時アーカイブの復元(Restore temporary archive)", expanded=False):
+        _render_archive_restore()
+
+
+def _render_maintenance_tab(records: list[RunRecord], web_config: dict[str, Any]) -> None:
+    _render_run_archive(records, web_config)
+    st.divider()
+    st.subheader("実験結果の削除(Delete Experiment Outputs)")
+    st.warning("生成された実験結果を削除します。実機の元データはデフォルトでは選択されません(This deletes generated experiment outputs. Raw real-device data is not selected by default).")
+
+    target_options = {
+        "runs": "data/runs",
+        "aggregated": "data/aggregated",
+        "figures": "outputs/figures",
+        "reports": "outputs/reports",
+        "raw_real": "data/raw/real",
+        "raw_simulation": "data/raw/simulation",
+    }
+    selected_targets = st.multiselect(
+        "削除対象(Targets)",
+        options=list(target_options),
+        default=["runs", "aggregated", "figures"],
+        format_func=lambda key: f"{CLEANUP_TARGET_LABELS.get(key, key)}: {target_options[key]}",
+    )
+
+    preview_result = cleanup_experiment_outputs(
+        target_names=tuple(selected_targets),
+        dry_run=True,
+    )
+    col_count, col_size = st.columns(2)
+    col_count.metric("項目数(Items)", preview_result.deleted_count)
+    col_size.metric("サイズ[MB](Size [MB])", f"{preview_result.deleted_size_mb:.3f}")
+
+    preview_df = _cleanup_result_to_frame(preview_result)
+    st.dataframe(preview_df.rename(columns=CLEANUP_COLUMN_LABELS), width="stretch", hide_index=True)
+
+    confirmation = st.text_input("削除を有効にするには DELETE と入力(Type DELETE to enable deletion)")
+    delete_disabled = confirmation != "DELETE" or not selected_targets or preview_result.deleted_count == 0
+
+    if st.button("選択した結果を削除(Delete selected outputs)", disabled=delete_disabled, type="primary"):
+        result = cleanup_experiment_outputs(
+            target_names=tuple(selected_targets),
+            dry_run=False,
+        )
+        st.success(f"{result.deleted_count} 件、{result.deleted_size_mb:.3f} MB を削除しました(Deleted {result.deleted_count} item(s), {result.deleted_size_mb:.3f} MB).")
+        _bump_cache_token("runs")
+        _bump_cache_token("figures")
+        st.cache_data.clear()
+        st.rerun()
+
+
+def _format_bytes(value: Any) -> str:
+    if value is None or value == "":
+        return ""
+    try:
+        size = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if size < 0:
+        return ""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    unit_index = 0
+    while size >= 1024 and unit_index < len(units) - 1:
+        size /= 1024
+        unit_index += 1
+    if unit_index == 0:
+        return f"{int(size)} {units[unit_index]}"
+    return f"{size:.2f} {units[unit_index]}"
+
+
+def _run_system_command(args: list[str], timeout_seconds: float = 3.0) -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout_seconds,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+    output = "\n".join(part.strip() for part in [completed.stdout, completed.stderr] if part.strip())
+    return completed.returncode == 0, output
+
+
+def _run_powershell_json(command: str) -> Any:
+    executable = shutil.which("powershell") or shutil.which("pwsh")
+    if executable is None:
+        return None
+    wrapped_command = (
+        "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+        f"{command} | ConvertTo-Json -Depth 5"
+    )
+    ok, output = _run_system_command(
+        [executable, "-NoProfile", "-Command", wrapped_command],
+        timeout_seconds=5.0,
+    )
+    if not ok or not output:
+        return None
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        return None
+
+
+def _collect_cpu_info() -> dict[str, Any]:
+    info: dict[str, Any] = {
+        "name": platform.processor() or "",
+        "physical_cores": None,
+        "logical_cores": os.cpu_count(),
+        "sockets": None,
+        "max_clock_mhz": None,
+    }
+
+    try:
+        import psutil  # type: ignore[import-not-found]
+
+        info["physical_cores"] = psutil.cpu_count(logical=False)
+        info["logical_cores"] = psutil.cpu_count(logical=True)
+        freq = psutil.cpu_freq()
+        if freq is not None:
+            info["max_clock_mhz"] = round(float(freq.max), 1) if freq.max else None
+    except Exception:
+        pass
+
+    if platform.system() == "Windows":
+        cpu_data = _run_powershell_json(
+            "Get-CimInstance Win32_Processor | "
+            "Select-Object Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed"
+        )
+        items = cpu_data if isinstance(cpu_data, list) else ([cpu_data] if isinstance(cpu_data, dict) else [])
+        if items:
+            names = [str(item.get("Name", "")).strip() for item in items if str(item.get("Name", "")).strip()]
+            info["name"] = "; ".join(dict.fromkeys(names)) or info["name"]
+            info["physical_cores"] = sum(int(item.get("NumberOfCores") or 0) for item in items) or info["physical_cores"]
+            info["logical_cores"] = (
+                sum(int(item.get("NumberOfLogicalProcessors") or 0) for item in items) or info["logical_cores"]
+            )
+            info["max_clock_mhz"] = max((int(item.get("MaxClockSpeed") or 0) for item in items), default=0) or info["max_clock_mhz"]
+            info["sockets"] = len(items)
+    elif platform.system() == "Linux":
+        cpuinfo_path = Path("/proc/cpuinfo")
+        if cpuinfo_path.exists():
+            text = cpuinfo_path.read_text(encoding="utf-8", errors="replace")
+            model_names = [
+                line.split(":", 1)[1].strip()
+                for line in text.splitlines()
+                if line.lower().startswith("model name") and ":" in line
+            ]
+            if model_names:
+                info["name"] = model_names[0]
+            physical_pairs: set[tuple[str, str]] = set()
+            current_physical = ""
+            current_core = ""
+            for line in text.splitlines():
+                if not line.strip():
+                    if current_physical and current_core:
+                        physical_pairs.add((current_physical, current_core))
+                    current_physical = ""
+                    current_core = ""
+                elif line.lower().startswith("physical id") and ":" in line:
+                    current_physical = line.split(":", 1)[1].strip()
+                elif line.lower().startswith("core id") and ":" in line:
+                    current_core = line.split(":", 1)[1].strip()
+            if current_physical and current_core:
+                physical_pairs.add((current_physical, current_core))
+            if physical_pairs:
+                info["physical_cores"] = len(physical_pairs)
+    elif platform.system() == "Darwin":
+        for key, field_name in [
+            ("machdep.cpu.brand_string", "name"),
+            ("hw.physicalcpu", "physical_cores"),
+            ("hw.logicalcpu", "logical_cores"),
+        ]:
+            ok, output = _run_system_command(["sysctl", "-n", key])
+            if ok and output:
+                info[field_name] = int(output) if field_name.endswith("cores") else output
+
+    return info
+
+
+def _collect_memory_info() -> dict[str, Any]:
+    try:
+        import psutil  # type: ignore[import-not-found]
+
+        memory = psutil.virtual_memory()
+        return {
+            "total_bytes": int(memory.total),
+            "available_bytes": int(memory.available),
+            "used_bytes": int(memory.used),
+            "percent": float(memory.percent),
+            "source": "psutil",
+        }
+    except Exception:
+        pass
+
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+
+            class MemoryStatusEx(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = MemoryStatusEx()
+            status.dwLength = ctypes.sizeof(MemoryStatusEx)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                used = int(status.ullTotalPhys - status.ullAvailPhys)
+                return {
+                    "total_bytes": int(status.ullTotalPhys),
+                    "available_bytes": int(status.ullAvailPhys),
+                    "used_bytes": used,
+                    "percent": round((used / status.ullTotalPhys) * 100, 1) if status.ullTotalPhys else None,
+                    "source": "GlobalMemoryStatusEx",
+                }
+        except Exception:
+            pass
+
+    meminfo_path = Path("/proc/meminfo")
+    if meminfo_path.exists():
+        values: dict[str, int] = {}
+        for line in meminfo_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if ":" not in line:
+                continue
+            key, raw_value = line.split(":", 1)
+            parts = raw_value.strip().split()
+            if parts and parts[0].isdigit():
+                values[key] = int(parts[0]) * 1024
+        total = values.get("MemTotal")
+        available = values.get("MemAvailable")
+        if total is not None:
+            used = total - available if available is not None else None
+            return {
+                "total_bytes": total,
+                "available_bytes": available,
+                "used_bytes": used,
+                "percent": round((used / total) * 100, 1) if used is not None and total else None,
+                "source": "/proc/meminfo",
+            }
+
+    if platform.system() == "Darwin":
+        ok, output = _run_system_command(["sysctl", "-n", "hw.memsize"])
+        if ok and output.strip().isdigit():
+            return {
+                "total_bytes": int(output.strip()),
+                "available_bytes": None,
+                "used_bytes": None,
+                "percent": None,
+                "source": "sysctl",
+            }
+
+    return {
+        "total_bytes": None,
+        "available_bytes": None,
+        "used_bytes": None,
+        "percent": None,
+        "source": "unavailable",
+    }
+
+
+def _collect_nvidia_gpu_info() -> tuple[list[dict[str, Any]], str]:
+    executable = shutil.which("nvidia-smi")
+    if executable is None:
+        return [], ""
+
+    query_fields = [
+        "index",
+        "name",
+        "driver_version",
+        "memory.total",
+        "utilization.gpu",
+        "temperature.gpu",
+        "power.draw",
+        "power.limit",
+        "clocks.current.graphics",
+        "clocks.max.graphics",
+        "clocks.current.memory",
+        "clocks.max.memory",
+    ]
+    ok, output = _run_system_command(
+        [
+            executable,
+            f"--query-gpu={','.join(query_fields)}",
+            "--format=csv,noheader,nounits",
+        ],
+        timeout_seconds=5.0,
+    )
+    if not ok or not output:
+        return [], output
+
+    rows: list[dict[str, Any]] = []
+    for parsed_row in csv.reader(output.splitlines()):
+        if len(parsed_row) < len(query_fields):
+            continue
+        values = [value.strip() for value in parsed_row]
+        rows.append(
+            {
+                "index": values[0],
+                "name": values[1],
+                "driver": values[2],
+                "memory_total": f"{values[3]} MB" if values[3] else "",
+                "gpu_utilization": f"{values[4]} %" if values[4] else "",
+                "temperature": f"{values[5]} C" if values[5] else "",
+                "power_draw": f"{values[6]} W" if values[6] else "",
+                "power_limit": f"{values[7]} W" if values[7] else "",
+                "graphics_clock": f"{values[8]} / {values[9]} MHz" if values[8] or values[9] else "",
+                "memory_clock": f"{values[10]} / {values[11]} MHz" if values[10] or values[11] else "",
+                "source": "nvidia-smi",
+            }
+        )
+    return rows, output
+
+
+def _collect_os_gpu_info() -> tuple[list[dict[str, Any]], str]:
+    if platform.system() == "Windows":
+        gpu_data = _run_powershell_json(
+            "Get-CimInstance Win32_VideoController | "
+            "Select-Object Name,AdapterRAM,DriverVersion,VideoProcessor,CurrentHorizontalResolution,CurrentVerticalResolution"
+        )
+        items = gpu_data if isinstance(gpu_data, list) else ([gpu_data] if isinstance(gpu_data, dict) else [])
+        rows: list[dict[str, Any]] = []
+        for index, item in enumerate(items):
+            rows.append(
+                {
+                    "index": index,
+                    "name": str(item.get("Name") or ""),
+                    "driver": str(item.get("DriverVersion") or ""),
+                    "memory_total": _format_bytes(item.get("AdapterRAM")),
+                    "processor": str(item.get("VideoProcessor") or ""),
+                    "resolution": (
+                        f"{item.get('CurrentHorizontalResolution')} x {item.get('CurrentVerticalResolution')}"
+                        if item.get("CurrentHorizontalResolution") and item.get("CurrentVerticalResolution")
+                        else ""
+                    ),
+                    "source": "Win32_VideoController",
+                }
+            )
+        return rows, ""
+
+    if platform.system() == "Linux" and shutil.which("lspci") is not None:
+        ok, output = _run_system_command(["lspci"], timeout_seconds=5.0)
+        if ok:
+            rows = [
+                {"index": index, "name": line, "source": "lspci"}
+                for index, line in enumerate(output.splitlines())
+                if any(marker in line.lower() for marker in ["vga", "3d controller", "display controller"])
+            ]
+            return rows, output
+
+    if platform.system() == "Darwin" and shutil.which("system_profiler") is not None:
+        ok, output = _run_system_command(["system_profiler", "SPDisplaysDataType"], timeout_seconds=8.0)
+        if ok:
+            names = [
+                line.split(":", 1)[1].strip()
+                for line in output.splitlines()
+                if "Chipset Model:" in line
+            ]
+            return [{"index": index, "name": name, "source": "system_profiler"} for index, name in enumerate(names)], output
+
+    return [], ""
+
+
+@st.cache_data(show_spinner=False, ttl=10)
+def _collect_server_specs(refresh_token: int = 0) -> dict[str, Any]:
+    cpu = _collect_cpu_info()
+    memory = _collect_memory_info()
+    nvidia_gpus, nvidia_raw_output = _collect_nvidia_gpu_info()
+    os_gpus, os_gpu_raw_output = _collect_os_gpu_info()
+    gpu_rows = nvidia_gpus or os_gpus
+    if nvidia_gpus:
+        gpu_note = "NVIDIA GPUはVRAM、使用率、温度、電力、現在/最大クロックを表示しています。"
+    elif gpu_rows:
+        gpu_note = "nvidia-smiが使えないため、OSが提供するGPUアダプタ情報を表示しています。使用率や演算性能は取得できません。"
+    else:
+        gpu_note = "GPU情報を取得できませんでした。nvidia-smi、OSのGPU情報、または仮想化環境の制限を確認してください。"
+
+    return {
+        "system": {
+            "hostname": socket.gethostname(),
+            "platform": platform.platform(),
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+            "python": sys.version.split()[0],
+            "executable": sys.executable,
+            "project_root": str(PROJECT_ROOT),
+            "process_id": os.getpid(),
+        },
+        "cpu": cpu,
+        "memory": memory,
+        "gpu_rows": gpu_rows,
+        "gpu_note": gpu_note,
+        "diagnostics": {
+            "nvidia_smi_output": nvidia_raw_output if not nvidia_gpus else "",
+            "os_gpu_output": os_gpu_raw_output if not os_gpus else "",
+            "refresh_token": refresh_token,
+        },
+    }
+
+
+def _render_server_tab() -> None:
+    st.header("サーバー環境(Server environment)")
+    if st.button("環境情報を再取得(Refresh server specs)"):
+        _bump_cache_token("server")
+        st.rerun()
+
+    specs = _collect_server_specs(_cache_token("server"))
+    cpu = specs["cpu"]
+    memory = specs["memory"]
+    gpu_rows = specs["gpu_rows"]
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("論理CPU(Logical cores)", cpu.get("logical_cores") or "不明")
+    metric_cols[1].metric("物理CPU(Physical cores)", cpu.get("physical_cores") or "不明")
+    metric_cols[2].metric("メモリ(Memory)", _format_bytes(memory.get("total_bytes")) or "不明")
+    metric_cols[3].metric("GPU数(GPUs)", len(gpu_rows))
+
+    st.subheader("基本情報(System)")
+    system_rows = [{"項目(Item)": key, "値(Value)": value} for key, value in specs["system"].items()]
+    st.dataframe(_display_rows_frame(system_rows), width="stretch", hide_index=True)
+
+    st.subheader("CPU")
+    cpu_rows = [
+        {"項目(Item)": "CPU名(CPU name)", "値(Value)": cpu.get("name") or "不明"},
+        {"項目(Item)": "ソケット数(Sockets)", "値(Value)": cpu.get("sockets") or "不明"},
+        {"項目(Item)": "物理コア数(Physical cores)", "値(Value)": cpu.get("physical_cores") or "不明"},
+        {"項目(Item)": "論理コア数(Logical cores)", "値(Value)": cpu.get("logical_cores") or "不明"},
+        {"項目(Item)": "最大クロック[MHz](Max clock [MHz])", "値(Value)": cpu.get("max_clock_mhz") or "不明"},
+    ]
+    st.dataframe(_display_rows_frame(cpu_rows), width="stretch", hide_index=True)
+
+    st.subheader("メモリ(Memory)")
+    memory_rows = [
+        {"項目(Item)": "総容量(Total)", "値(Value)": _format_bytes(memory.get("total_bytes")) or "不明"},
+        {"項目(Item)": "使用中(Used)", "値(Value)": _format_bytes(memory.get("used_bytes")) or "不明"},
+        {"項目(Item)": "空き/利用可能(Available)", "値(Value)": _format_bytes(memory.get("available_bytes")) or "不明"},
+        {"項目(Item)": "使用率(Usage)", "値(Value)": f"{memory.get('percent')} %" if memory.get("percent") is not None else "不明"},
+        {"項目(Item)": "取得元(Source)", "値(Value)": memory.get("source") or "不明"},
+    ]
+    st.dataframe(_display_rows_frame(memory_rows), width="stretch", hide_index=True)
+
+    st.subheader("GPU")
+    st.caption(specs["gpu_note"])
+    if gpu_rows:
+        st.dataframe(pd.DataFrame(gpu_rows), width="stretch", hide_index=True)
+    else:
+        st.info("GPU情報は取得できませんでした(GPU information is unavailable).")
+
+    diagnostics = specs.get("diagnostics", {})
+    diagnostic_text = "\n\n".join(
+        text
+        for text in [
+            str(diagnostics.get("nvidia_smi_output") or "").strip(),
+            str(diagnostics.get("os_gpu_output") or "").strip(),
+        ]
+        if text
+    )
+    if diagnostic_text:
+        with st.expander("取得診断(Diagnostics)", expanded=False):
+            st.code(diagnostic_text)
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="研究プログラム(Research Program)",
+        layout="wide",
+    )
+    st.title("研究プログラム(Research Program)")
+
+    web_config, contract = _load_runtime()
+    page_options = {
+        "runs": "実行結果(Runs)",
+        "simulation": "シミュレーション(Simulation)",
+        "graph_first": "Graph-first",
+        "graph_creation": "グラフ作成(Graph creation)",
+        "figures": "画像(Figures)",
+        "server": "サーバー環境(Server)",
+        "maintenance": "管理(Maintenance)",
+        "contract": "データ形式(Data format)",
+    }
+    primary_page_options = {
+        "runs": page_options["runs"],
+        "simulation": page_options["simulation"],
+        "graph_first": page_options["graph_first"],
+        "graph_creation": page_options["graph_creation"],
+        "figures": page_options["figures"],
+        "server": page_options["server"],
+        "maintenance": page_options["maintenance"],
+        "contract": page_options["contract"],
+    }
+
+    primary_page = st.sidebar.radio(
+        "ページ(Page)",
+        options=list(primary_page_options),
+        format_func=lambda key: primary_page_options[key],
+    )
+
+    if primary_page == "graph_first":
+        graph_first_page_options = {
+            "graph_first_interval_per_vs_k_create": "Create Interval PER vs K",
+            "graph_first_interval_per_vs_k_review": "Review / redraw Interval PER vs K",
+        }
+        st.sidebar.markdown("### Graph-first")
+        page = st.sidebar.radio(
+            "種類(Type)",
+            options=list(graph_first_page_options),
+            format_func=lambda key: graph_first_page_options[key],
+        )
+    elif primary_page == "graph_creation":
+        graph_page_options = {
+            "graph_jobs": "ジョブ確認(Job status)",
+            "graph_redraw": "再描画(Redraw)",
+            **{
+                f"{GRAPH_CREATION_PAGE_PREFIX}{command_name}": command_info["label"]
+                for command_name, command_info in GRAPH_CREATION_COMMANDS.items()
+            },
+        }
+        st.sidebar.markdown("### グラフ作成(Graph creation)")
+        page = st.sidebar.radio(
+            "種類(Type)",
+            options=list(graph_page_options),
+            format_func=lambda key: graph_page_options[key],
+        )
+    else:
+        page = primary_page
+
+    records: list[RunRecord] | None = None
+    if page in {"runs", "maintenance", "graph_redraw"} or page.startswith(GRAPH_CREATION_PAGE_PREFIX):
+        refresh_runs_clicked = st.sidebar.button("run一覧を更新(Refresh runs)")
+        rebuild_runs_clicked = st.sidebar.button(
+            "runインデックス再構築(Rebuild run index)",
+            help="metadata.csvを手で編集した場合など、インデックスを作り直したい時に使います(Use this after manual metadata edits).",
+        )
+        if refresh_runs_clicked or rebuild_runs_clicked:
+            _bump_cache_token("runs")
+        records = _discover_records(
+            web_config,
+            contract,
+            _cache_token("runs"),
+            force_rescan=rebuild_runs_clicked,
+        )
+        st.sidebar.metric("読み込み済みrun数(Loaded runs)", len(records))
+
+    if page == "runs":
+        assert records is not None
+        _render_runs_tab(records, web_config)
+    elif page == "simulation":
+        _render_simulation_tab(web_config)
+    elif page == "graph_jobs":
+        _render_graph_creation_job_monitor()
+    elif page == "graph_first_interval_per_vs_k_create":
+        _render_interval_per_vs_k_graph_first_page(web_config)
+    elif page == "graph_first_interval_per_vs_k_review":
+        _render_interval_per_vs_k_graph_first_review_page(web_config)
+    elif page == "graph_redraw":
+        assert records is not None
+        _render_graph_redraw_page(web_config, records)
+    elif page.startswith(GRAPH_CREATION_PAGE_PREFIX):
+        assert records is not None
+        command_name = page.removeprefix(GRAPH_CREATION_PAGE_PREFIX)
+        _render_graph_type_creation_page(command_name, web_config, records)
+    elif page == "figures":
+        _render_figures_tab(web_config, contract)
+    elif page == "server":
+        _render_server_tab()
+    elif page == "maintenance":
+        assert records is not None
+        _render_maintenance_tab(records, web_config)
+    elif page == "contract":
+        _render_contract_tab(contract)
+
+
+if __name__ == "__main__":
+    main()
