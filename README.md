@@ -87,7 +87,6 @@ Interval PER vs K用のjobを追加します。
 - listening rate
 - strength ratio
 - max workers
-- simulation mode
 - carrier sense duration
 - LoRa settings
 - plot settings
@@ -305,7 +304,7 @@ LoRa airtimeは以下の入力から計算します。
 - CRC enabled
 - low data rate optimize
 
-`simulation_mode = "per_measurement"` の場合、LoRa airtimeを送信時間として使います。`standard` の場合、Web上では確認用として表示されます。
+Interval PER vs Kでは `simulation_mode = "per_measurement"` 固定です。LoRa airtimeを送信時間として使います。`standard` はこのgraph workflowでは選択できません。
 
 ## 現在アーカイブ済みの旧機能
 

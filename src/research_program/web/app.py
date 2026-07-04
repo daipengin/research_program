@@ -76,7 +76,7 @@ DEFAULT_INTERVAL_PER_VS_K_PARAMS: dict[str, Any] = {
         "listening_rate": 25,
         "strength_ratio": -0.0001,
         "max_workers": 1,
-        "simulation_mode": "standard",
+        "simulation_mode": "per_measurement",
         "carrier_sense_duration_ms": 0.0,
         "lora_payload_bytes": 16,
         "lora_spreading_factor": 7,
@@ -205,13 +205,12 @@ def render_job_add_page() -> None:
                 value=int(saved_base.get("max_workers", 1)),
                 step=1,
             )
-            simulation_mode = st.selectbox(
+            simulation_mode = "per_measurement"
+            st.text_input(
                 "simulation mode",
-                ["standard", "per_measurement"],
-                index=select_index(
-                    ["standard", "per_measurement"],
-                    str(saved_base.get("simulation_mode", "standard")),
-                ),
+                value=simulation_mode,
+                disabled=True,
+                help="Interval PER vs K uses LoRa airtime as transmission time.",
             )
         with sim_c:
             carrier_sense_duration_ms = duration_input_ms(
@@ -387,7 +386,7 @@ def render_job_preview(
         f"{graph_type}: K={len(k_values)} points, runs per K={runs_per_k}, "
         f"total runs={total_runs}. Simulation duration={format_duration_ms(simulation_duration_ms)}, "
         f"interval={format_duration_ms(interval_start_ms)} to {format_duration_ms(interval_end_ms)}. "
-        f"LoRa airtime is {'used as TX time' if simulation_mode == 'per_measurement' else 'reference only'}."
+        "LoRa airtime is used as TX time."
     )
 
 

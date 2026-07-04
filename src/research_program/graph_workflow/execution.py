@@ -415,7 +415,7 @@ def _simulation_request_for_k(
         start_timing_mode=str(
             base.get("start_timing_mode", "random_cycle_ms_with_replacement")
         ),  # type: ignore[arg-type]
-        simulation_mode=str(base.get("simulation_mode", "standard")),  # type: ignore[arg-type]
+        simulation_mode="per_measurement",
         carrier_sense_duration_ms=float(base.get("carrier_sense_duration_ms", 0.0)),
         lora_payload_bytes=int(base.get("lora_payload_bytes", 16)),
         lora_spreading_factor=int(base.get("lora_spreading_factor", 7)),
