@@ -553,7 +553,7 @@ class ComparePerByDevicesIntervalConfig:
     # 点や線
     marker_size: float = 8.0
     line_width: float = 1.5
-    # 既存の集計CSVがあれば再計算せずに使うか
+    # 既存の描画用CSVがあれば再計算せずに使うか
     use_existing_csv_if_available: bool = True
 
     # 比較グラフに載せる手法。空なら全手法

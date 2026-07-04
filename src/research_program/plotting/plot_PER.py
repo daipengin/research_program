@@ -203,6 +203,13 @@ def save_per_plot(
     plt.tight_layout()
     plt.savefig(output_path, dpi=CFG.save_dpi)
     plt.close()
+    pd.DataFrame(
+        {
+            "cycle_index": x.astype(np.int64),
+            "per_percent": per_percent.astype(np.float64),
+            "window_width_cycles": int(window_width_cycles),
+        }
+    ).to_csv(output_path.with_suffix(".csv"), index=False)
 
     return output_path
 
@@ -243,6 +250,13 @@ def save_per_change_plot(
     plt.tight_layout()
     plt.savefig(output_path, dpi=CFG.save_dpi)
     plt.close()
+    pd.DataFrame(
+        {
+            "cycle_index": x_change.astype(np.int64),
+            "per_change_percent": per_change.astype(np.float64),
+            "change_width_cycles": int(change_width_cycles),
+        }
+    ).to_csv(output_path.with_suffix(".csv"), index=False)
 
     return output_path
 

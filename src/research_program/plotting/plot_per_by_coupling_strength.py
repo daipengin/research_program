@@ -325,16 +325,32 @@ def _format_number_for_filename(value: float) -> str:
     return f"{value:g}".replace(".", "p")
 
 
-def get_aggregated_csv_path(output_dir: Path) -> Path:
+def graph_stem_for_coupling_function(coupling_function: str) -> str:
     time_label = _format_number_for_filename(float(CFG.target_time_ms))
-    return output_dir / f"per_by_coupling_strength_time_{time_label}ms_window_{CFG.per_window_width_cycles}.csv"
+    safe_function = _safe_filename_part(str(coupling_function))
+    return f"{safe_function}_per_by_k_time_{time_label}ms"
 
 
-def save_aggregated_csv(df: pd.DataFrame, output_dir: Path) -> Path:
+def graph_data_csv_path(output_dir: Path, coupling_function: str) -> Path:
+    return output_dir / f"{graph_stem_for_coupling_function(coupling_function)}.csv"
+
+
+def graph_data_csv_paths(output_dir: Path) -> list[Path]:
+    time_label = _format_number_for_filename(float(CFG.target_time_ms))
+    return sorted(output_dir.glob(f"*_per_by_k_time_{time_label}ms.csv"))
+
+
+def save_graph_data_csvs(df: pd.DataFrame, output_dir: Path) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = get_aggregated_csv_path(output_dir)
-    df.to_csv(output_path, index=False)
-    return output_path
+    output_paths: list[Path] = []
+    if df.empty:
+        return output_paths
+
+    for coupling_function, sub in df.groupby("coupling_function"):
+        output_path = graph_data_csv_path(output_dir, str(coupling_function))
+        sub.sort_values("coupling_strength").to_csv(output_path, index=False)
+        output_paths.append(output_path)
+    return output_paths
 
 
 def read_aggregated_csv(csv_path: Path) -> pd.DataFrame:
@@ -353,6 +369,19 @@ def read_aggregated_csv(csv_path: Path) -> pd.DataFrame:
             "count": "int64",
         },
     ).sort_values(["coupling_function", "coupling_strength"]).reset_index(drop=True)
+
+
+def read_graph_data_csvs(output_dir: Path) -> pd.DataFrame:
+    csv_paths = graph_data_csv_paths(output_dir)
+    if csv_paths:
+        frames = [read_aggregated_csv(path) for path in csv_paths]
+        return pd.concat(frames, ignore_index=True).sort_values(
+            ["coupling_function", "coupling_strength"]
+        ).reset_index(drop=True)
+
+    raise FileNotFoundError(
+        f"style-only redraw needs existing per-graph csvs like: {output_dir / '*_per_by_k_time_*ms.csv'}"
+    )
 
 
 def _safe_filename_part(value: str) -> str:
@@ -455,8 +484,6 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
     if df.empty:
         return output_paths
 
-    time_label = _format_number_for_filename(float(CFG.target_time_ms))
-
     for coupling_function, sub in df.groupby("coupling_function"):
         sub = sub.sort_values("coupling_strength").reset_index(drop=True)
         if sub.empty:
@@ -512,8 +539,7 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
         plt.grid(True)
         plt.tight_layout()
 
-        safe_function = _safe_filename_part(str(coupling_function))
-        output_path = output_dir / f"{safe_function}_per_by_k_time_{time_label}ms.pdf"
+        output_path = output_dir / f"{graph_stem_for_coupling_function(str(coupling_function))}.pdf"
         plt.savefig(output_path, dpi=CFG.save_dpi)
         plt.close()
         output_paths.append(output_path)
@@ -527,23 +553,20 @@ def main() -> None:
     style_only_redraw = os.environ.get("RESEARCH_PROGRAM_STYLE_ONLY_REDRAW") == "1"
 
     CFG.graphs_dir.mkdir(parents=True, exist_ok=True)
-    aggregated_csv_path = get_aggregated_csv_path(CFG.graphs_dir)
-
     if style_only_redraw:
-        if not aggregated_csv_path.exists():
-            raise FileNotFoundError(f"style-only redraw needs existing csv: {aggregated_csv_path}")
-        agg_df = read_aggregated_csv(aggregated_csv_path)
-        print(f"loaded existing csv: {aggregated_csv_path}")
-    elif CFG.use_existing_csv_if_available and aggregated_csv_path.exists() and not force_recalculate:
-        agg_df = read_aggregated_csv(aggregated_csv_path)
-        print(f"loaded existing csv: {aggregated_csv_path}")
+        agg_df = read_graph_data_csvs(CFG.graphs_dir)
+        print(f"loaded existing per-graph csvs: {CFG.graphs_dir}")
+    elif CFG.use_existing_csv_if_available and graph_data_csv_paths(CFG.graphs_dir) and not force_recalculate:
+        agg_df = read_graph_data_csvs(CFG.graphs_dir)
+        print(f"loaded existing per-graph csvs: {CFG.graphs_dir}")
     else:
         if not results_dir.exists():
             raise FileNotFoundError(f"results folder not found: {results_dir}")
         raw_df = collect_all_results(results_dir)
         agg_df = aggregate_results(raw_df)
-        csv_path = save_aggregated_csv(agg_df, CFG.graphs_dir)
-        print(f"saved: {csv_path}")
+        csv_paths = save_graph_data_csvs(agg_df, CFG.graphs_dir)
+        for csv_path in csv_paths:
+            print(f"saved: {csv_path}")
 
     plot_paths = save_plots(agg_df, CFG.graphs_dir)
     if not plot_paths:

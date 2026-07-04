@@ -252,15 +252,41 @@ def aggregate_results(df: pd.DataFrame) -> pd.DataFrame:
     )
     return grouped
 
-def get_aggregated_csv_path(output_dir: Path) -> Path:
-    return output_dir / f"per_compare_cycle_{CFG.target_cycle}.csv"
+
+def graph_data_csv_path(output_dir: Path, coupling_function: str) -> Path:
+    return output_dir / f"{coupling_function}_cycle_{CFG.target_cycle}.csv"
 
 
-def save_aggregated_csv(df: pd.DataFrame, output_dir: Path) -> Path:
+def combined_graph_data_csv_path(output_dir: Path) -> Path:
+    return output_dir / f"combined_methods_cycle_{CFG.target_cycle}.csv"
+
+
+def graph_data_csv_paths(output_dir: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in output_dir.glob(f"*_cycle_{CFG.target_cycle}.csv")
+        if not path.name.startswith("combined_methods_cycle_")
+    )
+
+
+def save_graph_data_csvs(df: pd.DataFrame, output_dir: Path) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = get_aggregated_csv_path(output_dir)
-    df.to_csv(output_path, index=False)
-    return output_path
+    output_paths: list[Path] = []
+    if df.empty:
+        return output_paths
+
+    for coupling_function, sub in df.groupby("coupling_function"):
+        output_path = graph_data_csv_path(output_dir, str(coupling_function))
+        sub.sort_values(["send_interval", "num_devices"]).to_csv(output_path, index=False)
+        output_paths.append(output_path)
+
+    target_df = df[df["coupling_function"].map(is_target_method)].copy()
+    if CFG.show_combined_method_plot and not target_df.empty:
+        output_path = combined_graph_data_csv_path(output_dir)
+        target_df.sort_values(["coupling_function", "send_interval", "num_devices"]).to_csv(output_path, index=False)
+        output_paths.append(output_path)
+
+    return output_paths
 
 def read_aggregated_csv(csv_path: Path) -> pd.DataFrame:
     return pd.read_csv(
@@ -275,6 +301,19 @@ def read_aggregated_csv(csv_path: Path) -> pd.DataFrame:
     ).sort_values(
         ["coupling_function", "send_interval", "num_devices"]
     ).reset_index(drop=True)
+
+
+def read_graph_data_csvs(output_dir: Path) -> pd.DataFrame:
+    csv_paths = graph_data_csv_paths(output_dir)
+    if csv_paths:
+        frames = [read_aggregated_csv(path) for path in csv_paths]
+        return pd.concat(frames, ignore_index=True).sort_values(
+            ["coupling_function", "send_interval", "num_devices"]
+        ).reset_index(drop=True)
+
+    raise FileNotFoundError(
+        f"style-only redraw needs existing per-graph csvs like: {output_dir / f'*_cycle_{CFG.target_cycle}.csv'}"
+    )
 
 
 
@@ -536,24 +575,21 @@ def main() -> None:
 
     CFG.graphs_dir.mkdir(parents=True, exist_ok=True)
 
-    aggregated_csv_path = get_aggregated_csv_path(CFG.graphs_dir)
-
     if style_only_redraw:
-        if not aggregated_csv_path.exists():
-            raise FileNotFoundError(f"style-only redraw needs existing csv: {aggregated_csv_path}")
-        agg_df = read_aggregated_csv(aggregated_csv_path)
-        print(f"loaded existing csv: {aggregated_csv_path}")
-    elif CFG.use_existing_csv_if_available and aggregated_csv_path.exists() and not force_recalculate:
-        agg_df = read_aggregated_csv(aggregated_csv_path)
-        print(f"loaded existing csv: {aggregated_csv_path}")
+        agg_df = read_graph_data_csvs(CFG.graphs_dir)
+        print(f"loaded existing per-graph csvs: {CFG.graphs_dir}")
+    elif CFG.use_existing_csv_if_available and graph_data_csv_paths(CFG.graphs_dir) and not force_recalculate:
+        agg_df = read_graph_data_csvs(CFG.graphs_dir)
+        print(f"loaded existing per-graph csvs: {CFG.graphs_dir}")
     else:
         if not results_dir.exists():
             raise FileNotFoundError(f"results folder not found: {results_dir}")
         raw_df = collect_all_results(results_dir)
         agg_df = aggregate_results(raw_df)
 
-        csv_path = save_aggregated_csv(agg_df, CFG.graphs_dir)
-        print(f"saved: {csv_path}")
+        csv_paths = save_graph_data_csvs(agg_df, CFG.graphs_dir)
+        for csv_path in csv_paths:
+            print(f"saved: {csv_path}")
 
     plot_paths = save_plots(agg_df, CFG.graphs_dir)
     for path in plot_paths:

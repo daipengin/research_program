@@ -202,6 +202,46 @@ def get_legend_name(run_id: str) -> str:
     return CFG.legend_name_by_run_id.get(run_id, run_id)
 
 
+def aligned_result_to_frame(result: dict) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "run_id": result["run_id"],
+            "coupling_function": result["coupling_function"],
+            "base_cycle": int(result["base_cycle"]),
+            "cycle_index": result["x"].astype(np.int64),
+            "per_percent": result["per_percent"].astype(np.float64),
+            "aligned_cycle": result["aligned_x"].astype(np.int64),
+            "aligned_per_percent": result["aligned_per"].astype(np.float64),
+        }
+    )
+
+
+def overlay_results_to_frame(results: list[dict]) -> pd.DataFrame:
+    frames = [
+        aligned_result_to_frame(result)
+        for result in sorted(results, key=lambda r: (r["coupling_function"], r["run_id"]))
+    ]
+    if not frames:
+        return pd.DataFrame(
+            columns=[
+                "run_id",
+                "coupling_function",
+                "base_cycle",
+                "cycle_index",
+                "per_percent",
+                "aligned_cycle",
+                "aligned_per_percent",
+            ]
+        )
+    return pd.concat(frames, ignore_index=True)
+
+
+def save_graph_data_csv(path: Path, df: pd.DataFrame) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
+    return path
+
+
 
 def build_aligned_per_series(
     x: np.ndarray,
@@ -338,6 +378,7 @@ def save_individual_plots(results: list[dict], output_dir: Path) -> list[Path]:
         output_path = output_dir / f"{run_id}_aligned.pdf"
         plt.savefig(output_path, dpi=CFG.save_dpi)
         plt.close()
+        save_graph_data_csv(output_path.with_suffix(".csv"), aligned_result_to_frame(result))
 
         output_paths.append(output_path)
 
@@ -400,6 +441,7 @@ def save_overlay_plot(results: list[dict], output_dir: Path) -> Optional[Path]:
 
     plt.savefig(output_path, dpi=CFG.save_dpi)
     plt.close()
+    save_graph_data_csv(output_path.with_suffix(".csv"), overlay_results_to_frame(results))
 
     return output_path
 

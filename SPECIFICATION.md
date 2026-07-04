@@ -56,7 +56,8 @@ data/
   aggregated/       集約済み解析データ
 outputs/
   figures/          生成グラフ
-  reports/          ジョブ状態、run index、前回設定など
+  reports/          ジョブ状態、run indexなどのログ・レポート
+  settings/         Web UIの前回パラメーター、描画設定
 src/research_program/
   analysis/         周期データ、PER集約
   config/           パス、TOML、プロット設定
@@ -560,6 +561,8 @@ PERは0未満にならないようクリップする。
 
 グラフ生成は主に `outputs/figures/` 配下へPDFとして保存する。Web UIの画像一覧はPDF以外にPNG/JPEG/WebP/SVGも扱える。
 
+通常導線のグラフ生成では、原則としてグラフ1枚に対して同じstemの描画用CSVを1つ保存する。例として `LINEAR_cycle_90.pdf` の描画用データは `LINEAR_cycle_90.csv` とする。複数手法を重ねるグラフでは、重ね描きグラフ用CSVを保存し、可能なものは各手法の個別グラフと個別CSVも保存する。
+
 | CLIコマンド | 主な入力 | 主な出力 | 内容 |
 | --- | --- | --- | --- |
 | `plot-phase-diff` | `send_log.csv`, `calculated_Cycle_data.csv` | `outputs/figures/phase_diff_graphs/*.pdf` | 参照振動子との位相差。 |
@@ -569,7 +572,7 @@ PERは0未満にならないようクリップする。
 | `compare-per-by-coupling-strength` | 複数runのPER | `outputs/figures/per_by_coupling_strength_graphs/*` | 指定時刻のPERを結合強度ごとに比較。 |
 | `plot-per-timing-k-heatmap` | 複数runのPER | `outputs/figures/per_timing_k_heatmaps/*.pdf` | PER timingと結合強度KごとのPERヒートマップ。`show_per_contour_line = true` の場合、各Kについて `per_contour_level` [%] 以下になる最小PER timingをマーカーで重ね描きする。 |
 
-`plot-per-timing-k-heatmap` のPER levelマーカーオプションは、`PerTimingCouplingStrengthHeatmapConfig` で指定する。ヒートマップの色分け範囲は `color_min` と `color_max` [%] で指定し、例えば0〜10%で色分けしたい場合は `color_min = 0.0`, `color_max = 10.0` を指定する。PER timingの計算条件と集計CSVはmsで保持し、縦軸の表示単位だけを `timing_display_unit` で `ms`, `s`, `min` から選べる。`show_per_contour_line` はマーカー表示のON/OFF、`per_contour_level` は閾値N[%]、`per_contour_color` はマーカー色、`per_level_marker_size` はマーカーサイズ、`per_level_marker_style` はマーカー形状、`show_per_contour_label` は凡例表示、`per_contour_label_font_size` は凡例フォントサイズである。各Kについて、集計済みPERがN%以下になる最小のPER timingだけを1点描画し、点同士は線で結ばない。`show_min_per_timing_annotation = true` の場合は、そのマーカー群のうちPER timingが最小になる点を星印で強調し、K値とtimingを注釈表示する。同じtimingの点が複数ある場合はKが小さい点を採用する。例えばPER 0%以下になる最小timingを描く場合は `show_per_contour_line = true`, `per_contour_level = 0.0` を指定する。PERが0%のセルすべてにだけマーカーを重ねる場合は `show_zero_per_markers = true` を指定する。0%判定は `zero_per_marker_tolerance` 以下の絶対値で行い、色・サイズ・形状は `zero_per_marker_color`, `zero_per_marker_size`, `zero_per_marker_style` で指定する。これらのオプションは表示だけを変更するため、同じtiming範囲・step・PER窓幅で作成済みの集計CSVがある場合は、Web UIの再描画または `RESEARCH_PROGRAM_STYLE_ONLY_REDRAW=1` で再集計せずに反映できる。
+`plot-per-timing-k-heatmap` のPER levelマーカーオプションは、`PerTimingCouplingStrengthHeatmapConfig` で指定する。ヒートマップの色分け範囲は `color_min` と `color_max` [%] で指定し、例えば0〜10%で色分けしたい場合は `color_min = 0.0`, `color_max = 10.0` を指定する。PER timingの計算条件と描画用CSVはmsで保持し、縦軸の表示単位だけを `timing_display_unit` で `ms`, `s`, `min` から選べる。`show_per_contour_line` はマーカー表示のON/OFF、`per_contour_level` は閾値N[%]、`per_contour_color` はマーカー色、`per_level_marker_size` はマーカーサイズ、`per_level_marker_style` はマーカー形状、`show_per_contour_label` は凡例表示、`per_contour_label_font_size` は凡例フォントサイズである。各Kについて、集計済みPERがN%以下になる最小のPER timingだけを1点描画し、点同士は線で結ばない。`show_min_per_timing_annotation = true` の場合は、そのマーカー群のうちPER timingが最小になる点を星印で強調し、K値とtimingを注釈表示する。同じtimingの点が複数ある場合はKが小さい点を採用する。例えばPER 0%以下になる最小timingを描く場合は `show_per_contour_line = true`, `per_contour_level = 0.0` を指定する。PERが0%のセルすべてにだけマーカーを重ねる場合は `show_zero_per_markers = true` を指定する。0%判定は `zero_per_marker_tolerance` 以下の絶対値で行い、色・サイズ・形状は `zero_per_marker_color`, `zero_per_marker_size`, `zero_per_marker_style` で指定する。これらのオプションは表示だけを変更するため、同じ条件の描画用CSVがある場合は、Web UIの再描画または `RESEARCH_PROGRAM_STYLE_ONLY_REDRAW=1` で再集計せずに反映できる。
 
 位相差グラフはデフォルトでは `send_log.csv` の実送信時刻のみを使う。`VISUALIZE_PHASE_DIFF_CONFIG.include_skipped_send_times = true` の場合だけ、`carrier_sense_log.csv` の `action = skip_busy` 行を送信予定時刻として合成して位相差計算に含める。
 
@@ -630,18 +633,18 @@ Windows用補助起動ファイル:
 run_streamlit_app.bat
 ```
 
-Web UI起動時は、`data/`, `outputs/` と標準サブディレクトリを自動作成する。対象は `data/runs`, `data/run`, `data/aggregated`, `data/archives/temp`, `data/raw/real`, `data/raw/simulation`, `outputs/figures`, `outputs/reports`, `outputs/reports/simulation_jobs`, `outputs/reports/graph_creation_jobs` である。加えて、`configs/web/default.toml` の `runs_dirs`, `aggregated_dirs`, `figure_dirs` に指定されたディレクトリも存在しなければ作成する。Gitで空ディレクトリを保持する対象には `.gitkeep` も作成する。既存ディレクトリや既存ファイルは上書きしない。
+Web UI起動時は、`data/`, `outputs/` と標準サブディレクトリを自動作成する。対象は `data/runs`, `data/run`, `data/aggregated`, `data/archives/temp`, `data/raw/real`, `data/raw/simulation`, `outputs/figures`, `outputs/reports`, `outputs/reports/simulation_jobs`, `outputs/reports/graph_creation_jobs`, `outputs/settings` である。加えて、`configs/web/default.toml` の `runs_dirs`, `aggregated_dirs`, `figure_dirs` に指定されたディレクトリも存在しなければ作成する。Gitで空ディレクトリを保持する対象には `.gitkeep` も作成する。既存ディレクトリや既存ファイルは上書きしない。
 
 ### 13.1 ページ
 
 | ページ | 仕様 |
 | --- | --- |
-| Runs | run一覧の探索、条件フィルタ、件数表示、簡易位相ギャップ誤差グラフ作成。 |
+| Runs | run一覧の探索、条件フィルタ、件数表示。 |
 | Simulation | シミュレーション条件入力、一括sweep、実行前確認、バックグラウンド実行、ジョブ監視。 |
 | Graph creation | グラフ種別選択、対象run選択、前処理計画、プロット設定上書き、バックグラウンド実行、ジョブ監視。 |
 | Figures | 画像一覧、フィルタ、プレビュー、ダウンロード。PDFはPNG/JPEG/WebPへラスター化して表示・保存できる。選択画像に対応する実験パラメーター、複数runの値域、初期位相の候補範囲と選択範囲も表示する。 |
 | Server | サーバー環境のOS、CPUコア数、メモリ容量、GPU情報を表示する。NVIDIA GPUでは `nvidia-smi` から使用率、VRAM、電力、クロックも表示する。 |
-| Maintenance | 生成データ削除、`NONE` run削除。 |
+| Maintenance | runの一時アーカイブ、生成データ削除。 |
 | Data format | データ契約の表示。 |
 
 ### 13.2 run探索
@@ -654,7 +657,7 @@ Web UI起動時は、`data/`, `outputs/` と標準サブディレクトリを自
 
 - Web UIはユーザー入力から `SimulationRequest` を作成する。
 - 実行前に自動付与タグ、実効キャリアセンス時間、LoRa airtime、実効ワーカー数などを確認表示する。
-- 実行した条件は `outputs/reports/last_simulation_request.json` に保存し、次回初期値として使う。
+- 実行した条件は `outputs/settings/last_simulation_request.json` に保存し、次回初期値として使う。
 - 実行はバックグラウンドジョブとして開始する。
 
 ### 13.4 グラフ作成
@@ -662,7 +665,7 @@ Web UI起動時は、`data/`, `outputs/` と標準サブディレクトリを自
 - 全グラフ一括作成、またはグラフ種別ごとのページ作成ができる。
 - 対象runはフィルタ結果全体、または個別選択で指定できる。
 - 一部runだけを対象にする場合、ジョブは一時作業ディレクトリへ対象runをコピーし、環境変数で入力ディレクトリを切り替える。
-- プロット設定の上書き値は `outputs/reports/last_graph_plot_overrides.json` に保存される。
+- プロット設定の上書き値は `outputs/settings/last_graph_plot_overrides.json` に保存される。`outputs/reports` はログ・レポート用であり、reports削除時に前回パラメーターや描画設定を巻き込まない。
 
 ## 14. バックグラウンドジョブ仕様
 
@@ -755,7 +758,7 @@ uv run research-program clear-experiment-outputs
 
 追加で指定可能:
 
-- `outputs/reports`
+- `outputs/reports`。ジョブ状態やrun indexなどのログ・レポートのみを対象にし、`outputs/settings` は対象外。
 - `data/raw/real`
 - `data/raw/simulation`
 
@@ -765,7 +768,6 @@ uv run research-program clear-experiment-outputs
 - プロジェクト外パスは削除しない。
 - `.gitkeep` は削除しない。
 - `data/raw/real` は既定削除対象ではない。
-- Web UIの `NONE` run削除はmetadataの `coupling_function` が `NONE` のrunのみを対象にし、削除前に確認入力を要求する。
 
 ## 17. 代表的なワークフロー
 

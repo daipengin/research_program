@@ -280,6 +280,21 @@ def save_phase_diff_plot(
     plt.tight_layout()
     plt.savefig(output_path, dpi=CFG.save_dpi)
     plt.close()
+    rows: list[dict[str, float | int | bool]] = []
+    for osc_id, (x, y, is_original_cycle) in sorted(series.items()):
+        for cycle_index, phase_diff, original in zip(x, y, is_original_cycle):
+            if np.isnan(phase_diff):
+                continue
+            rows.append(
+                {
+                    "oscillator_id": int(osc_id),
+                    "cycle_index": int(cycle_index),
+                    "phase_diff_rad": float(phase_diff),
+                    "is_original_cycle": bool(original),
+                    "is_reference": bool(osc_id == reference_id),
+                }
+            )
+    pd.DataFrame(rows).to_csv(output_path.with_suffix(".csv"), index=False)
 
     return output_path
 

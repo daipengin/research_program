@@ -34,7 +34,6 @@ from research_program.config.paths import resolve_project_path
 from research_program.io.cleanup import (
     CleanupResult,
     cleanup_experiment_outputs,
-    cleanup_run_directories,
 )
 from research_program.io.archive import (
     ArchiveResult,
@@ -92,8 +91,11 @@ from research_program.simulation.range_generators import (
 
 
 DEFAULT_WEB_CONFIG = Path("configs/web/default.toml")
-LAST_SIMULATION_REQUEST_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_simulation_request.json"
-LAST_GRAPH_PLOT_OVERRIDES_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_graph_plot_overrides.json"
+SETTINGS_DIR = PROJECT_ROOT / "outputs" / "settings"
+LAST_SIMULATION_REQUEST_PATH = SETTINGS_DIR / "last_simulation_request.json"
+LAST_GRAPH_PLOT_OVERRIDES_PATH = SETTINGS_DIR / "last_graph_plot_overrides.json"
+OLD_LAST_SIMULATION_REQUEST_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_simulation_request.json"
+OLD_LAST_GRAPH_PLOT_OVERRIDES_PATH = PROJECT_ROOT / "outputs" / "reports" / "last_graph_plot_overrides.json"
 COUPLING_FUNCTION_OPTIONS = ["KURAMOTO", "LINEAR", "NewSIN", "NONE"]
 
 
@@ -517,6 +519,7 @@ def _ensure_server_directories(web_config: dict[str, Any]) -> None:
         "outputs/reports",
         "outputs/reports/simulation_jobs",
         "outputs/reports/graph_creation_jobs",
+        "outputs/settings",
     ]
     gitkeep_directory_values: list[str | Path] = [
         "data/runs",
@@ -530,6 +533,7 @@ def _ensure_server_directories(web_config: dict[str, Any]) -> None:
         "outputs/reports",
         "outputs/reports/simulation_jobs",
         "outputs/reports/graph_creation_jobs",
+        "outputs/settings",
     ]
     for key in ["runs_dirs", "aggregated_dirs", "figure_dirs"]:
         configured_directories = _path_values(paths_config.get(key, []))
@@ -846,14 +850,27 @@ def _load_last_simulation_request(fallback: SimulationRequest) -> SimulationRequ
     if isinstance(cached_request, SimulationRequest):
         return cached_request
 
-    if not LAST_SIMULATION_REQUEST_PATH.exists():
+    request_path = LAST_SIMULATION_REQUEST_PATH
+    if not request_path.exists() and OLD_LAST_SIMULATION_REQUEST_PATH.exists():
+        request_path = OLD_LAST_SIMULATION_REQUEST_PATH
+    if not request_path.exists():
         return fallback
 
     try:
-        data = json.loads(LAST_SIMULATION_REQUEST_PATH.read_text(encoding="utf-8"))
+        data = json.loads(request_path.read_text(encoding="utf-8"))
         request = _simulation_request_from_dict(data, fallback)
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         return fallback
+
+    if request_path != LAST_SIMULATION_REQUEST_PATH:
+        try:
+            LAST_SIMULATION_REQUEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LAST_SIMULATION_REQUEST_PATH.write_text(
+                json.dumps(_simulation_request_to_dict(request), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
 
     st.session_state["last_simulation_request_defaults"] = request
     return request
@@ -888,15 +905,27 @@ def _load_last_graph_plot_overrides() -> dict[str, dict[str, Any]]:
     if isinstance(cached_overrides, dict):
         return _normalize_plot_overrides(cached_overrides)
 
-    if not LAST_GRAPH_PLOT_OVERRIDES_PATH.exists():
+    overrides_path = LAST_GRAPH_PLOT_OVERRIDES_PATH
+    if not overrides_path.exists() and OLD_LAST_GRAPH_PLOT_OVERRIDES_PATH.exists():
+        overrides_path = OLD_LAST_GRAPH_PLOT_OVERRIDES_PATH
+    if not overrides_path.exists():
         return {}
 
     try:
-        data = json.loads(LAST_GRAPH_PLOT_OVERRIDES_PATH.read_text(encoding="utf-8"))
+        data = json.loads(overrides_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError, json.JSONDecodeError):
         return {}
 
     overrides = _normalize_plot_overrides(data)
+    if overrides_path != LAST_GRAPH_PLOT_OVERRIDES_PATH:
+        try:
+            LAST_GRAPH_PLOT_OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
+            LAST_GRAPH_PLOT_OVERRIDES_PATH.write_text(
+                json.dumps(overrides, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
     st.session_state["last_graph_plot_overrides"] = overrides
     return overrides
 
@@ -913,10 +942,11 @@ def _save_last_graph_plot_overrides(overrides: dict[str, dict[str, Any]]) -> Non
 
 
 def _clear_last_graph_plot_overrides() -> None:
-    try:
-        LAST_GRAPH_PLOT_OVERRIDES_PATH.unlink(missing_ok=True)
-    except OSError:
-        pass
+    for path in [LAST_GRAPH_PLOT_OVERRIDES_PATH, OLD_LAST_GRAPH_PLOT_OVERRIDES_PATH]:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
     st.session_state.pop("last_graph_plot_overrides", None)
     for key in list(st.session_state):
         key_text = str(key)
@@ -3081,7 +3111,7 @@ def _render_style_only_redraw_option(commands: list[str], key: str) -> bool:
             value=False,
             key=key,
             help=(
-                "既に作成済みの集計CSVから再描画し、runの再集計と前処理を行いません。"
+                "既に作成済みの描画用CSVから再描画し、runの再集計と前処理を行いません。"
                 "軸ラベル、フォント、画像サイズ、マーカーサイズなどだけを変える時に使ってください。"
                 "PER timing や window など計算条件を変える場合はOFFにしてください。"
             ),
@@ -4221,7 +4251,7 @@ def _select_redraw_preview_asset(
 
 def _render_graph_redraw_page(web_config: dict[str, Any]) -> None:
     st.header("グラフ再描画(Graph redraw)")
-    st.caption("既存の集計CSVから再描画します。runの再集計や前処理は行いません。")
+    st.caption("既存の描画用CSVから再描画します。runの再集計や前処理は行いません。")
 
     command_name = st.selectbox(
         "再描画するグラフ(Graph to redraw)",
@@ -4672,74 +4702,8 @@ def _render_run_archive(records: list[RunRecord], web_config: dict[str, Any]) ->
         _render_archive_restore()
 
 
-def _render_none_run_cleanup(records: list[RunRecord]) -> None:
-    st.subheader("NONE runのみ削除(Delete NONE runs only)")
-    st.warning(
-        "metadata.csv の coupling_function が NONE のrunディレクトリだけを削除します。"
-        "タグにNONEと書かれているだけのrunは削除しません"
-        "(Deletes only run directories whose metadata coupling_function is NONE)."
-    )
-
-    none_records = [
-        record
-        for record in records
-        if str(record.metadata.get("coupling_function") or "").strip().upper() == "NONE"
-        and record.storage_kind == "directory"
-    ]
-    st.metric("削除対象run数(Target NONE runs)", len(none_records))
-
-    sqlite_none_count = sum(
-        1
-        for record in records
-        if str(record.metadata.get("coupling_function") or "").strip().upper() == "NONE"
-        and record.storage_kind == "sqlite"
-    )
-    if sqlite_none_count:
-        st.caption(
-            f"SQLite-backed NONE runs are not deleted here because multiple runs share one DB file: {sqlite_none_count}"
-        )
-
-    preview_rows = [
-        {
-            "run ID(Run ID)": record.run_id,
-            "パス(Path)": _display_project_path(record.path),
-            "結合強度(Coupling strength)": record.metadata.get("coupling_strength"),
-            "タグ(Tags)": ";".join(record.tags),
-        }
-        for record in none_records
-    ]
-    st.dataframe(pd.DataFrame(preview_rows), width="stretch", hide_index=True)
-
-    confirmation = st.text_input(
-        "削除を有効にするには DELETE NONE と入力(Type DELETE NONE to enable deletion)",
-        key="delete_none_runs_confirmation",
-    )
-    delete_disabled = confirmation != "DELETE NONE" or not none_records
-    if st.button(
-        "NONE runだけを削除(Delete NONE runs only)",
-        disabled=delete_disabled,
-        type="primary",
-        key="delete_none_runs_button",
-    ):
-        with st.spinner("NONE runを削除しています(Deleting NONE runs)..."):
-            result = cleanup_run_directories(
-                (record.path for record in none_records),
-                dry_run=False,
-                calculate_size=False,
-            )
-        st.success(
-            f"NONE runを {result.deleted_count} 件削除しました"
-            f"(Deleted {result.deleted_count} NONE run(s))."
-        )
-        _bump_cache_token("runs")
-        st.cache_data.clear()
-        st.rerun()
-
-
 def _render_maintenance_tab(records: list[RunRecord], web_config: dict[str, Any]) -> None:
     _render_run_archive(records, web_config)
-    st.divider()
-    _render_none_run_cleanup(records)
     st.divider()
     st.subheader("実験結果の削除(Delete Experiment Outputs)")
     st.warning("生成された実験結果を削除します。実機の元データはデフォルトでは選択されません(This deletes generated experiment outputs. Raw real-device data is not selected by default).")
