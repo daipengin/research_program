@@ -1,0 +1,573 @@
+from __future__ import annotations
+
+import os
+import re
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+from typing import Optional
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from research_program.analysis.calculate_cycle_data import ensure_cycle_data_for_run
+from research_program.config.plot_config import PER_TIMING_K_HEATMAP_CONFIG
+from research_program.plotting.plot_per_by_coupling_strength import (
+    compute_per_series,
+    cycle_at_target_time,
+    extract_device_count_from_tags,
+    normalize_oscillator_id_column,
+    normalize_time_column,
+    read_calculated_cycle_data,
+    read_metadata,
+    read_send_log,
+)
+from research_program.plotting.labels import (
+    coupling_strength_axis_label,
+    coupling_strength_value_label,
+)
+
+
+CFG = PER_TIMING_K_HEATMAP_CONFIG
+
+TIMING_DISPLAY_UNITS: dict[str, tuple[float, str]] = {
+    "ms": (1.0, "ms"),
+    "s": (1000.0, "s"),
+    "min": (60000.0, "min"),
+}
+
+
+def _format_number_for_filename(value: float) -> str:
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:g}".replace(".", "p")
+
+
+def _safe_filename_part(value: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
+    return safe or "unknown"
+
+
+def _display_coupling_function(coupling_function: str) -> str:
+    return "FrogChorus" if coupling_function == "FROGCHORUS" else coupling_function
+
+
+def _timing_display_unit() -> str:
+    unit = str(getattr(CFG, "timing_display_unit", "ms")).strip().lower()
+    if unit in {"m", "minute", "minutes"}:
+        unit = "min"
+    if unit in {"sec", "second", "seconds"}:
+        unit = "s"
+    if unit not in TIMING_DISPLAY_UNITS:
+        raise ValueError("timing_display_unit must be one of: ms, s, min")
+    return unit
+
+
+def _timing_display_divisor() -> float:
+    divisor, _ = TIMING_DISPLAY_UNITS[_timing_display_unit()]
+    return divisor
+
+
+def _timing_display_label() -> str:
+    _, label = TIMING_DISPLAY_UNITS[_timing_display_unit()]
+    return label
+
+
+def _timing_axis_label() -> str:
+    base_label = str(getattr(CFG, "y_label", "PER timing")).strip() or "PER timing"
+    for suffix in (" [ms]", " [s]", " [min]"):
+        if base_label.endswith(suffix):
+            base_label = base_label[: -len(suffix)]
+            break
+    return f"{base_label} [{_timing_display_label()}]"
+
+
+def _to_display_timing(values_ms: np.ndarray) -> np.ndarray:
+    return values_ms / _timing_display_divisor()
+
+
+def _format_timing_for_annotation(value: float) -> str:
+    return f"{value:g} {_timing_display_label()}"
+
+
+def timing_grid_ms() -> np.ndarray:
+    if CFG.timing_step_ms <= 0:
+        raise ValueError("timing_step_ms must be positive")
+    if CFG.timing_max_ms < CFG.timing_min_ms:
+        raise ValueError("timing_max_ms must be greater than or equal to timing_min_ms")
+
+    count = int(np.floor((CFG.timing_max_ms - CFG.timing_min_ms) / CFG.timing_step_ms)) + 1
+    return CFG.timing_min_ms + np.arange(count, dtype=np.float64) * CFG.timing_step_ms
+
+
+def config_allows_result(coupling_function: str, coupling_strength: float) -> bool:
+    if CFG.target_coupling_functions and coupling_function not in set(CFG.target_coupling_functions):
+        return False
+    if CFG.coupling_strength_min is not None and coupling_strength < CFG.coupling_strength_min:
+        return False
+    if CFG.coupling_strength_max is not None and coupling_strength > CFG.coupling_strength_max:
+        return False
+    return True
+
+
+def process_run(run_dir: Path) -> list[dict]:
+    try:
+        send_log_path = run_dir / "send_log.csv"
+        metadata_path = run_dir / "metadata.csv"
+        cycle_data_path = run_dir / "calculated_Cycle_data.csv"
+
+        if not send_log_path.exists() or not metadata_path.exists():
+            return []
+
+        if not cycle_data_path.exists():
+            ensure_cycle_data_for_run(run_dir)
+
+        if not cycle_data_path.exists():
+            return []
+
+        tags, coupling_function, coupling_strength = read_metadata(metadata_path)
+        if not config_allows_result(coupling_function, coupling_strength):
+            return []
+
+        send_df = read_send_log(send_log_path)
+        if send_df.empty:
+            return []
+
+        num_devices = extract_device_count_from_tags(tags)
+        send_df = normalize_oscillator_id_column(send_df, tags)
+        send_df = normalize_time_column(send_df, tags)
+
+        _, cycle_starts, _ = read_calculated_cycle_data(cycle_data_path)
+        x, per_percent = compute_per_series(
+            send_df=send_df,
+            cycle_starts=cycle_starts,
+            num_devices=num_devices,
+            window_width_cycles=CFG.per_window_width_cycles,
+        )
+        if len(x) == 0:
+            return []
+
+        per_by_cycle = {int(cycle): float(per) for cycle, per in zip(x, per_percent)}
+        rows: list[dict] = []
+        for target_time_ms in timing_grid_ms():
+            target_cycle = cycle_at_target_time(cycle_starts, float(target_time_ms))
+            if target_cycle is None:
+                continue
+            per_value = per_by_cycle.get(int(target_cycle))
+            if per_value is None:
+                continue
+            rows.append(
+                {
+                    "run_id": run_dir.name,
+                    "coupling_function": coupling_function,
+                    "coupling_strength": float(coupling_strength),
+                    "per_timing_ms": float(target_time_ms),
+                    "target_cycle": int(target_cycle),
+                    "per_percent": float(per_value),
+                }
+            )
+        return rows
+    except Exception:
+        return []
+
+
+def _empty_raw_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "run_id",
+            "coupling_function",
+            "coupling_strength",
+            "per_timing_ms",
+            "target_cycle",
+            "per_percent",
+        ]
+    )
+
+
+def _empty_aggregated_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=[
+            "coupling_function",
+            "coupling_strength",
+            "per_timing_ms",
+            "per_percent_mean",
+            "per_percent_std",
+            "per_percent_min",
+            "per_percent_max",
+            "target_cycle_mean",
+            "count",
+        ]
+    )
+
+
+def collect_all_results(results_dir: Path) -> pd.DataFrame:
+    run_dirs = sorted([p for p in results_dir.iterdir() if p.is_dir()])
+    if not run_dirs:
+        return _empty_raw_frame()
+
+    rows: list[dict] = []
+    max_workers = min(len(run_dirs), (os.cpu_count() or 1))
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(process_run, run_dir) for run_dir in run_dirs]
+
+        for future in as_completed(futures):
+            rows.extend(future.result())
+
+    if not rows:
+        return _empty_raw_frame()
+
+    return pd.DataFrame(rows)
+
+
+def aggregate_results(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return _empty_aggregated_frame()
+
+    return (
+        df.groupby(["coupling_function", "coupling_strength", "per_timing_ms"], as_index=False)
+        .agg(
+            per_percent_mean=("per_percent", "mean"),
+            per_percent_std=("per_percent", "std"),
+            per_percent_min=("per_percent", "min"),
+            per_percent_max=("per_percent", "max"),
+            target_cycle_mean=("target_cycle", "mean"),
+            count=("per_percent", "size"),
+        )
+        .sort_values(["coupling_function", "coupling_strength", "per_timing_ms"])
+        .reset_index(drop=True)
+    )
+
+
+def graph_stem_for_coupling_function(coupling_function: str) -> str:
+    safe_function = _safe_filename_part(str(coupling_function))
+    return f"{safe_function}_per_timing_k_heatmap"
+
+
+def graph_data_csv_path(output_dir: Path, coupling_function: str) -> Path:
+    return output_dir / f"{graph_stem_for_coupling_function(coupling_function)}.csv"
+
+
+def graph_data_csv_paths(output_dir: Path) -> list[Path]:
+    return sorted(output_dir.glob("*_per_timing_k_heatmap.csv"))
+
+
+def save_graph_data_csvs(df: pd.DataFrame, output_dir: Path) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_paths: list[Path] = []
+    if df.empty:
+        return output_paths
+
+    for coupling_function, sub in df.groupby("coupling_function"):
+        output_path = graph_data_csv_path(output_dir, str(coupling_function))
+        sub.sort_values(["coupling_strength", "per_timing_ms"]).to_csv(output_path, index=False)
+        output_paths.append(output_path)
+    return output_paths
+
+
+def read_aggregated_csv(csv_path: Path) -> pd.DataFrame:
+    return pd.read_csv(
+        csv_path,
+        dtype={
+            "coupling_function": "string",
+            "coupling_strength": "float64",
+            "per_timing_ms": "float64",
+            "per_percent_mean": "float64",
+            "per_percent_std": "float64",
+            "per_percent_min": "float64",
+            "per_percent_max": "float64",
+            "target_cycle_mean": "float64",
+            "count": "int64",
+        },
+    ).sort_values(["coupling_function", "coupling_strength", "per_timing_ms"]).reset_index(drop=True)
+
+
+def read_graph_data_csvs(output_dir: Path) -> pd.DataFrame:
+    csv_paths = graph_data_csv_paths(output_dir)
+    if csv_paths:
+        frames = [read_aggregated_csv(path) for path in csv_paths]
+        return pd.concat(frames, ignore_index=True).sort_values(
+            ["coupling_function", "coupling_strength", "per_timing_ms"]
+        ).reset_index(drop=True)
+
+    raise FileNotFoundError(
+        f"style-only redraw needs existing per-graph csvs like: {output_dir / '*_per_timing_k_heatmap.csv'}"
+    )
+
+
+def _pivot_heatmap(sub: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    pivot = sub.pivot_table(
+        index="per_timing_ms",
+        columns="coupling_strength",
+        values="per_percent_mean",
+        aggfunc="mean",
+    ).sort_index().sort_index(axis=1)
+
+    x = pivot.columns.to_numpy(dtype=np.float64)
+    y = pivot.index.to_numpy(dtype=np.float64)
+    z = pivot.to_numpy(dtype=np.float64)
+    return x, y, z
+
+
+def _cell_extent_from_centers(values: np.ndarray) -> tuple[float, float]:
+    if values.size == 0:
+        return 0.0, 0.0
+    if values.size == 1:
+        center = float(values[0])
+        return center - 0.5, center + 0.5
+
+    centers = values.astype(np.float64, copy=False)
+    midpoints = (centers[:-1] + centers[1:]) / 2.0
+    first_width = midpoints[0] - centers[0]
+    last_width = centers[-1] - midpoints[-1]
+    return float(centers[0] - first_width), float(centers[-1] + last_width)
+
+
+def per_level_marker_points(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    level: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    x_points: list[float] = []
+    y_points: list[float] = []
+
+    for column_index, coupling_strength in enumerate(x):
+        per_values = z[:, column_index]
+        matching_indices = np.flatnonzero(np.isfinite(per_values) & (per_values <= level))
+        if matching_indices.size == 0:
+            continue
+        first_index = int(matching_indices[0])
+        x_points.append(float(coupling_strength))
+        y_points.append(float(y[first_index]))
+
+    return (
+        np.array(x_points, dtype=np.float64),
+        np.array(y_points, dtype=np.float64),
+    )
+
+
+def zero_per_marker_points(
+    x: np.ndarray,
+    y: np.ndarray,
+    z: np.ndarray,
+    tolerance: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    if x.size == 0 or y.size == 0 or z.size == 0:
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+
+    mask = np.isfinite(z) & (np.abs(z) <= max(float(tolerance), 0.0))
+    y_indices, x_indices = np.nonzero(mask)
+    if x_indices.size == 0:
+        return np.array([], dtype=np.float64), np.array([], dtype=np.float64)
+
+    return (
+        x[x_indices].astype(np.float64, copy=False),
+        y[y_indices].astype(np.float64, copy=False),
+    )
+
+
+def minimum_per_timing_point(
+    x_points: np.ndarray,
+    y_points: np.ndarray,
+) -> tuple[float, float] | None:
+    if x_points.size == 0 or y_points.size == 0:
+        return None
+    order = np.lexsort((x_points, y_points))
+    if order.size == 0:
+        return None
+    index = int(order[0])
+    return float(x_points[index]), float(y_points[index])
+
+
+def draw_minimum_per_timing_annotation(x_point: float, y_point: float) -> None:
+    if not getattr(CFG, "show_min_per_timing_annotation", True):
+        return
+
+    color = str(getattr(CFG, "min_per_timing_marker_color", "tab:red"))
+    plt.scatter(
+        [x_point],
+        [y_point],
+        s=float(getattr(CFG, "min_per_timing_marker_size", 120.0)),
+        marker="*",
+        color=color,
+        edgecolors="black",
+        linewidths=0.6,
+        label="minimum PER timing",
+        zorder=5,
+    )
+    plt.annotate(
+        (
+            "min timing\n"
+            f"{coupling_strength_value_label(x_point)}\n"
+            f"t={_format_timing_for_annotation(y_point)}"
+        ),
+        xy=(x_point, y_point),
+        xytext=(8, 8),
+        textcoords="offset points",
+        fontsize=int(getattr(CFG, "min_per_timing_annotation_font_size", 14)),
+        ha="left",
+        va="bottom",
+        bbox={
+            "boxstyle": "round,pad=0.25",
+            "facecolor": "white",
+            "edgecolor": "0.4",
+            "alpha": 0.9,
+        },
+        arrowprops={
+            "arrowstyle": "->",
+            "linewidth": 0.8,
+            "color": "0.3",
+        },
+    )
+
+
+def draw_per_level_markers(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
+    if not CFG.show_per_contour_line:
+        return
+    if x.size == 0 or y.size == 0:
+        return
+
+    level = float(CFG.per_contour_level)
+    x_points, y_points = per_level_marker_points(x, y, z, level)
+    if x_points.size == 0:
+        return
+
+    plt.scatter(
+        x_points,
+        y_points,
+        s=float(getattr(CFG, "per_level_marker_size", 42.0)),
+        marker=str(getattr(CFG, "per_level_marker_style", "o")),
+        color=CFG.per_contour_color,
+        label=f"min timing where PER<={level:g}%",
+        zorder=3,
+    )
+    min_point = minimum_per_timing_point(x_points, y_points)
+    if min_point is not None:
+        draw_minimum_per_timing_annotation(*min_point)
+
+    if CFG.show_per_contour_label:
+        plt.legend(fontsize=CFG.per_contour_label_font_size)
+
+
+def draw_zero_per_markers(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
+    if not getattr(CFG, "show_zero_per_markers", False):
+        return
+    if x.size == 0 or y.size == 0:
+        return
+
+    x_points, y_points = zero_per_marker_points(
+        x,
+        y,
+        z,
+        tolerance=float(getattr(CFG, "zero_per_marker_tolerance", 1e-9)),
+    )
+    if x_points.size == 0:
+        return
+
+    label = "PER=0%" if getattr(CFG, "show_zero_per_marker_label", True) else None
+    plt.scatter(
+        x_points,
+        y_points,
+        s=float(getattr(CFG, "zero_per_marker_size", 30.0)),
+        marker=str(getattr(CFG, "zero_per_marker_style", "x")),
+        color=str(getattr(CFG, "zero_per_marker_color", "black")),
+        label=label,
+        zorder=4,
+    )
+    if label is not None:
+        plt.legend(fontsize=CFG.per_contour_label_font_size)
+
+
+def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_paths: list[Path] = []
+    if df.empty:
+        return output_paths
+
+    for coupling_function, sub in df.groupby("coupling_function"):
+        x, y_ms, z = _pivot_heatmap(sub)
+        if x.size == 0 or y_ms.size == 0:
+            continue
+        y = _to_display_timing(y_ms)
+
+        plt.figure(figsize=(CFG.figure_width, CFG.figure_height))
+        mesh = plt.imshow(
+            z,
+            aspect="auto",
+            origin="lower",
+            interpolation="nearest",
+            cmap=CFG.colormap,
+            vmin=CFG.color_min,
+            vmax=CFG.color_max,
+            extent=[
+                *_cell_extent_from_centers(x),
+                *_cell_extent_from_centers(y),
+            ],
+        )
+        draw_per_level_markers(x, y, z)
+        draw_zero_per_markers(x, y, z)
+
+        colorbar = plt.colorbar(mesh)
+        colorbar.set_label(CFG.colorbar_label, fontsize=CFG.font_size_label)
+        colorbar.ax.tick_params(labelsize=CFG.font_size_ticks)
+
+        if CFG.xlim_min is not None or CFG.xlim_max is not None:
+            plt.xlim(left=CFG.xlim_min, right=CFG.xlim_max)
+
+        if CFG.ylim_min is not None or CFG.ylim_max is not None:
+            plt.ylim(bottom=CFG.ylim_min, top=CFG.ylim_max)
+
+        plt.xlabel(coupling_strength_axis_label(CFG.x_label), fontsize=CFG.font_size_label)
+        plt.ylabel(_timing_axis_label(), fontsize=CFG.font_size_label)
+
+        if CFG.show_title:
+            display_name = _display_coupling_function(str(coupling_function))
+            plt.title(
+                f"PER heatmap\nmethod={display_name}, window={CFG.per_window_width_cycles} cycles",
+                fontsize=CFG.font_size_title,
+            )
+
+        plt.xticks(fontsize=CFG.font_size_ticks)
+        plt.yticks(fontsize=CFG.font_size_ticks)
+        plt.tight_layout()
+
+        output_path = output_dir / f"{graph_stem_for_coupling_function(str(coupling_function))}.pdf"
+        plt.savefig(output_path, dpi=CFG.save_dpi)
+        plt.close()
+        output_paths.append(output_path)
+
+    return output_paths
+
+
+def main() -> None:
+    results_dir = Path(os.environ.get("RESEARCH_PROGRAM_RUNS_DIR", CFG.results_dir))
+    force_recalculate = os.environ.get("RESEARCH_PROGRAM_FORCE_RECALCULATE") == "1"
+    style_only_redraw = os.environ.get("RESEARCH_PROGRAM_STYLE_ONLY_REDRAW") == "1"
+
+    CFG.graphs_dir.mkdir(parents=True, exist_ok=True)
+    if style_only_redraw:
+        agg_df = read_graph_data_csvs(CFG.graphs_dir)
+        print(f"loaded existing per-graph csvs: {CFG.graphs_dir}")
+    elif CFG.use_existing_csv_if_available and graph_data_csv_paths(CFG.graphs_dir) and not force_recalculate:
+        agg_df = read_graph_data_csvs(CFG.graphs_dir)
+        print(f"loaded existing per-graph csvs: {CFG.graphs_dir}")
+    else:
+        if not results_dir.exists():
+            raise FileNotFoundError(f"results folder not found: {results_dir}")
+        raw_df = collect_all_results(results_dir)
+        agg_df = aggregate_results(raw_df)
+        csv_paths = save_graph_data_csvs(agg_df, CFG.graphs_dir)
+        for csv_path in csv_paths:
+            print(f"saved: {csv_path}")
+
+    plot_paths = save_plots(agg_df, CFG.graphs_dir)
+    if not plot_paths:
+        print("no PER timing-K heatmaps were generated")
+        return
+
+    for path in plot_paths:
+        print(f"saved: {path}")
+
+
+if __name__ == "__main__":
+    main()

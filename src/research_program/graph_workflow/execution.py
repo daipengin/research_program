@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from research_program.analysis.calculate_cycle_data import ensure_cycle_data_for_run
+from research_program.io import sqlite_runs
 from research_program.plotting.plot_per_by_coupling_strength import (
     assign_cycles_from_reference_windows,
     extract_device_count_from_tags,
@@ -31,6 +32,25 @@ from research_program.simulation.runner import SimulationRequest, run_simulation
 from .storage import load_graph_job, utc_now_iso
 
 
+RAW_RUN_DB_NAME = "raw_run.sqlite"
+
+
+class JobCancelled(RuntimeError):
+    pass
+
+
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+        try:
+            if exc_type is None:
+                self.commit()
+            else:
+                self.rollback()
+        finally:
+            self.close()
+        return False
+
+
 def available_coupling_functions() -> list[str]:
     return [item.value for item in CouplingFunction]
 
@@ -40,7 +60,7 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
     manifest_path = graph_dir / "manifest.json"
     status_path = graph_dir / "status.json"
     db_path = graph_dir / "graph_data.sqlite"
-    raw_runs_dir = graph_dir / "raw" / "runs"
+    raw_run_db_path = graph_dir / RAW_RUN_DB_NAME
     figures_dir = graph_dir / "figures"
 
     manifest = _read_json(manifest_path)
@@ -48,8 +68,12 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
     params = dict(manifest.get("input") or {})
     graph_key = dict(manifest.get("graph_key") or {})
 
-    raw_runs_dir.mkdir(parents=True, exist_ok=True)
     figures_dir.mkdir(parents=True, exist_ok=True)
+    raw_conn = sqlite_runs.connect(raw_run_db_path)
+    try:
+        sqlite_runs.initialize(raw_conn)
+    finally:
+        raw_conn.close()
 
     k_values = [float(value) for value in params.get("k_values", [])]
     runs_per_k = int(params.get("runs_per_k", 1))
@@ -80,27 +104,30 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
                 graph_key=graph_key,
                 params=params,
                 k_value=k_value,
-                output_root=raw_runs_dir,
+                output_root=raw_run_db_path,
             )
+            _raise_if_cancel_requested(status_path, db_path)
 
             def on_progress(done: int, total: int, result: dict[str, Any]) -> None:
                 nonlocal completed
-                completed += 1
                 run_id = str(result["run_id"])
+                if _cancel_requested(status_path):
+                    _delete_raw_run(raw_run_db_path, run_id)
+                    raise JobCancelled(f"Job cancelled while run was active: {run_id}")
+                completed += 1
                 _save_run_record(
                     db_path=db_path,
                     request_id=str(manifest["graph_id"]),
                     run_id=run_id,
                     coupling_strength=k_value,
                     repeat_index=done - 1,
-                    raw_path=_relative_to_graph(graph_dir, Path(result["output_dir"])),
+                    raw_path=f"{RAW_RUN_DB_NAME}::{run_id}",
                     metadata=result,
                 )
-                _save_run_intermediate_and_interval(
+                _save_run_intermediate_and_interval_from_raw_sqlite(
                     db_path=db_path,
-                    graph_dir=graph_dir,
+                    raw_db_path=raw_run_db_path,
                     run_id=run_id,
-                    run_dir=Path(result["output_dir"]),
                     aggregate_set_id=aggregate_set_id,
                     interval_start_ms=float(params["interval_start_ms"]),
                     interval_end_ms=float(params["interval_end_ms"]),
@@ -173,6 +200,21 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
         )
     except Exception as exc:
         failed_at = utc_now_iso()
+        if isinstance(exc, JobCancelled):
+            status.update(
+                {
+                    "status": "cancelled",
+                    "updated_at": failed_at,
+                    "finished_at": failed_at,
+                    "current_run_id": "",
+                    "error": str(exc),
+                }
+            )
+            manifest.update({"status": "cancelled", "updated_at": failed_at})
+            _write_json(status_path, status)
+            _write_json(manifest_path, manifest)
+            _append_history(db_path, "job_cancelled", {"error": str(exc)})
+            return {"job": load_graph_job(graph_dir), "output": None, "aggregate_rows": 0}
         status.update(
             {
                 "status": "failed",
@@ -514,6 +556,139 @@ def _save_run_intermediate_and_interval(
     )
 
 
+def _save_run_intermediate_and_interval_from_raw_sqlite(
+    *,
+    db_path: Path,
+    raw_db_path: Path,
+    run_id: str,
+    aggregate_set_id: str,
+    interval_start_ms: float,
+    interval_end_ms: float,
+) -> None:
+    raw_conn = sqlite_runs.connect(raw_db_path)
+    try:
+        raw_conn.row_factory = sqlite3.Row
+        sqlite_runs.initialize(raw_conn)
+        metadata_row = raw_conn.execute(
+            "SELECT * FROM runs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+        if metadata_row is None:
+            raise ValueError(f"raw run not found in {raw_db_path}: {run_id}")
+
+        tags_raw = metadata_row["tags"] if "tags" in metadata_row.keys() else ""
+        tags = [tag.strip() for tag in str(tags_raw).split(";") if tag.strip()]
+        coupling_function = str(metadata_row["coupling_function"])
+        coupling_strength = float(metadata_row["coupling_strength"])
+        num_devices = extract_device_count_from_tags(tags)
+
+        send_df = pd.read_sql_query(
+            """
+            SELECT time, oscillator_id, send_count, transmission_end_time, transmission_time_ms
+            FROM send_log
+            WHERE run_id = ?
+            ORDER BY time, oscillator_id
+            """,
+            raw_conn,
+            params=(run_id,),
+        )
+        cycle_df = pd.read_sql_query(
+            """
+            SELECT cycle_index, cycle_start_time, is_original_cycle, reference_id
+            FROM calculated_cycle_data
+            WHERE run_id = ?
+            ORDER BY cycle_index
+            """,
+            raw_conn,
+            params=(run_id,),
+        )
+    finally:
+        raw_conn.close()
+
+    if send_df.empty:
+        raise ValueError(f"send_log is empty for run {run_id}")
+    if cycle_df.empty:
+        raise ValueError(f"calculated_cycle_data is empty for run {run_id}")
+
+    send_df = normalize_oscillator_id_column(send_df, tags)
+    send_df = normalize_time_column(send_df, tags)
+    cycle_starts = cycle_df["cycle_start_time"].to_numpy(dtype=np.float64)
+
+    send_df = assign_cycles_from_reference_windows(send_df, cycle_starts)
+    max_cycle = len(cycle_starts)
+    counts_full = np.zeros(max_cycle, dtype=np.int64)
+    if max_cycle > 0 and not send_df.empty:
+        counts_by_cycle = send_df.groupby("cycle_index").size().sort_index()
+        cycle_indices = counts_by_cycle.index.to_numpy(dtype=np.int64)
+        valid_indices = (cycle_indices >= 1) & (cycle_indices <= max_cycle)
+        counts_full[cycle_indices[valid_indices] - 1] = counts_by_cycle.to_numpy(dtype=np.int64)[valid_indices]
+    cumulative_counts = np.concatenate(
+        [np.array([0], dtype=np.int64), np.cumsum(counts_full, dtype=np.int64)]
+    )
+
+    metrics = compute_interval_per_from_cycle_counts(
+        cycle_starts=cycle_starts,
+        cumulative_counts=cumulative_counts,
+        num_devices=num_devices,
+        interval_start_ms=interval_start_ms,
+        interval_end_ms=interval_end_ms,
+    )
+    if metrics is None:
+        raise ValueError(f"Could not compute interval PER for run {run_id}")
+
+    with _connect(db_path) as conn:
+        conn.execute("DELETE FROM run_cycle_counts WHERE run_id = ?", (run_id,))
+        conn.executemany(
+            """
+            INSERT INTO run_cycle_counts
+                (run_id, cycle_index, expected_packets, actual_packets,
+                 cumulative_expected_packets, cumulative_actual_packets)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    run_id,
+                    int(index + 1),
+                    int(num_devices),
+                    int(count),
+                    int((index + 1) * num_devices),
+                    int(cumulative_counts[index + 1]),
+                )
+                for index, count in enumerate(counts_full)
+            ],
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO run_interval_per
+                (aggregate_set_id, run_id, coupling_function, coupling_strength,
+                 interval_start_ms, interval_end_ms, interval_cycle_count,
+                 expected_packets, actual_packets, per_percent)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                aggregate_set_id,
+                run_id,
+                coupling_function,
+                coupling_strength,
+                interval_start_ms,
+                interval_end_ms,
+                int(metrics["interval_cycle_count"]),
+                int(metrics["expected_packets"]),
+                int(metrics["actual_packets"]),
+                float(metrics["per_percent"]),
+            ),
+        )
+    _append_history(
+        db_path,
+        "run_saved",
+        {
+            "run_id": run_id,
+            "raw_path": f"{RAW_RUN_DB_NAME}::{run_id}",
+            "per_percent": metrics["per_percent"],
+        },
+    )
+
+
 def _save_output(
     db_path: Path,
     aggregate_set_id: str,
@@ -539,7 +714,7 @@ def _save_output(
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, factory=ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -561,6 +736,29 @@ def _append_history(db_path: Path, event_type: str, detail: dict[str, Any]) -> N
             """,
             (event_type, json.dumps(detail, ensure_ascii=False), utc_now_iso()),
         )
+
+
+def _cancel_requested(status_path: Path) -> bool:
+    try:
+        status = _read_json(status_path)
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(status.get("cancel_requested")) or str(status.get("status")) == "cancel_requested"
+
+
+def _raise_if_cancel_requested(status_path: Path, db_path: Path) -> None:
+    if _cancel_requested(status_path):
+        _append_history(db_path, "job_cancelled_before_next_run", {})
+        raise JobCancelled("Job cancelled before starting next run")
+
+
+def _delete_raw_run(raw_db_path: Path, run_id: str) -> None:
+    conn = sqlite_runs.connect(raw_db_path)
+    try:
+        sqlite_runs.initialize(conn)
+        sqlite_runs.delete_run(conn, run_id)
+    finally:
+        conn.close()
 
 
 def _aggregate_set_id(interval_start_ms: float, interval_end_ms: float) -> str:

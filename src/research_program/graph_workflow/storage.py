@@ -9,9 +9,12 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from research_program.io import sqlite_runs
+
 
 GRAPH_RUNS_ROOT = Path("outputs") / "graph_runs"
 GRAPH_TYPE_INTERVAL_PER_VS_K = "interval_per_vs_k"
+RAW_RUN_DB_NAME = "raw_run.sqlite"
 
 
 SCHEMA_SQL = """
@@ -112,6 +115,18 @@ CREATE TABLE IF NOT EXISTS history (
 """
 
 
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool:
+        try:
+            if exc_type is None:
+                self.commit()
+            else:
+                self.rollback()
+        finally:
+            self.close()
+        return False
+
+
 @dataclass(frozen=True)
 class GraphJobSummary:
     graph_id: str
@@ -143,16 +158,20 @@ def create_interval_per_vs_k_job(params: dict[str, Any]) -> GraphJobSummary:
     graph_type = GRAPH_TYPE_INTERVAL_PER_VS_K
     graph_key = {"coupling_function": params["coupling_function"]}
     graph_dir = GRAPH_RUNS_ROOT / graph_type / graph_id
-    raw_dir = graph_dir / "raw" / "runs"
     figures_dir = graph_dir / "figures"
     logs_dir = graph_dir / "logs"
 
-    raw_dir.mkdir(parents=True, exist_ok=False)
+    graph_dir.mkdir(parents=True, exist_ok=False)
     figures_dir.mkdir(parents=True, exist_ok=True)
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     db_path = graph_dir / "graph_data.sqlite"
     _init_db(db_path)
+    raw_conn = sqlite_runs.connect(graph_dir / RAW_RUN_DB_NAME)
+    try:
+        sqlite_runs.initialize(raw_conn)
+    finally:
+        raw_conn.close()
 
     total_runs = len(params["k_values"]) * int(params["runs_per_k"])
     aggregate_set_id = _interval_aggregate_set_id(
@@ -269,7 +288,8 @@ def create_interval_per_vs_k_job(params: dict[str, Any]) -> GraphJobSummary:
             },
             "created_at": now,
             "storage_policy": {
-                "raw_data": "raw_file_reference",
+                "raw_data": "raw_run_sqlite",
+                "raw_run_sqlite": RAW_RUN_DB_NAME,
                 "sqlite": "metadata_intermediate_aggregate",
             },
         },
@@ -321,13 +341,66 @@ def get_storage_overview() -> dict[str, Any]:
     root = ensure_graph_runs_root()
     jobs = list_graph_jobs()
     db_count = sum(1 for _ in root.rglob("graph_data.sqlite"))
+    raw_db_count = sum(1 for _ in root.rglob(RAW_RUN_DB_NAME))
     raw_dirs = sum(1 for path in root.rglob("raw") if path.is_dir())
     return {
         "root": str(root),
         "job_count": len(jobs),
         "sqlite_count": db_count,
+        "raw_sqlite_count": raw_db_count,
         "raw_dir_count": raw_dirs,
     }
+
+
+def request_cancel_graph_job(graph_dir: str | Path, reason: str = "requested from GUI") -> None:
+    graph_path = Path(graph_dir)
+    status_path = graph_path / "status.json"
+    manifest_path = graph_path / "manifest.json"
+    now = utc_now_iso()
+    status = _read_json(status_path)
+    current_status = str(status.get("status", "unknown"))
+
+    if current_status == "queued":
+        status.update(
+            {
+                "status": "cancelled",
+                "cancel_requested": True,
+                "cancel_requested_at": now,
+                "cancel_reason": reason,
+                "updated_at": now,
+                "finished_at": now,
+            }
+        )
+        manifest = _read_json(manifest_path)
+        manifest.update({"status": "cancelled", "updated_at": now})
+        _write_json(manifest_path, manifest)
+    else:
+        status.update(
+            {
+                "cancel_requested": True,
+                "cancel_requested_at": status.get("cancel_requested_at") or now,
+                "cancel_reason": reason,
+                "updated_at": now,
+            }
+        )
+        if current_status not in {"completed", "failed", "cancelled"}:
+            status["status"] = "cancel_requested"
+    _write_json(status_path, status)
+
+    db_path = graph_path / "graph_data.sqlite"
+    if db_path.exists():
+        with _connect(db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO history (event_type, detail_json, created_at)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "cancel_requested",
+                    json.dumps({"reason": reason}, ensure_ascii=False),
+                    now,
+                ),
+            )
 
 
 def delete_graph_job(graph_dir: str | Path) -> Path:
@@ -365,7 +438,7 @@ def _read_json(path: Path, default: dict[str, Any] | None = None) -> dict[str, A
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, factory=ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 

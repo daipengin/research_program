@@ -1,0 +1,39 @@
+[paths]
+data_format_config = "configs/data_format/run_v1.toml"
+output_runs_dir = "data/run/simulation_runs.sqlite"
+
+[simulation]
+num_runs = 1
+seed = 12345
+coupling_function = "LINEAR"
+coupling_strength = 10
+strength_ratio = -0.0001
+cycle_time = 30000
+listening_rate = 25
+device_count = 20
+duration = 30000000
+start_step_count = 100
+start_step = 10
+start_timing_mode = "random"
+fixed_start_times = []
+fixed_start_interval = 10
+fixed_start_offset = 0
+simulation_mode = "standard"
+carrier_sense_duration_ms = 0.0
+lora_payload_bytes = 16
+lora_spreading_factor = 7
+lora_bandwidth_hz = 125000
+lora_coding_rate_denominator = 5
+lora_preamble_symbols = 8
+lora_explicit_header = true
+lora_crc_enabled = true
+lora_low_data_rate_optimize = "auto"
+save_asleep_log = false
+save_carrier_sense_log = false
+tags = ["auto", "generated", "web"]
+max_workers = 0
+
+[sweep]
+enabled = false
+coupling_functions = ["KURAMOTO", "LINEAR", "NewSIN"]
+coupling_strength_values = [10, 20, 30, 40, 50]

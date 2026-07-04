@@ -18,6 +18,13 @@ data/archives/*
 outputs/figures/*
 outputs/reports/*
 outputs/cache/*
+outputs/settings/**
+outputs/graph_runs/**
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.db
 !data/runs/.gitkeep
 !data/run/.gitkeep
 !data/aggregated/.gitkeep
