@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import base64
 import json
 import os
 import platform
@@ -486,6 +487,7 @@ def render_results_page() -> None:
     if output_path is not None:
         st.subheader("Representative PDF")
         st.code(str(output_path), language="text")
+        render_pdf_preview(output_path)
         st.download_button(
             "Download PDF",
             data=output_path.read_bytes(),
@@ -833,6 +835,23 @@ def representative_pdf_path(graph_dir: Path) -> Path | None:
         return None
     path = graph_dir / str(row[0])
     return path if path.exists() else None
+
+
+def render_pdf_preview(pdf_path: Path) -> None:
+    pdf_bytes = pdf_path.read_bytes()
+    encoded_pdf = base64.b64encode(pdf_bytes).decode("ascii")
+    st.markdown(
+        f"""
+        <iframe
+            src="data:application/pdf;base64,{encoded_pdf}"
+            width="100%"
+            height="720"
+            type="application/pdf"
+            style="border: 1px solid #ddd; border-radius: 4px;"
+        ></iframe>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def save_plot_settings_and_output(
