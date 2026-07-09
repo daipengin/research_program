@@ -70,6 +70,7 @@ class SimulationRequest:
     max_workers: int = 0
     start_timing_mode: StartTimingMode = "random"
     fixed_start_times: tuple[int, ...] = tuple()
+    initial_start_times_by_run: tuple[tuple[int, ...], ...] = tuple()
     fixed_start_interval: int = 10
     fixed_start_offset: int = 0
     simulation_mode: SimulationMode = "standard"
@@ -244,6 +245,23 @@ def _random_ranges_factory(request: SimulationRequest):
 
 def _random_cycle_ms_with_replacement_ranges_factory(request: SimulationRequest):
     def ranges_factory(rng: Any, index: int) -> list[tuple[int, int, int]]:
+        if request.initial_start_times_by_run:
+            if index >= len(request.initial_start_times_by_run):
+                raise ValueError(
+                    "initial_start_times_by_run does not contain run index "
+                    f"{index}"
+                )
+            start_times = tuple(int(value) for value in request.initial_start_times_by_run[index])
+            if len(start_times) != request.device_count:
+                raise ValueError(
+                    "each initial_start_times_by_run entry must contain exactly "
+                    f"device_count values ({request.device_count}), got {len(start_times)}"
+                )
+            return generate_ranges_from_start_times(
+                start_times=list(start_times),
+                duration=request.duration,
+                start_device_id=0,
+            )
         return generate_ranges_same_duration_from_random_cycle_starts(
             rng=rng,
             cycle_time=request.cycle_time,

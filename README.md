@@ -154,6 +154,7 @@ Interval PER vs K用のjobを追加します。
 
 - PDF download
 - aggregate済みデータからPDF再描画
+- グラフ上への最小PER値注釈表示
 - graph folder完全削除
 
 通常の再描画ではシミュレーション生データを読み直さず、`graph_data.sqlite` の集計済みデータを使います。再描画結果は代表PDFを上書きします。
@@ -279,6 +280,17 @@ Interval PER vs K用の現在のデフォルト:
 - `random_cycle_ms_with_replacement`
 - 1 cycle内の `0` から `cycle_time - 1` msまでを1ms刻みで候補にする
 - device_count個を重複ありでランダム選択
+- job開始時にrun indexごとの初期タイミングセットを先に作る
+- すべてのK値で同じrun indexの初期タイミングセットを使う
+
+例:
+
+```text
+K=0, run index=0 と K=5, run index=0 は同じ初期タイミング
+K=0, run index=1 と K=5, run index=1 は同じ初期タイミング
+```
+
+これにより、Kごとの比較で初期条件の違いが混ざりにくくなります。
 
 この選び方はInterval PER vs Kのgraph workflow側で指定しています。他のグラフ種を追加する場合は、そのグラフ種ごとに初期タイミング方針を決めます。
 

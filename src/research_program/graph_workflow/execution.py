@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import sqlite3
 import time
 from dataclasses import replace
@@ -78,10 +79,31 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
     k_values = [float(value) for value in params.get("k_values", [])]
     runs_per_k = int(params.get("runs_per_k", 1))
     total_runs = len(k_values) * runs_per_k
+    initial_start_times_by_run = _initial_start_times_by_run(params)
     aggregate_set_id = _aggregate_set_id(
         float(params["interval_start_ms"]),
         float(params["interval_end_ms"]),
     )
+    completed_pairs = _completed_run_pairs(db_path, aggregate_set_id)
+    expected_pairs = [
+        (float(k_value), int(repeat_index))
+        for k_value in k_values
+        for repeat_index in range(runs_per_k)
+    ]
+    initial_completed = sum(1 for pair in expected_pairs if pair in completed_pairs)
+    pending_pairs = [
+        pair for pair in expected_pairs if pair not in completed_pairs
+    ]
+    if initial_completed > 0 or str(status.get("status")) in {"cancelled", "failed"}:
+        _append_history(
+            db_path,
+            "job_resume_started",
+            {
+                "completed_runs": initial_completed,
+                "pending_runs": len(pending_pairs),
+                "total_runs": total_runs,
+            },
+        )
 
     status.update(
         {
@@ -89,22 +111,28 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
             "started_at": status.get("started_at") or utc_now_iso(),
             "updated_at": utc_now_iso(),
             "total_runs": total_runs,
-            "completed_runs": 0,
+            "completed_runs": initial_completed,
             "current_run_id": "",
+            "cancel_requested": False,
+            "cancel_requested_at": None,
+            "cancel_reason": "",
+            "finished_at": None,
             "error": "",
         }
     )
     _write_json(status_path, status)
 
-    completed = 0
+    completed = initial_completed
     try:
-        for k_value in k_values:
+        for k_value, repeat_index in pending_pairs:
             request = _simulation_request_for_k(
                 graph_id=str(manifest["graph_id"]),
                 graph_key=graph_key,
                 params=params,
                 k_value=k_value,
                 output_root=raw_run_db_path,
+                num_runs=1,
+                initial_start_times_by_run=(initial_start_times_by_run[repeat_index],),
             )
             _raise_if_cancel_requested(status_path, db_path)
 
@@ -120,7 +148,7 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
                     request_id=str(manifest["graph_id"]),
                     run_id=run_id,
                     coupling_strength=k_value,
-                    repeat_index=done - 1,
+                    repeat_index=repeat_index,
                     raw_path=f"{RAW_RUN_DB_NAME}::{run_id}",
                     metadata=result,
                 )
@@ -144,6 +172,13 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
 
             run_simulation_request(request, progress_callback=on_progress)
 
+        if not pending_pairs:
+            _append_history(
+                db_path,
+                "job_resume_no_missing_runs",
+                {"completed_runs": completed, "total_runs": total_runs},
+            )
+
         status.update(
             {
                 "status": "running_analysis",
@@ -166,6 +201,7 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
             interval_start_ms=float(params["interval_start_ms"]),
             interval_end_ms=float(params["interval_end_ms"]),
             plot_settings=params.get("plot_settings", {}),
+            strength_ratio=float(dict(params.get("simulation_base") or {}).get("strength_ratio", -0.0001)),
         )
         _save_output(db_path, aggregate_set_id, output_path, graph_dir)
 
@@ -297,6 +333,27 @@ def rebuild_interval_aggregate(db_path: Path, aggregate_set_id: str) -> int:
     return len(rows)
 
 
+def _completed_run_pairs(db_path: Path, aggregate_set_id: str) -> set[tuple[float, int]]:
+    if not db_path.exists():
+        return set()
+    with _connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT r.coupling_strength, r.repeat_index
+            FROM runs AS r
+            INNER JOIN run_interval_per AS p
+                ON p.run_id = r.run_id
+            WHERE r.status = 'completed'
+              AND p.aggregate_set_id = ?
+            """,
+            (aggregate_set_id,),
+        ).fetchall()
+    return {
+        (float(row["coupling_strength"]), int(row["repeat_index"]))
+        for row in rows
+    }
+
+
 def render_interval_per_vs_k_pdf(
     *,
     graph_dir: Path,
@@ -306,6 +363,7 @@ def render_interval_per_vs_k_pdf(
     interval_start_ms: float,
     interval_end_ms: float,
     plot_settings: dict[str, Any] | None = None,
+    strength_ratio: float | None = None,
 ) -> Path:
     settings = plot_settings or {}
     with _connect(db_path) as conn:
@@ -364,6 +422,43 @@ def render_interval_per_vs_k_pdf(
     if settings.get("xlim_min") is not None or settings.get("xlim_max") is not None:
         plt.xlim(left=settings.get("xlim_min"), right=settings.get("xlim_max"))
 
+    if bool(settings.get("show_min_annotation", False)):
+        ax = plt.gca()
+        min_row = df.loc[df["per_percent_mean"].idxmin()]
+        min_x = float(min_row["coupling_strength"])
+        min_y = float(min_row["per_percent_mean"])
+        ax.scatter(
+            [min_x],
+            [min_y],
+            marker="*",
+            s=max(float(settings.get("marker_size", 6.0)) * 28.0, 80.0),
+            color="tab:red",
+            zorder=5,
+            clip_on=False,
+        )
+        y_offset = float(settings.get("min_annotation_y_offset", 10.0))
+        y_low, y_high = ax.get_ylim()
+        if y_high > y_low and min_y > y_low + (y_high - y_low) * 0.8:
+            y_offset = -abs(y_offset)
+        va = "top" if y_offset < 0 else "bottom"
+        ax.annotate(
+            f"min PER: {min_y:.3g}%\nK={min_x:g}",
+            xy=(min_x, min_y),
+            xytext=(
+                float(settings.get("min_annotation_x_offset", 10.0)),
+                y_offset,
+            ),
+            textcoords="offset points",
+            fontsize=int(settings.get("min_annotation_font_size", 10)),
+            color="tab:red",
+            arrowprops={"arrowstyle": "->", "linewidth": 0.8, "color": "tab:red"},
+            bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": "tab:red", "alpha": 0.9},
+            annotation_clip=False,
+            va=va,
+            zorder=6,
+        )
+
+    ax = plt.gca()
     plt.xlabel("Coupling strength K", fontsize=int(settings.get("font_size_label", 12)))
     plt.ylabel("Interval PER [%]", fontsize=int(settings.get("font_size_label", 12)))
     if bool(settings.get("show_title", True)):
@@ -373,12 +468,74 @@ def render_interval_per_vs_k_pdf(
         )
     plt.xticks(fontsize=int(settings.get("font_size_ticks", 10)))
     plt.yticks(fontsize=int(settings.get("font_size_ticks", 10)))
+    _add_x_axis_multiplier(ax, strength_ratio, int(settings.get("font_size_ticks", 10)))
     plt.grid(bool(settings.get("show_grid", True)))
     plt.tight_layout()
-    plt.savefig(output_path, dpi=int(settings.get("save_dpi", 300)))
+    plt.savefig(output_path, dpi=int(settings.get("save_dpi", 300)), bbox_inches="tight")
     plt.close()
     _append_history(db_path, "pdf_rendered", {"output": _relative_to_graph(graph_dir, output_path)})
     return output_path
+
+
+def _add_x_axis_multiplier(ax: Any, strength_ratio: float | None, font_size: int) -> None:
+    if strength_ratio is None:
+        return
+    ax.text(
+        1.0,
+        -0.105,
+        f"$\\times$ {_format_scientific(strength_ratio)}",
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=font_size,
+    )
+
+
+def _format_scientific(value: float) -> str:
+    text = f"{value:.1e}"
+    text = text.replace("e-0", "e-").replace("e+0", "e+")
+    return text
+
+
+def _initial_start_times_by_run(params: dict[str, Any]) -> tuple[tuple[int, ...], ...]:
+    base = dict(params.get("simulation_base") or {})
+    runs_per_k = int(params.get("runs_per_k", 1))
+    cycle_time = int(base.get("cycle_time", 30000))
+    device_count = int(base.get("device_count", 20))
+    seed = int(base.get("seed", 1))
+
+    if runs_per_k < 1:
+        raise ValueError("runs_per_k must be at least 1")
+    if cycle_time < 1:
+        raise ValueError("cycle_time must be at least 1")
+    if device_count < 1:
+        raise ValueError("device_count must be at least 1")
+
+    start_ms, end_ms = _initial_phase_range_ms(base, cycle_time)
+    rng = random.Random(seed)
+    start_times_by_run: list[tuple[int, ...]] = []
+    for _ in range(runs_per_k):
+        starts = [rng.randrange(start_ms, end_ms) for _ in range(device_count)]
+        starts.sort()
+        start_times_by_run.append(tuple(starts))
+    return tuple(start_times_by_run)
+
+
+def _initial_phase_range_ms(base: dict[str, Any], cycle_time: int) -> tuple[int, int]:
+    start_percent = float(base.get("initial_phase_start_percent", 0.0))
+    end_percent = float(base.get("initial_phase_end_percent", 100.0))
+    if not 0.0 <= start_percent <= 100.0:
+        raise ValueError("initial_phase_start_percent must be between 0 and 100")
+    if not 0.0 <= end_percent <= 100.0:
+        raise ValueError("initial_phase_end_percent must be between 0 and 100")
+    if end_percent <= start_percent:
+        raise ValueError("initial_phase_end_percent must be larger than initial_phase_start_percent")
+
+    start_ms = int(math.floor(cycle_time * start_percent / 100.0))
+    end_ms = int(math.ceil(cycle_time * end_percent / 100.0))
+    start_ms = max(0, min(start_ms, cycle_time - 1))
+    end_ms = max(start_ms + 1, min(end_ms, cycle_time))
+    return start_ms, end_ms
 
 
 def _simulation_request_for_k(
@@ -388,12 +545,14 @@ def _simulation_request_for_k(
     params: dict[str, Any],
     k_value: float,
     output_root: Path,
+    num_runs: int | None = None,
+    initial_start_times_by_run: tuple[tuple[int, ...], ...] = tuple(),
 ) -> SimulationRequest:
     base = dict(params.get("simulation_base") or {})
     coupling_function = str(graph_key["coupling_function"])
     return SimulationRequest(
-        num_runs=int(params.get("runs_per_k", 1)),
-        seed=int(base.get("seed", 1)) + int(round(k_value * 1000)),
+        num_runs=int(num_runs if num_runs is not None else params.get("runs_per_k", 1)),
+        seed=int(base.get("seed", 1)),
         coupling_function=coupling_function,
         coupling_strength=int(k_value),
         strength_ratio=float(base.get("strength_ratio", -0.0001)),
@@ -415,6 +574,7 @@ def _simulation_request_for_k(
         start_timing_mode=str(
             base.get("start_timing_mode", "random_cycle_ms_with_replacement")
         ),  # type: ignore[arg-type]
+        initial_start_times_by_run=initial_start_times_by_run,
         simulation_mode="per_measurement",
         carrier_sense_duration_ms=float(base.get("carrier_sense_duration_ms", 0.0)),
         lora_payload_bytes=int(base.get("lora_payload_bytes", 16)),

@@ -272,7 +272,10 @@ class BufferedCsvEventLogger:
         )
         selected_start_times_as_text = ";".join(str(start) for start, _, _ in config.ranges)
         tags_as_text = ";".join(config.tags)
-        is_random_start = config.start_timing_mode == "random"
+        is_random_start = config.start_timing_mode in {
+            "random",
+            "random_cycle_ms_with_replacement",
+        }
         random_start_min = 0 if is_random_start else ""
         random_start_max = (
             int(config.start_step) * int(config.start_step_count)
@@ -1015,6 +1018,9 @@ def run_simulation_case(
 
     return {
         "run_id": config.run_id,
+        "random_seed": config.random_seed,
+        "random_run_index": config.random_run_index,
+        "selected_start_times": ";".join(str(start) for start, _, _ in config.ranges),
         "output_dir": str(output_dir),
         "storage_kind": storage_kind,
         "elapsed_sec": simulation_elapsed,
