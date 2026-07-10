@@ -1,5 +1,5 @@
-coupling_function,k_min,k_max,k_count,k_step_values,device_counts,cycle_times,listening_rates,durations,formats,run_count,readable_run_count
-KURAMOTO,1,1491,150,10,50,10000,25,1800000,current_graph_manifest,150000,0
-LINEAR,1,150,150,1,50,10000,25,1800000,current_graph_manifest,150000,0
-LINEAR_4,1,150,150,1,50,10000,25,1800000,current_graph_manifest,225000,0
-NewSIN,1,150,150,1,50,10000,25,1800000,current_graph_manifest,75000,0
+coupling_function,k_min,k_max,k_count,k_step_values,device_counts,cycle_times,listening_rates,durations,formats,run_count,readable_run_count,total_data_size_bytes
+KURAMOTO,1,1491,150,10,50,10000,25,1800000,current_graph_manifest,75000,75000,98341533561
+LINEAR,1,150,150,1,50,10000,25,1800000,current_graph_manifest,75000,75000,97581889787
+LINEAR_4,1,150,150,1,50,10000,25,1800000,current_graph_manifest,75000,75000,99094546537
+NewSIN,1,150,150,1,50,10000,25,1800000,current_graph_manifest,75000,75000,100079404239
