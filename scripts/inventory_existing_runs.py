@@ -50,6 +50,8 @@ CSV_COLUMNS = [
     "trial_index",
     "simulation_length_cycles",
     "duration",
+    "send_log_rows",
+    "has_cycle_cache",
     "analysis_readable",
     "analysis_readable_detail",
 ]
@@ -71,11 +73,20 @@ class InventoryRow:
     trial_index: str = UNKNOWN
     simulation_length_cycles: str = UNKNOWN
     duration: str = UNKNOWN
+    send_log_rows: str = UNKNOWN
+    has_cycle_cache: str = UNKNOWN
     analysis_readable: str = "no"
     analysis_readable_detail: str = UNKNOWN
 
     def as_dict(self) -> dict[str, str]:
         return {column: str(getattr(self, column)) for column in CSV_COLUMNS}
+
+
+@dataclass(frozen=True)
+class RawRunStats:
+    run_ids_by_k: dict[str, list[str]]
+    send_log_rows_by_run_id: dict[str, int]
+    cycle_cache_run_ids: set[str]
 
 
 def main() -> int:
@@ -191,6 +202,8 @@ def inventory_csv_run_dir(run_dir: Path, root: Path) -> InventoryRow:
         if cycle_count != UNKNOWN
         else cycles_from_duration(duration, cycle_time),
         duration=duration,
+        send_log_rows=csv_send_log_rows(send_log_path),
+        has_cycle_cache="yes" if (run_dir / "calculated_Cycle_data.csv").exists() else "no",
         analysis_readable="yes" if analysis_ok else "no",
         analysis_readable_detail=analysis_detail,
     )
@@ -217,7 +230,10 @@ def inventory_sqlite_run_store(sqlite_path: Path, root: Path) -> list[InventoryR
                 tags = tags_from_metadata(metadata)
                 cycle_time = first_known(metadata, "cycle_time")
                 duration = duration_from_ranges(metadata.get("ranges"))
-                readable, detail = readable_by_run.get(run_id, (False, "not checked"))
+                readable, detail, send_log_rows, has_cycle_cache = readable_by_run.get(
+                    run_id,
+                    (False, "not checked", UNKNOWN, UNKNOWN),
+                )
                 trial_count = graph_repeat_counts.get(run_id, UNKNOWN)
                 if trial_count == UNKNOWN:
                     trial_count = UNKNOWN
@@ -239,6 +255,8 @@ def inventory_sqlite_run_store(sqlite_path: Path, root: Path) -> list[InventoryR
                         trial_index=first_known(metadata, "random_run_index"),
                         simulation_length_cycles=cycles_from_duration(duration, cycle_time),
                         duration=duration,
+                        send_log_rows=send_log_rows,
+                        has_cycle_cache=has_cycle_cache,
                         analysis_readable="yes" if readable else "no",
                         analysis_readable_detail=detail,
                     )
@@ -282,12 +300,20 @@ def inventory_graph_manifest(graph_dir: Path, root: Path) -> list[InventoryRow]:
     listening_rate = first_known(simulation_base, "listening_rate")
     simulation_length_cycles = cycles_from_duration(duration, cycle_time)
     runs_per_k_text = str(runs_per_k)
+    raw_stats = graph_run_stats(graph_dir)
     rows: list[InventoryRow] = []
     k_value_list = k_values if isinstance(k_values, list) else []
     for k_value in k_value_list:
         k_text = text_or_unknown(k_value)
+        raw_run_ids = raw_stats.run_ids_by_k.get(k_text, [])
         for repeat_index in range(runs_per_k):
-            run_id = f"manifest_k_{k_value}_repeat_{repeat_index}"
+            run_id = (
+                raw_run_ids[repeat_index]
+                if repeat_index < len(raw_run_ids)
+                else f"manifest_k_{k_value}_repeat_{repeat_index}"
+            )
+            send_log_rows = raw_stats.send_log_rows_by_run_id.get(run_id, 0)
+            has_cycle_cache = run_id in raw_stats.cycle_cache_run_ids
             rows.append(
                 InventoryRow(
                     path=f"{graph_rel}::{run_id}",
@@ -304,9 +330,13 @@ def inventory_graph_manifest(graph_dir: Path, root: Path) -> list[InventoryRow]:
                     trial_index=str(repeat_index),
                     simulation_length_cycles=simulation_length_cycles,
                     duration=duration,
-                    analysis_readable="no",
+                    send_log_rows=str(send_log_rows) if send_log_rows else "0",
+                    has_cycle_cache="yes" if has_cycle_cache else "no",
+                    analysis_readable="yes" if send_log_rows > 0 else "no",
                     analysis_readable_detail=(
-                        "large graph_data.sqlite was not opened; manifest inventory only"
+                        "send_log-derived cycle counts found for this run"
+                        if send_log_rows > 0
+                        else "manifest inventory; no send_log-derived rows found for run"
                     ),
                 )
             )
@@ -324,6 +354,8 @@ def inventory_graph_manifest(graph_dir: Path, root: Path) -> list[InventoryRow]:
             listening_rate=listening_rate,
             simulation_length_cycles=simulation_length_cycles,
             duration=duration,
+            send_log_rows=UNKNOWN,
+            has_cycle_cache=UNKNOWN,
             analysis_readable="no",
             analysis_readable_detail="manifest did not contain k_values/runs_per_k",
         )
@@ -373,6 +405,8 @@ def inventory_graph_metadata_db(sqlite_path: Path, root: Path) -> list[Inventory
                 trial_index=first_known(merged, "repeat_index", "random_run_index"),
                 simulation_length_cycles=cycles_from_duration(duration, cycle_time),
                 duration=duration,
+                send_log_rows=UNKNOWN,
+                has_cycle_cache=UNKNOWN,
                 analysis_readable="no",
                 analysis_readable_detail="graph metadata only; raw send_log is not directly available here",
             )
@@ -400,40 +434,154 @@ def repeat_counts_for_graph(sqlite_path: Path) -> dict[str, int]:
     }
 
 
-def sqlite_analysis_readability(conn: sqlite3.Connection) -> dict[str, tuple[bool, str]]:
-    result: dict[str, tuple[bool, str]] = {}
+def sqlite_analysis_readability(conn: sqlite3.Connection) -> dict[str, tuple[bool, str, str, str]]:
+    result: dict[str, tuple[bool, str, str, str]] = {}
     try:
         run_rows = conn.execute("SELECT run_id, tags FROM runs ORDER BY run_id").fetchall()
     except sqlite3.Error as exc:
-        return {UNKNOWN: (False, f"runs table unreadable: {exc}")}
+        return {UNKNOWN: (False, f"runs table unreadable: {exc}", UNKNOWN, UNKNOWN)}
 
-    has_send_log = sqlite_table_has_any_row(conn, "send_log")
-    has_cycle_data = sqlite_table_has_any_row(conn, "calculated_cycle_data")
+    send_log_rows_by_run_id = sqlite_send_log_row_counts(conn)
+    cycle_cache_run_ids = sqlite_distinct_run_ids(conn, "calculated_cycle_data")
 
     for row in run_rows:
         run_id = str(row["run_id"])
         try:
             tags = parse_tags(row["tags"] if "tags" in row.keys() else "")
             calculate_phase_gap_error.extract_device_count_from_tags(tags)
-            if not has_send_log:
-                result[run_id] = (False, "send_log table is empty")
-            elif not has_cycle_data:
-                result[run_id] = (False, "calculated_cycle_data table is empty")
+            send_log_rows = send_log_rows_by_run_id.get(run_id, 0)
+            has_cycle_cache = run_id in cycle_cache_run_ids
+            if send_log_rows <= 0:
+                result[run_id] = (False, "send_log has no rows for this run", "0", "yes" if has_cycle_cache else "no")
             else:
-                result[run_id] = (True, "sqlite schema and representative rows readable by current graph pipeline")
+                result[run_id] = (
+                    True,
+                    "send_log rows found for this run",
+                    str(send_log_rows),
+                    "yes" if has_cycle_cache else "no",
+                )
         except Exception as exc:
-            result[run_id] = (False, f"sqlite analysis read failed: {exc}")
+            result[run_id] = (False, f"sqlite analysis read failed: {exc}", UNKNOWN, UNKNOWN)
     return result
 
 
-def sqlite_table_has_any_row(conn: sqlite3.Connection, table_name: str) -> bool:
+def sqlite_send_log_row_counts(conn: sqlite3.Connection) -> dict[str, int]:
     try:
-        row = conn.execute(
-            f"SELECT 1 FROM {table_name} LIMIT 1",
-        ).fetchone()
+        rows = conn.execute(
+            "SELECT run_id, COUNT(*) AS n FROM send_log GROUP BY run_id"
+        ).fetchall()
     except sqlite3.Error:
-        return False
-    return row is not None
+        return {}
+    return {str(row["run_id"]): int(row["n"]) for row in rows}
+
+
+def sqlite_distinct_run_ids(conn: sqlite3.Connection, table_name: str) -> set[str]:
+    try:
+        rows = conn.execute(f"SELECT DISTINCT run_id FROM {table_name}").fetchall()
+    except sqlite3.Error:
+        return set()
+    return {str(row["run_id"]) for row in rows}
+
+
+def raw_run_stats(raw_db_path: Path) -> RawRunStats:
+    if not raw_db_path.exists():
+        return RawRunStats({}, {}, set())
+    try:
+        with sqlite3.connect(raw_db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            run_rows = conn.execute(
+                """
+                SELECT run_id, coupling_strength
+                FROM runs
+                ORDER BY coupling_strength, run_id
+                """
+            ).fetchall()
+            send_counts = sqlite_send_log_row_counts(conn)
+            cycle_cache_run_ids = sqlite_distinct_run_ids(conn, "calculated_cycle_data")
+    except sqlite3.Error:
+        return RawRunStats({}, {}, set())
+
+    run_ids_by_k: dict[str, list[str]] = {}
+    for row in run_rows:
+        k_text = text_or_unknown(row["coupling_strength"])
+        run_ids_by_k.setdefault(k_text, []).append(str(row["run_id"]))
+    return RawRunStats(run_ids_by_k, send_counts, cycle_cache_run_ids)
+
+
+def graph_run_stats(graph_dir: Path) -> RawRunStats:
+    graph_db_path = graph_dir / "graph_data.sqlite"
+    if not graph_db_path.exists():
+        return raw_run_stats(graph_dir / "raw_run.sqlite")
+
+    run_ids_by_k: dict[str, list[tuple[int, str]]] = {}
+    try:
+        with sqlite3.connect(graph_db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT run_id, coupling_strength, repeat_index
+                FROM runs
+                WHERE status = 'completed'
+                ORDER BY coupling_strength, repeat_index
+                """
+            ).fetchall()
+    except sqlite3.Error:
+        rows = []
+
+    for row in rows:
+        k_text = text_or_unknown(row["coupling_strength"])
+        run_ids_by_k.setdefault(k_text, []).append((int(row["repeat_index"]), str(row["run_id"])))
+
+    count_db_path = graph_dir / "interval_per.sqlite"
+    if not count_db_path.exists():
+        count_db_path = graph_db_path
+    send_counts, cycle_cache_run_ids = graph_cycle_count_stats(count_db_path)
+    if not send_counts and count_db_path != graph_db_path:
+        send_counts, cycle_cache_run_ids = graph_cycle_count_stats(graph_db_path)
+
+    return RawRunStats(
+        {
+            k_text: [
+                run_id
+                for _, run_id in sorted(repeat_rows, key=lambda item: item[0])
+            ]
+            for k_text, repeat_rows in run_ids_by_k.items()
+        },
+        send_counts,
+        cycle_cache_run_ids,
+    )
+
+
+def graph_cycle_count_stats(db_path: Path) -> tuple[dict[str, int], set[str]]:
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT run_id, MAX(cumulative_actual_packets) AS n
+                FROM run_cycle_counts
+                GROUP BY run_id
+                """
+            ).fetchall()
+    except sqlite3.Error:
+        return {}, set()
+    counts = {
+        str(row["run_id"]): int(row["n"])
+        for row in rows
+        if row["n"] is not None
+    }
+    return counts, set(counts)
+
+
+def csv_send_log_rows(send_log_path: Path) -> str:
+    if not send_log_path.exists():
+        return "0"
+    try:
+        with send_log_path.open("r", encoding="utf-8", errors="ignore") as handle:
+            row_count = sum(1 for _ in handle)
+    except OSError:
+        return UNKNOWN
+    return str(max(0, row_count - 1))
 
 
 def try_csv_analysis_read(
