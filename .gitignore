@@ -21,6 +21,7 @@ outputs/cache/*
 outputs/settings/**
 outputs/graph_runs/**
 results/**
+results_local/**
 *.sqlite
 *.sqlite3
 *.sqlite-wal
