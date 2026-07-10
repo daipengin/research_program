@@ -16,6 +16,7 @@ from research_program.graph_workflow.storage import (
     create_interval_per_vs_k_job,
     create_phase_gap_error_vs_k_job,
     list_graph_jobs,
+    load_graph_job,
 )
 from research_program.simulation.lora_airtime import (
     LoRaAirtimeConfig,
@@ -403,10 +404,9 @@ def render_convergence_job_add_page(
         for job in list_graph_jobs()
         if job.status == "completed" and (job.path / RAW_RUN_DB_NAME).exists()
     ]
-    source_options = ["new_simulation"]
+    source_options = ["new_simulation", "existing_graph"]
     source_labels: list[str] = []
     if existing_jobs:
-        source_options.append("existing_graph")
         source_labels = [
             f"{job.graph_id} / {job.graph_type} / {job.completed_runs}/{job.total_runs}"
             for job in existing_jobs
@@ -425,8 +425,18 @@ def render_convergence_job_add_page(
     source_job = None
     source_summary = []
     if source_mode == "existing_graph":
-        if not source_labels:
-            st.warning("選択できる既存graph folderがありません。 / No existing graph folder is available.")
+        external_source_path = st.text_input(
+            "外部graph folder path / External graph folder path",
+            value=external_source_path_default(saved_params),
+            key="conv_external_source_graph_path",
+            help="例 / Example: F:\\researchDatas\\20260704_230626_8d964914",
+        )
+        if external_source_path.strip():
+            source_job, source_error = load_external_source_job(external_source_path)
+            if source_error:
+                st.error(source_error)
+        elif not source_labels:
+            st.warning("選択できるローカルgraph folderがありません。外部パスを入力してください。 / No local graph folder is available. Enter an external path.")
         else:
             selected_source_label = st.selectbox(
                 "元graph folder / Source graph folder",
@@ -434,6 +444,8 @@ def render_convergence_job_add_page(
                 key="conv_source_graph",
             )
             source_job = existing_jobs[source_labels.index(selected_source_label)]
+        if source_job is not None:
+            selected_source_label = str(source_job.path)
             source_summary = source_run_summary(source_job.path / "graph_data.sqlite")
             source_manifest = read_json(source_job.path / "manifest.json")
             source_requests = read_json(source_job.path / "requests.json")
@@ -731,12 +743,12 @@ def render_convergence_job_add_page(
     if not submitted:
         return
 
-    source_job = None
     if source_mode == "existing_graph":
         if not selected_source_label:
             st.error("元graph folderを選択してください。 / Source graph folder is required.")
             return
-        source_job = existing_jobs[source_labels.index(selected_source_label)]
+        if source_job is None:
+            source_job = existing_jobs[source_labels.index(selected_source_label)]
         source_manifest = read_json(source_job.path / "manifest.json")
         source_requests = read_json(source_job.path / "requests.json")
         source_params = source_requests.get("params", source_manifest.get("input", {}))
@@ -857,10 +869,9 @@ It is the mean absolute difference between adjacent oscillator phase gaps and th
         for job in list_graph_jobs()
         if job.status == "completed" and (job.path / RAW_RUN_DB_NAME).exists()
     ]
-    source_options = ["new_simulation"]
+    source_options = ["new_simulation", "existing_graph"]
     source_labels: list[str] = []
     if existing_jobs:
-        source_options.append("existing_graph")
         source_labels = [
             f"{job.graph_id} / {job.graph_type} / {job.completed_runs}/{job.total_runs}"
             for job in existing_jobs
@@ -882,8 +893,18 @@ It is the mean absolute difference between adjacent oscillator phase gaps and th
     source_params: dict[str, object] = {}
     source_base: dict[str, object] = {}
     if source_mode == "existing_graph":
-        if not source_labels:
-            st.warning("選択できる既存graph folderがありません。 / No existing graph folder is available.")
+        external_source_path = st.text_input(
+            "外部graph folder path / External graph folder path",
+            value=external_source_path_default(saved_params),
+            key="phase_external_source_graph_path",
+            help="例 / Example: F:\\researchDatas\\20260704_230626_8d964914",
+        )
+        if external_source_path.strip():
+            source_job, source_error = load_external_source_job(external_source_path)
+            if source_error:
+                st.error(source_error)
+        elif not source_labels:
+            st.warning("選択できるローカルgraph folderがありません。外部パスを入力してください。 / No local graph folder is available. Enter an external path.")
         else:
             selected_source_label = st.selectbox(
                 "元graph folder / Source graph folder",
@@ -891,6 +912,8 @@ It is the mean absolute difference between adjacent oscillator phase gaps and th
                 key="phase_source_graph",
             )
             source_job = existing_jobs[source_labels.index(selected_source_label)]
+        if source_job is not None:
+            selected_source_label = str(source_job.path)
             source_summary = source_run_summary(source_job.path / "graph_data.sqlite")
             source_manifest = read_json(source_job.path / "manifest.json")
             source_requests = read_json(source_job.path / "requests.json")
@@ -1012,7 +1035,8 @@ It is the mean absolute difference between adjacent oscillator phase gaps and th
         if not selected_source_label:
             st.error("元graph folderを選択してください。 / Source graph folder is required.")
             return
-        source_job = existing_jobs[source_labels.index(selected_source_label)]
+        if source_job is None:
+            source_job = existing_jobs[source_labels.index(selected_source_label)]
         source_manifest = read_json(source_job.path / "manifest.json")
         source_requests = read_json(source_job.path / "requests.json")
         source_params = source_requests.get("params", source_manifest.get("input", {}))
@@ -1313,6 +1337,64 @@ def clamped_repeat_range(
     if value_max < value_min:
         value_min, value_max = value_max, value_min
     return value_min, value_max
+
+
+def external_source_path_default(saved_params: dict[str, object]) -> str:
+    value = saved_params.get("source_graph_dir")
+    if value is None:
+        return ""
+    text = str(value)
+    if not text:
+        return ""
+    try:
+        path = Path(text)
+    except (OSError, ValueError):
+        return ""
+    return text if path.is_absolute() else ""
+
+
+def load_external_source_job(path_text: str) -> tuple[object | None, str]:
+    text = path_text.strip().strip('"')
+    if not text:
+        return None, ""
+    try:
+        graph_dir = Path(text)
+    except (OSError, ValueError) as exc:
+        return None, f"Invalid external graph folder path: {exc}"
+    if graph_dir.name == "manifest.json":
+        graph_dir = graph_dir.parent
+    if graph_dir.is_dir() and not (graph_dir / "manifest.json").exists():
+        matches = [
+            path.parent
+            for path in graph_dir.rglob("manifest.json")
+            if (path.parent / "graph_data.sqlite").exists()
+            and (path.parent / RAW_RUN_DB_NAME).exists()
+        ]
+        if len(matches) == 1:
+            graph_dir = matches[0]
+        elif len(matches) > 1:
+            examples = ", ".join(str(path) for path in matches[:3])
+            return (
+                None,
+                "External path contains multiple graph folders. "
+                f"Please specify one graph folder directly. Examples: {examples}",
+            )
+
+    required_files = ["manifest.json", "graph_data.sqlite", RAW_RUN_DB_NAME]
+    missing = [name for name in required_files if not (graph_dir / name).exists()]
+    if missing:
+        return (
+            None,
+            "External graph folder must contain "
+            f"{', '.join(required_files)}. Missing: {', '.join(missing)}",
+        )
+    try:
+        job = load_graph_job(graph_dir)
+    except Exception as exc:
+        return None, f"Could not load external graph folder: {exc}"
+    if job.status != "completed":
+        return None, f"External graph folder status must be completed. Current status: {job.status}"
+    return job, ""
 
 
 def int_or_default(value: object, default: int) -> int:

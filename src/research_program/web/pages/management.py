@@ -8,17 +8,22 @@ from pathlib import Path
 
 import streamlit as st
 
-from research_program.graph_workflow.storage import RAW_RUN_DB_NAME, get_storage_overview
+from research_program.graph_workflow.storage import (
+    INTERVAL_PER_DB_NAME,
+    RAW_RUN_DB_NAME,
+    get_storage_overview,
+)
 from research_program.web.utils import format_bytes
 
 
 def render_management_page() -> None:
     st.header("その他管理")
     overview = get_storage_overview()
-    col_a, col_b, col_c = st.columns(3)
+    col_a, col_b, col_c, col_d = st.columns(4)
     col_a.metric("graph folders", overview["job_count"])
     col_b.metric("graph SQLite files", overview["sqlite_count"])
     col_c.metric("raw SQLite files", overview["raw_sqlite_count"])
+    col_d.metric("PER SQLite files", overview.get("interval_per_sqlite_count", 0))
 
     st.subheader("Storage layout")
     st.code(
@@ -29,6 +34,7 @@ def render_management_page() -> None:
                 "  status.json",
                 "  requests.json",
                 "  graph_data.sqlite",
+                f"  {INTERVAL_PER_DB_NAME}  # Interval PER calculated/aggregate data",
                 f"  {RAW_RUN_DB_NAME}",
                 "  figures/",
                 "  logs/",
@@ -119,4 +125,3 @@ def format_memory_label(memory: dict[str, object]) -> str:
     if not memory.get("available"):
         return "unknown"
     return f"{memory['used_percent']}% / {memory['total']}"
-

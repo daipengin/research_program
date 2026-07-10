@@ -29,6 +29,7 @@ from research_program.web.utils import (
     format_duration_ms,
     format_graph_key,
     format_percent_range,
+    interval_per_db_path,
     read_aggregate_convergence_cycles,
     read_aggregate_interval_per,
     read_aggregate_phase_gap_error_points,
@@ -104,7 +105,7 @@ def render_results_page() -> None:
         elif job.graph_type == "phase_gap_error_vs_k":
             aggregate_df = read_aggregate_phase_gap_error_points(job.path / "graph_data.sqlite")
         else:
-            aggregate_df = read_aggregate_interval_per(job.path / "graph_data.sqlite")
+            aggregate_df = read_aggregate_interval_per(job.path)
         if aggregate_df.empty:
             st.info("No aggregate data yet.")
         else:
@@ -168,7 +169,7 @@ def render_results_page() -> None:
             aggregate_set_id = f"interval_{int(float(params['interval_start_ms']))}_to_{int(float(params['interval_end_ms']))}"
             output = render_interval_per_vs_k_pdf(
                 graph_dir=job.path,
-                db_path=job.path / "graph_data.sqlite",
+                db_path=interval_per_db_path(job.path),
                 aggregate_set_id=aggregate_set_id,
                 coupling_function=str(job.graph_key.get("coupling_function", "")),
                 interval_start_ms=float(params["interval_start_ms"]),

@@ -17,6 +17,7 @@ GRAPH_TYPE_INTERVAL_PER_VS_K = "interval_per_vs_k"
 GRAPH_TYPE_CONVERGENCE_CYCLE_VS_K = "convergence_cycle_vs_k"
 GRAPH_TYPE_PHASE_GAP_ERROR_VS_K = "phase_gap_error_vs_k"
 RAW_RUN_DB_NAME = "raw_run.sqlite"
+INTERVAL_PER_DB_NAME = "interval_per.sqlite"
 
 
 SCHEMA_SQL = """
@@ -224,7 +225,9 @@ def create_interval_per_vs_k_job(params: dict[str, Any]) -> GraphJobSummary:
     logs_dir.mkdir(parents=True, exist_ok=True)
 
     db_path = graph_dir / "graph_data.sqlite"
+    interval_db_path = graph_dir / INTERVAL_PER_DB_NAME
     _init_db(db_path)
+    _init_db(interval_db_path)
     raw_conn = sqlite_runs.connect(graph_dir / RAW_RUN_DB_NAME)
     try:
         sqlite_runs.initialize(raw_conn)
@@ -333,6 +336,24 @@ def create_interval_per_vs_k_job(params: dict[str, Any]) -> GraphJobSummary:
                 now,
             ),
         )
+    with _connect(interval_db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO aggregate_sets
+                (aggregate_set_id, label, interval_start_ms, interval_end_ms,
+                 per_method, run_filter_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                aggregate_set_id,
+                f"{params['interval_start_ms']} to {params['interval_end_ms']} ms",
+                params["interval_start_ms"],
+                params["interval_end_ms"],
+                params.get("per_method", "interval_packet_error_rate"),
+                "{}",
+                now,
+            ),
+        )
 
     _insert_meta(
         db_path,
@@ -351,7 +372,8 @@ def create_interval_per_vs_k_job(params: dict[str, Any]) -> GraphJobSummary:
             "storage_policy": {
                 "raw_data": "raw_run_sqlite",
                 "raw_run_sqlite": RAW_RUN_DB_NAME,
-                "sqlite": "metadata_intermediate_aggregate",
+                "interval_per_sqlite": INTERVAL_PER_DB_NAME,
+                "sqlite": "metadata_graph_settings_output",
             },
         },
     )
@@ -742,14 +764,69 @@ def get_storage_overview() -> dict[str, Any]:
     jobs = list_graph_jobs()
     db_count = sum(1 for _ in root.rglob("graph_data.sqlite"))
     raw_db_count = sum(1 for _ in root.rglob(RAW_RUN_DB_NAME))
+    interval_per_db_count = sum(1 for _ in root.rglob(INTERVAL_PER_DB_NAME))
     raw_dirs = sum(1 for path in root.rglob("raw") if path.is_dir())
     return {
         "root": str(root),
         "job_count": len(jobs),
         "sqlite_count": db_count,
         "raw_sqlite_count": raw_db_count,
+        "interval_per_sqlite_count": interval_per_db_count,
         "raw_dir_count": raw_dirs,
     }
+
+
+def ensure_interval_per_db(graph_dir: str | Path) -> Path:
+    graph_path = Path(graph_dir)
+    split_db_path = graph_path / INTERVAL_PER_DB_NAME
+    if split_db_path.exists():
+        return split_db_path
+
+    source_db_path = graph_path / "graph_data.sqlite"
+    if not source_db_path.exists():
+        return split_db_path
+
+    try:
+        with _connect(source_db_path) as source_conn:
+            row = source_conn.execute(
+                "SELECT COUNT(*) AS n FROM run_interval_per"
+            ).fetchone()
+            has_interval_data = int(row["n"] if row else 0) > 0
+    except sqlite3.Error:
+        return split_db_path
+    if not has_interval_data:
+        return split_db_path
+
+    _init_db(split_db_path)
+    tables = [
+        "aggregate_sets",
+        "aggregate_interval_per",
+        "history",
+    ]
+    with _connect(split_db_path) as conn:
+        conn.execute("ATTACH DATABASE ? AS source_db", (str(source_db_path),))
+        try:
+            for table in tables:
+                try:
+                    conn.execute(
+                        f"INSERT OR IGNORE INTO {table} SELECT * FROM source_db.{table}"
+                    )
+                except sqlite3.Error:
+                    continue
+            conn.execute(
+                """
+                INSERT INTO history (event_type, detail_json, created_at)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    "interval_per_db_migrated",
+                    json.dumps({"source": str(source_db_path)}, ensure_ascii=False),
+                    utc_now_iso(),
+                ),
+            )
+        finally:
+            conn.execute("DETACH DATABASE source_db")
+    return split_db_path
 
 
 def request_cancel_graph_job(graph_dir: str | Path, reason: str = "requested from GUI") -> None:

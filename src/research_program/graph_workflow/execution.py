@@ -30,7 +30,7 @@ from research_program.plotting.plot_per_by_coupling_strength_interval import (
 from research_program.simulation.coupling_functions import CouplingFunction
 from research_program.simulation.runner import SimulationRequest, run_simulation_request
 
-from .storage import load_graph_job, utc_now_iso
+from .storage import INTERVAL_PER_DB_NAME, load_graph_job, utc_now_iso
 
 
 RAW_RUN_DB_NAME = "raw_run.sqlite"
@@ -61,6 +61,7 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
     manifest_path = graph_dir / "manifest.json"
     status_path = graph_dir / "status.json"
     db_path = graph_dir / "graph_data.sqlite"
+    interval_db_path = _interval_per_db_path(graph_dir, db_path)
     raw_run_db_path = graph_dir / RAW_RUN_DB_NAME
     figures_dir = graph_dir / "figures"
 
@@ -88,7 +89,7 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
         float(params["interval_start_ms"]),
         float(params["interval_end_ms"]),
     )
-    completed_pairs = _completed_run_pairs(db_path, aggregate_set_id)
+    completed_pairs = _completed_run_pairs(db_path, aggregate_set_id, interval_db_path)
     expected_pairs = [
         (float(k_value), int(repeat_index))
         for k_value in k_values
@@ -157,7 +158,7 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
                     metadata=result,
                 )
                 _save_run_intermediate_and_interval_from_raw_sqlite(
-                    db_path=db_path,
+                    db_path=interval_db_path,
                     raw_db_path=raw_run_db_path,
                     run_id=run_id,
                     aggregate_set_id=aggregate_set_id,
@@ -192,14 +193,14 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
         )
         _write_json(status_path, status)
 
-        aggregate_rows = rebuild_interval_aggregate(db_path, aggregate_set_id)
+        aggregate_rows = rebuild_interval_aggregate(interval_db_path, aggregate_set_id)
 
         status.update({"status": "rendering_graph", "updated_at": utc_now_iso()})
         _write_json(status_path, status)
 
         output_path = render_interval_per_vs_k_pdf(
             graph_dir=graph_dir,
-            db_path=db_path,
+            db_path=interval_db_path,
             aggregate_set_id=aggregate_set_id,
             coupling_function=str(graph_key.get("coupling_function", "")),
             interval_start_ms=float(params["interval_start_ms"]),
@@ -802,21 +803,53 @@ def rebuild_phase_gap_error_aggregate(db_path: Path, aggregate_set_id: str) -> i
     return len(rows)
 
 
-def _completed_run_pairs(db_path: Path, aggregate_set_id: str) -> set[tuple[float, int]]:
+def _completed_run_pairs(
+    db_path: Path,
+    aggregate_set_id: str,
+    interval_db_path: Path | None = None,
+) -> set[tuple[float, int]]:
     if not db_path.exists():
         return set()
-    with _connect(db_path) as conn:
-        rows = conn.execute(
-            """
-            SELECT r.coupling_strength, r.repeat_index
-            FROM runs AS r
-            INNER JOIN run_interval_per AS p
-                ON p.run_id = r.run_id
-            WHERE r.status = 'completed'
-              AND p.aggregate_set_id = ?
-            """,
-            (aggregate_set_id,),
-        ).fetchall()
+    per_db_path = interval_db_path or db_path
+    if per_db_path == db_path:
+        with _connect(db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT r.coupling_strength, r.repeat_index
+                FROM runs AS r
+                INNER JOIN run_interval_per AS p
+                    ON p.run_id = r.run_id
+                WHERE r.status = 'completed'
+                  AND p.aggregate_set_id = ?
+                """,
+                (aggregate_set_id,),
+            ).fetchall()
+    else:
+        with _connect(per_db_path) as per_conn:
+            completed_run_ids = [
+                str(row["run_id"])
+                for row in per_conn.execute(
+                    """
+                    SELECT run_id
+                    FROM run_interval_per
+                    WHERE aggregate_set_id = ?
+                    """,
+                    (aggregate_set_id,),
+                ).fetchall()
+            ]
+        if not completed_run_ids:
+            return set()
+        placeholders = ", ".join("?" for _ in completed_run_ids)
+        with _connect(db_path) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT coupling_strength, repeat_index
+                FROM runs
+                WHERE status = 'completed'
+                  AND run_id IN ({placeholders})
+                """,
+                completed_run_ids,
+            ).fetchall()
     return {
         (float(row["coupling_strength"]), int(row["repeat_index"]))
         for row in rows
@@ -2295,6 +2328,11 @@ def _delete_raw_run(raw_db_path: Path, run_id: str) -> None:
 
 def _aggregate_set_id(interval_start_ms: float, interval_end_ms: float) -> str:
     return f"interval_{int(interval_start_ms)}_to_{int(interval_end_ms)}"
+
+
+def _interval_per_db_path(graph_dir: Path, fallback_db_path: Path) -> Path:
+    db_path = graph_dir / INTERVAL_PER_DB_NAME
+    return db_path if db_path.exists() else fallback_db_path
 
 
 def _relative_to_graph(graph_dir: Path, path: Path) -> str:

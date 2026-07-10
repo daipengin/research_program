@@ -10,6 +10,10 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from research_program.graph_workflow.storage import (
+    INTERVAL_PER_DB_NAME,
+    ensure_interval_per_db,
+)
 from research_program.simulation.lora_airtime import LoRaAirtimeConfig
 from research_program.web.settings import (
     DEFAULT_CONVERGENCE_CYCLE_VS_K_PARAMS,
@@ -199,6 +203,7 @@ def read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 def read_aggregate_interval_per(db_path: Path) -> pd.DataFrame:
+    db_path = interval_per_db_path(db_path)
     if not db_path.exists():
         return pd.DataFrame()
     with closing(sqlite3.connect(db_path)) as conn:
@@ -216,6 +221,20 @@ def read_aggregate_interval_per(db_path: Path) -> pd.DataFrame:
             )
         except sqlite3.Error:
             return pd.DataFrame()
+
+
+def interval_per_db_path(db_path_or_graph_dir: Path) -> Path:
+    path = Path(db_path_or_graph_dir)
+    graph_dir = path if path.is_dir() else path.parent
+    split_db = graph_dir / INTERVAL_PER_DB_NAME
+    if split_db.exists():
+        return split_db
+    migrated_db = ensure_interval_per_db(graph_dir)
+    if migrated_db.exists():
+        return migrated_db
+    if path.is_dir():
+        return path / "graph_data.sqlite"
+    return path
 
 
 def read_aggregate_convergence_cycles(db_path: Path) -> pd.DataFrame:
