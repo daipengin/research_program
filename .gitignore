@@ -45,3 +45,7 @@ outputs/reports/graph_creation_jobs/*
 !results/**/
 !results/**/*.csv
 !results/**/*.pdf
+results/inventory/*
+!results/inventory/
+!results/inventory/runs_summary.csv
+!results/inventory/sweep_overview.csv
