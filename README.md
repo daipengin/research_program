@@ -516,3 +516,4 @@ result = run_interval_per_vs_k_job(Path(job.path))
 - `LINEAR_16`, `NewSIN`, `expSIN`, `exp_4`, `NONE` を投稿予定実験から除外するか、UI で非表示にするかはコードからは確認できません。
 - `logs/` directory は job 作成時に作られますが、現行主要経路で詳細ログを書き込む実装は確認できません。
 - `estimated_finish_at` は `status.json` にありますが、現行実行コードで推定時刻を計算して更新する実装は確認できません。
+Paper figures: `uv run python scripts/make_paper_figures.py` generates vector PDFs and matching plot-data CSVs in `results/paper_figures/`.
