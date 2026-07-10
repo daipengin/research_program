@@ -32,6 +32,9 @@ SERIES = {
         "marker": "o",
         "linestyle": "-",
         "optimal_k": 571.0,
+        "coupling_stem": "fig_coupling_kuramoto",
+        "demo_slug": "kuramoto",
+        "annotation_offset": (-48, 18),
     },
     "linear": {
         "csv": "linear_metrics.csv",
@@ -42,6 +45,9 @@ SERIES = {
         "marker": "s",
         "linestyle": "--",
         "optimal_k": 10.0,
+        "coupling_stem": "fig_coupling_frog",
+        "demo_slug": "frog",
+        "annotation_offset": (12, 26),
     },
     "linear_4": {
         "csv": "linear_4_metrics.csv",
@@ -52,6 +58,9 @@ SERIES = {
         "marker": "^",
         "linestyle": "-.",
         "optimal_k": 9.0,
+        "coupling_stem": "fig_coupling_modified_frog",
+        "demo_slug": "modified_frog",
+        "annotation_offset": (16, -34),
     },
     "newsin": {
         "csv": "newsin_metrics.csv",
@@ -62,10 +71,11 @@ SERIES = {
         "marker": "D",
         "linestyle": ":",
         "optimal_k": 24.0,
+        "coupling_stem": "fig_coupling_1sin",
+        "demo_slug": "1sin",
+        "annotation_offset": (24, 12),
     },
 }
-
-DEMO_ORDER = ["kuramoto", "linear", "linear_4", "newsin"]
 
 
 def main() -> int:
@@ -73,9 +83,9 @@ def main() -> int:
     configure_matplotlib()
     frames = load_metrics()
 
-    make_coupling_functions()
-    make_demo("uniform_1ms", "fig_demo_uniform")
-    make_demo("four_clusters", "fig_demo_clusters")
+    make_coupling_function_panels()
+    make_demo_panels("uniform_1ms", "fig_demo_uniform")
+    make_demo_panels("four_clusters", "fig_demo_clusters")
     make_per_vs_k(frames)
     make_ttu_vs_k(frames)
     make_usable_rate_vs_k(frames)
@@ -111,13 +121,9 @@ def load_metrics() -> dict[str, pd.DataFrame]:
     return frames
 
 
-def make_coupling_functions() -> None:
-    deltas = np.linspace(-math.pi, math.pi, 721)
-    rows = []
-    fig, ax = plt.subplots(figsize=(3.5, 2.6))
+def make_coupling_function_panels() -> None:
     for slug, spec in SERIES.items():
-        func = resolve_coupling_function(spec["enum"])
-        values = np.array([func(float(delta)) for delta in deltas], dtype=float)
+        deltas, values = coupling_curve(spec["enum"])
         plot_df = pd.DataFrame(
             {
                 "function": spec["function"],
@@ -126,59 +132,76 @@ def make_coupling_functions() -> None:
                 "coupling_value": values,
             }
         )
-        rows.append(plot_df)
-        ax.plot(
-            deltas,
-            values,
-            label=spec["label"],
-            color=spec["color"],
-            linestyle=spec["linestyle"],
-            linewidth=1.1,
-        )
-    ax.axhline(0.0, color="0.2", linewidth=0.5)
-    ax.set_xlim(-math.pi, math.pi)
-    ax.set_xlabel(r"$\delta$ (rad)")
-    ax.set_ylabel(r"$f(\delta)$")
-    ax.set_xticks([-math.pi, -math.pi / 2, 0, math.pi / 2, math.pi])
-    ax.set_xticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
-    finish_figure(fig, ax, "fig_coupling_functions", legend_ncol=1)
-    write_plot_csv("fig_coupling_functions", rows)
+        stem = str(spec["coupling_stem"])
+        plot_df.to_csv(OUTPUT_ROOT / f"{stem}.csv", index=False)
+
+        fig, ax = plt.subplots(figsize=(3.5, 2.6))
+        ax.plot(deltas, values, color=spec["color"], linewidth=1.2)
+        ax.axhline(0.0, color="0.25", linewidth=0.5)
+        ax.set_xlim(-math.pi, math.pi)
+        ax.set_ylim(-1.05, 1.05)
+        ax.set_xlabel(r"$\delta$ [rad]")
+        ax.set_ylabel(r"$f(\delta)$")
+        set_pi_x_ticks(ax)
+        style_axis(ax)
+        fig.tight_layout(pad=0.3)
+        fig.savefig(OUTPUT_ROOT / f"{stem}.pdf")
+        plt.close(fig)
 
 
-def make_demo(condition: str, stem: str) -> None:
-    rows = []
-    fig, axes = plt.subplots(2, 2, figsize=(3.5, 3.2), sharex=True, sharey=True)
-    for ax, slug in zip(axes.ravel(), DEMO_ORDER):
-        spec = SERIES[slug]
+def coupling_curve(coupling_enum: CouplingFunction) -> tuple[np.ndarray, np.ndarray]:
+    breakpoints = [-math.pi, 0.0, math.pi]
+    xs: list[float] = []
+    ys: list[float] = []
+    func = resolve_coupling_function(coupling_enum)
+    segments = [(-math.pi, 0.0), (0.0, math.pi)]
+    for start, end in segments:
+        if xs:
+            xs.append(np.nan)
+            ys.append(np.nan)
+        segment_x = np.linspace(start, end, 361, endpoint=True)
+        for value in segment_x:
+            if any(np.isclose(value, point) for point in breakpoints):
+                xs.append(float(value))
+                ys.append(np.nan)
+            else:
+                xs.append(float(value))
+                ys.append(float(func(float(value))))
+    return np.array(xs, dtype=float), np.array(ys, dtype=float)
+
+
+def make_demo_panels(condition: str, stem_prefix: str) -> None:
+    for slug, spec in SERIES.items():
         path = DEMO_ROOT / f"{slug}_{condition}_run1.csv"
         df = pd.read_csv(path, usecols=["cycle_index", "device_id", "phase_diff_rad"])
-        df["phase_diff_mod_rad"] = np.mod(pd.to_numeric(df["phase_diff_rad"], errors="coerce"), TWO_PI)
+        df["phase_diff_wrapped_rad"] = wrap_to_pi(pd.to_numeric(df["phase_diff_rad"], errors="coerce"))
         df.insert(0, "label", spec["label"])
         df.insert(0, "function", spec["function"])
         df.insert(0, "condition", condition)
-        rows.append(df)
+        output_stem = f"{stem_prefix}_{spec['demo_slug']}"
+        df.to_csv(OUTPUT_ROOT / f"{output_stem}.csv", index=False)
 
-        for _, device_df in df.groupby("device_id", sort=True):
-            ax.plot(
+        fig, ax = plt.subplots(figsize=(3.5, 2.6))
+        device_ids = sorted(df["device_id"].dropna().unique())
+        for index, device_id in enumerate(device_ids):
+            device_df = df[df["device_id"] == device_id]
+            ax.scatter(
                 device_df["cycle_index"],
-                device_df["phase_diff_mod_rad"],
-                color=spec["color"],
-                linewidth=0.5,
-                alpha=0.7,
+                device_df["phase_diff_wrapped_rad"],
+                s=0.8,
+                color=device_color(str(spec["color"]), index, len(device_ids)),
+                alpha=0.6,
+                linewidths=0,
             )
-        ax.set_title(spec["label"], pad=2)
-        ax.set_ylim(0, TWO_PI)
-        ax.set_yticks([0, math.pi, TWO_PI])
-        ax.set_yticklabels(["0", r"$\pi$", r"$2\pi$"])
+        ax.set_xlim(1, 180)
+        ax.set_ylim(-math.pi, math.pi)
+        ax.set_xlabel("Cycle index")
+        ax.set_ylabel("Phase difference [rad]")
+        set_pi_y_ticks(ax)
         style_axis(ax)
-    for ax in axes[-1, :]:
-        ax.set_xlabel("Cycle")
-    for ax in axes[:, 0]:
-        ax.set_ylabel("Phase diff. (rad)")
-    fig.tight_layout(pad=0.35, h_pad=0.55, w_pad=0.55)
-    fig.savefig(OUTPUT_ROOT / f"{stem}.pdf")
-    plt.close(fig)
-    write_plot_csv(stem, rows)
+        fig.tight_layout(pad=0.3)
+        fig.savefig(OUTPUT_ROOT / f"{output_stem}.pdf")
+        plt.close(fig)
 
 
 def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
@@ -215,16 +238,23 @@ def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
         ax.annotate(
             f'{best["overall_per_mean"]:.3g}%\nK={best["k"]:g}',
             xy=(best["k"], best["overall_per_mean"]),
-            xytext=(3, 3),
+            xytext=spec["annotation_offset"],
             textcoords="offset points",
             fontsize=5.8,
             color="red",
+            arrowprops={
+                "arrowstyle": "-",
+                "color": "red",
+                "linewidth": 0.45,
+                "shrinkA": 0,
+                "shrinkB": 2,
+            },
         )
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("K")
-    ax.set_ylabel("Overall PER (%)")
-    finish_figure(fig, ax, "fig_per_vs_k", legend_ncol=1)
+    ax.set_ylabel("Overall PER [%]")
+    finish_figure(fig, ax, "fig_per_vs_k")
     write_plot_csv("fig_per_vs_k", rows)
 
 
@@ -263,8 +293,8 @@ def make_ttu_vs_k(frames: dict[str, pd.DataFrame]) -> None:
         )
     ax.set_xscale("log")
     ax.set_xlabel("K")
-    ax.set_ylabel("Time to usable (min)")
-    finish_figure(fig, ax, "fig_ttu_vs_k", legend_ncol=1)
+    ax.set_ylabel("Time to usable [min]")
+    finish_figure(fig, ax, "fig_ttu_vs_k")
     write_plot_csv("fig_ttu_vs_k", rows)
 
 
@@ -292,15 +322,14 @@ def make_usable_rate_vs_k(frames: dict[str, pd.DataFrame]) -> None:
     ax.set_xscale("log")
     ax.set_ylim(-2, 102)
     ax.set_xlabel("K")
-    ax.set_ylabel("Usable rate (%)")
-    finish_figure(fig, ax, "fig_usable_rate_vs_k", legend_ncol=1)
+    ax.set_ylabel("Usable rate [%]")
+    finish_figure(fig, ax, "fig_usable_rate_vs_k")
     write_plot_csv("fig_usable_rate_vs_k", rows)
 
 
 def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
     rows = []
-    for slug in DEMO_ORDER:
-        df = frames[slug]
+    for slug, df in frames.items():
         spec = SERIES[slug]
         k_value = float(spec["optimal_k"])
         selected = df.loc[np.isclose(df["k"].astype(float), k_value)]
@@ -324,12 +353,14 @@ def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
     width = 0.36
     transient = positive_for_log(plot_df["transient_per_mean"].to_numpy(dtype=float))
     steady = positive_for_log(plot_df["steady_per_mean"].to_numpy(dtype=float))
-    ax.bar(x - width / 2, transient, width, label="Pre-TTU", color="#999999", edgecolor="black", linewidth=0.35)
-    ax.bar(x + width / 2, steady, width, label="Post-TTU", color="#FFFFFF", edgecolor="black", linewidth=0.35, hatch="//")
+    bars_a = ax.bar(x - width / 2, transient, width, label="Pre-TTU", color="#999999", edgecolor="black", linewidth=0.35)
+    bars_b = ax.bar(x + width / 2, steady, width, label="Post-TTU", color="#FFFFFF", edgecolor="black", linewidth=0.35, hatch="//")
     ax.set_xticks(x)
     ax.set_xticklabels(plot_df["label"], rotation=18, ha="right")
     ax.set_yscale("log")
-    ax.set_ylabel("PER (%)")
+    ax.set_ylabel("PER [%]")
+    add_bar_labels(ax, bars_a, plot_df["transient_per_mean"].to_numpy(dtype=float))
+    add_bar_labels(ax, bars_b, plot_df["steady_per_mean"].to_numpy(dtype=float))
     finish_figure(fig, ax, "fig_two_phase_per", legend_ncol=2)
 
 
@@ -347,6 +378,16 @@ def style_axis(ax: plt.Axes) -> None:
     ax.spines["right"].set_visible(False)
 
 
+def set_pi_x_ticks(ax: plt.Axes) -> None:
+    ax.set_xticks([-math.pi, -math.pi / 2, 0, math.pi / 2, math.pi])
+    ax.set_xticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
+
+
+def set_pi_y_ticks(ax: plt.Axes) -> None:
+    ax.set_yticks([-math.pi, -math.pi / 2, 0, math.pi / 2, math.pi])
+    ax.set_yticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
+
+
 def write_plot_csv(stem: str, frames: list[pd.DataFrame]) -> None:
     pd.concat(frames, ignore_index=True).to_csv(OUTPUT_ROOT / f"{stem}.csv", index=False)
 
@@ -355,10 +396,40 @@ def cycles_to_minutes(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce") * CYCLE_SECONDS / 60.0
 
 
+def wrap_to_pi(series: pd.Series) -> pd.Series:
+    return ((series + math.pi) % TWO_PI) - math.pi
+
+
+def device_color(base_color: str, index: int, count: int) -> tuple[float, float, float, float]:
+    rgb = np.array(mpl.colors.to_rgb(base_color), dtype=float)
+    if count <= 1:
+        mix = 0.0
+    else:
+        mix = 0.55 * index / (count - 1)
+    mixed = rgb * (1.0 - mix) + np.ones(3) * mix
+    return (float(mixed[0]), float(mixed[1]), float(mixed[2]), 1.0)
+
+
 def positive_for_log(values: np.ndarray) -> np.ndarray:
     finite_positive = values[np.isfinite(values) & (values > 0)]
     floor = min(float(np.min(finite_positive)) / 10.0, 1e-6) if finite_positive.size else 1e-6
     return np.where(np.isfinite(values) & (values > 0), values, floor)
+
+
+def add_bar_labels(ax: plt.Axes, bars: mpl.container.BarContainer, values: np.ndarray) -> None:
+    for bar, value in zip(bars, values):
+        if not np.isfinite(value):
+            continue
+        ax.annotate(
+            f"{value:.3g}%",
+            xy=(bar.get_x() + bar.get_width() / 2.0, bar.get_height()),
+            xytext=(0, 2),
+            textcoords="offset points",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            rotation=90,
+        )
 
 
 if __name__ == "__main__":
