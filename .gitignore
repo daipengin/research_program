@@ -20,6 +20,7 @@ outputs/reports/*
 outputs/cache/*
 outputs/settings/**
 outputs/graph_runs/**
+results/**
 *.sqlite
 *.sqlite3
 *.sqlite-wal
@@ -40,3 +41,7 @@ outputs/reports/simulation_jobs/*
 !outputs/reports/graph_creation_jobs/
 outputs/reports/graph_creation_jobs/*
 !outputs/reports/graph_creation_jobs/.gitkeep
+!results/
+!results/**/
+!results/**/*.csv
+!results/**/*.pdf

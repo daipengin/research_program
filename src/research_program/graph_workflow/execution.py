@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import random
+import shutil
 import sqlite3
 import time
 from dataclasses import replace
@@ -34,6 +35,8 @@ from .storage import INTERVAL_PER_DB_NAME, load_graph_job, utc_now_iso
 
 
 RAW_RUN_DB_NAME = "raw_run.sqlite"
+PAPER_RESULTS_ROOT = Path("results")
+PAPER_RESULTS_CSV_NAME = "final_values.csv"
 
 
 class JobCancelled(RuntimeError):
@@ -209,6 +212,13 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
             strength_ratio=float(dict(params.get("simulation_base") or {}).get("strength_ratio", -0.0001)),
         )
         _save_output(db_path, aggregate_set_id, output_path, graph_dir)
+        paper_outputs = _publish_paper_results(
+            graph_dir=graph_dir,
+            graph_type=str(manifest.get("graph_type", graph_dir.parent.name)),
+            aggregate_set_id=aggregate_set_id,
+            aggregate_db_path=interval_db_path,
+            output_path=output_path,
+        )
 
         finished_at = utc_now_iso()
         status.update(
@@ -225,7 +235,10 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
             {
                 "status": "completed",
                 "updated_at": finished_at,
-                "outputs": {"representative_pdf": _relative_to_graph(graph_dir, output_path)},
+                "outputs": {
+                    "representative_pdf": _relative_to_graph(graph_dir, output_path),
+                    **paper_outputs,
+                },
                 "run_summary": {
                     "total_runs": total_runs,
                     "completed_runs": completed,
@@ -237,7 +250,11 @@ def run_interval_per_vs_k_job(graph_dir: Path) -> dict[str, Any]:
         _append_history(
             db_path,
             "job_completed",
-            {"aggregate_rows": aggregate_rows, "output": str(output_path)},
+            {
+                "aggregate_rows": aggregate_rows,
+                "output": str(output_path),
+                "paper_outputs": paper_outputs,
+            },
         )
     except Exception as exc:
         failed_at = utc_now_iso()
@@ -387,6 +404,13 @@ def run_convergence_cycle_vs_k_job(graph_dir: Path) -> dict[str, Any]:
             strength_ratio=float(dict(params.get("simulation_base") or {}).get("strength_ratio", -0.0001)),
         )
         _save_output(db_path, aggregate_set_id, output_path, graph_dir)
+        paper_outputs = _publish_paper_results(
+            graph_dir=graph_dir,
+            graph_type=str(manifest.get("graph_type", graph_dir.parent.name)),
+            aggregate_set_id=aggregate_set_id,
+            aggregate_db_path=db_path,
+            output_path=output_path,
+        )
 
         finished_at = utc_now_iso()
         status.update(
@@ -403,7 +427,10 @@ def run_convergence_cycle_vs_k_job(graph_dir: Path) -> dict[str, Any]:
             {
                 "status": "completed",
                 "updated_at": finished_at,
-                "outputs": {"representative_pdf": _relative_to_graph(graph_dir, output_path)},
+                "outputs": {
+                    "representative_pdf": _relative_to_graph(graph_dir, output_path),
+                    **paper_outputs,
+                },
                 "run_summary": {"total_runs": total_runs, "completed_runs": completed},
             }
         )
@@ -412,7 +439,11 @@ def run_convergence_cycle_vs_k_job(graph_dir: Path) -> dict[str, Any]:
         _append_history(
             db_path,
             "job_completed",
-            {"aggregate_rows": aggregate_rows, "output": str(output_path)},
+            {
+                "aggregate_rows": aggregate_rows,
+                "output": str(output_path),
+                "paper_outputs": paper_outputs,
+            },
         )
     except Exception as exc:
         failed_at = utc_now_iso()
@@ -566,6 +597,13 @@ def run_phase_gap_error_vs_k_job(graph_dir: Path) -> dict[str, Any]:
             strength_ratio=float(dict(params.get("simulation_base") or {}).get("strength_ratio", -0.0001)),
         )
         _save_output(db_path, aggregate_set_id, output_path, graph_dir)
+        paper_outputs = _publish_paper_results(
+            graph_dir=graph_dir,
+            graph_type=str(manifest.get("graph_type", graph_dir.parent.name)),
+            aggregate_set_id=aggregate_set_id,
+            aggregate_db_path=db_path,
+            output_path=output_path,
+        )
 
         finished_at = utc_now_iso()
         status.update(
@@ -582,7 +620,10 @@ def run_phase_gap_error_vs_k_job(graph_dir: Path) -> dict[str, Any]:
             {
                 "status": "completed",
                 "updated_at": finished_at,
-                "outputs": {"representative_pdf": _relative_to_graph(graph_dir, output_path)},
+                "outputs": {
+                    "representative_pdf": _relative_to_graph(graph_dir, output_path),
+                    **paper_outputs,
+                },
                 "run_summary": {"total_runs": total_runs, "completed_runs": completed},
             }
         )
@@ -591,7 +632,11 @@ def run_phase_gap_error_vs_k_job(graph_dir: Path) -> dict[str, Any]:
         _append_history(
             db_path,
             "job_completed",
-            {"aggregate_rows": aggregate_rows, "output": str(output_path)},
+            {
+                "aggregate_rows": aggregate_rows,
+                "output": str(output_path),
+                "paper_outputs": paper_outputs,
+            },
         )
     except Exception as exc:
         failed_at = utc_now_iso()
@@ -2254,6 +2299,257 @@ def _cycle_interval_lengths(cycle_starts: np.ndarray) -> np.ndarray:
     return lengths
 
 
+def _publish_paper_results(
+    *,
+    graph_dir: Path,
+    graph_type: str,
+    aggregate_set_id: str,
+    aggregate_db_path: Path,
+    output_path: Path,
+) -> dict[str, str]:
+    results_dir = PAPER_RESULTS_ROOT / _safe_filename(graph_type) / _safe_filename(graph_dir.name)
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    csv_path = results_dir / PAPER_RESULTS_CSV_NAME
+    pdf_path = results_dir / output_path.name
+
+    df = _paper_results_frame(
+        graph_type=graph_type,
+        db_path=aggregate_db_path,
+        aggregate_set_id=aggregate_set_id,
+    )
+    df.to_csv(csv_path, index=False)
+    shutil.copy2(output_path, pdf_path)
+
+    _append_history(
+        aggregate_db_path,
+        "paper_results_exported",
+        {
+            "csv": _relative_to_project(csv_path),
+            "pdf": _relative_to_project(pdf_path),
+        },
+    )
+    return {
+        "paper_results_csv": _relative_to_project(csv_path),
+        "paper_results_pdf": _relative_to_project(pdf_path),
+        "paper_results_dir": _relative_to_project(results_dir),
+    }
+
+
+def _paper_results_frame(
+    *,
+    graph_type: str,
+    db_path: Path,
+    aggregate_set_id: str,
+) -> pd.DataFrame:
+    if graph_type == "interval_per_vs_k":
+        return _interval_per_paper_results_frame(db_path, aggregate_set_id)
+    if graph_type == "convergence_cycle_vs_k":
+        return _convergence_paper_results_frame(db_path, aggregate_set_id)
+    if graph_type == "phase_gap_error_vs_k":
+        return _phase_gap_error_paper_results_frame(db_path, aggregate_set_id)
+    raise ValueError(f"Unsupported graph_type for paper results export: {graph_type}")
+
+
+def _interval_per_paper_results_frame(db_path: Path, aggregate_set_id: str) -> pd.DataFrame:
+    with _connect(db_path) as conn:
+        df = pd.read_sql_query(
+            """
+            SELECT aggregate_set_id, coupling_function, coupling_strength,
+                   interval_start_ms, interval_end_ms, interval_cycle_count,
+                   expected_packets, actual_packets, per_percent
+            FROM run_interval_per
+            WHERE aggregate_set_id = ?
+            """,
+            conn,
+            params=(aggregate_set_id,),
+        )
+    if df.empty:
+        return pd.DataFrame(
+            columns=[
+                "aggregate_set_id",
+                "coupling_function",
+                "coupling_strength",
+                "interval_start_ms",
+                "interval_end_ms",
+                "per_percent_mean",
+                "per_percent_median",
+                "per_percent_q1",
+                "per_percent_q3",
+                "per_percent_std",
+                "per_percent_min",
+                "per_percent_max",
+                "expected_packets_sum",
+                "actual_packets_sum",
+                "interval_cycle_count_mean",
+                "count",
+            ]
+        )
+    return (
+        df.groupby(["aggregate_set_id", "coupling_function", "coupling_strength"], as_index=False)
+        .agg(
+            interval_start_ms=("interval_start_ms", "first"),
+            interval_end_ms=("interval_end_ms", "first"),
+            per_percent_mean=("per_percent", "mean"),
+            per_percent_median=("per_percent", "median"),
+            per_percent_q1=("per_percent", lambda s: s.quantile(0.25)),
+            per_percent_q3=("per_percent", lambda s: s.quantile(0.75)),
+            per_percent_std=("per_percent", "std"),
+            per_percent_min=("per_percent", "min"),
+            per_percent_max=("per_percent", "max"),
+            expected_packets_sum=("expected_packets", "sum"),
+            actual_packets_sum=("actual_packets", "sum"),
+            interval_cycle_count_mean=("interval_cycle_count", "mean"),
+            count=("per_percent", "size"),
+        )
+        .sort_values(["coupling_function", "coupling_strength"])
+        .reset_index(drop=True)
+    )
+
+
+def _convergence_paper_results_frame(db_path: Path, aggregate_set_id: str) -> pd.DataFrame:
+    with _connect(db_path) as conn:
+        df = pd.read_sql_query(
+            """
+            SELECT aggregate_set_id, coupling_function, coupling_strength,
+                   stable_cycle_count, phase_gap_change_threshold,
+                   convergence_cycle, converged
+            FROM run_convergence_cycles
+            WHERE aggregate_set_id = ?
+            """,
+            conn,
+            params=(aggregate_set_id,),
+        )
+    columns = [
+        "aggregate_set_id",
+        "coupling_function",
+        "coupling_strength",
+        "stable_cycle_count",
+        "phase_gap_change_threshold",
+        "convergence_cycle_mean",
+        "convergence_cycle_median",
+        "convergence_cycle_q1",
+        "convergence_cycle_q3",
+        "convergence_cycle_std",
+        "convergence_cycle_min",
+        "convergence_cycle_max",
+        "convergence_rate_percent",
+        "count",
+        "converged_count",
+    ]
+    if df.empty:
+        return pd.DataFrame(columns=columns)
+
+    rows: list[dict[str, Any]] = []
+    for (set_id, coupling_function, coupling_strength), group in df.groupby(
+        ["aggregate_set_id", "coupling_function", "coupling_strength"],
+        sort=True,
+    ):
+        converged = group[group["converged"].astype(bool)]
+        cycles = pd.to_numeric(converged["convergence_cycle"], errors="coerce").dropna()
+        rows.append(
+            {
+                "aggregate_set_id": set_id,
+                "coupling_function": coupling_function,
+                "coupling_strength": float(coupling_strength),
+                "stable_cycle_count": int(group["stable_cycle_count"].iloc[0]),
+                "phase_gap_change_threshold": float(group["phase_gap_change_threshold"].iloc[0]),
+                "convergence_cycle_mean": _series_stat(cycles, "mean"),
+                "convergence_cycle_median": _series_stat(cycles, "median"),
+                "convergence_cycle_q1": _series_quantile(cycles, 0.25),
+                "convergence_cycle_q3": _series_quantile(cycles, 0.75),
+                "convergence_cycle_std": _series_stat(cycles, "std"),
+                "convergence_cycle_min": _series_stat(cycles, "min"),
+                "convergence_cycle_max": _series_stat(cycles, "max"),
+                "convergence_rate_percent": float(100.0 * len(converged) / len(group)),
+                "count": int(len(group)),
+                "converged_count": int(len(converged)),
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)
+
+
+def _phase_gap_error_paper_results_frame(db_path: Path, aggregate_set_id: str) -> pd.DataFrame:
+    with _connect(db_path) as conn:
+        df = pd.read_sql_query(
+            """
+            SELECT aggregate_set_id, coupling_function, coupling_strength,
+                   target_cycle_mode, target_cycle_index, selected_cycle_index,
+                   phase_gap_error, phase_gap_error_ratio, has_value
+            FROM run_phase_gap_error_points
+            WHERE aggregate_set_id = ?
+            """,
+            conn,
+            params=(aggregate_set_id,),
+        )
+    columns = [
+        "aggregate_set_id",
+        "coupling_function",
+        "coupling_strength",
+        "target_cycle_mode",
+        "target_cycle_index",
+        "selected_cycle_index_median",
+        "phase_gap_error_mean",
+        "phase_gap_error_median",
+        "phase_gap_error_q1",
+        "phase_gap_error_q3",
+        "phase_gap_error_std",
+        "phase_gap_error_min",
+        "phase_gap_error_max",
+        "phase_gap_error_ratio_mean",
+        "phase_gap_error_ratio_median",
+        "valid_count",
+        "count",
+    ]
+    if df.empty:
+        return pd.DataFrame(columns=columns)
+
+    rows: list[dict[str, Any]] = []
+    for (set_id, coupling_function, coupling_strength), group in df.groupby(
+        ["aggregate_set_id", "coupling_function", "coupling_strength"],
+        sort=True,
+    ):
+        valid = group[group["has_value"].astype(bool)]
+        errors = pd.to_numeric(valid["phase_gap_error"], errors="coerce").dropna()
+        ratios = pd.to_numeric(valid["phase_gap_error_ratio"], errors="coerce").dropna()
+        selected_cycles = pd.to_numeric(valid["selected_cycle_index"], errors="coerce").dropna()
+        rows.append(
+            {
+                "aggregate_set_id": set_id,
+                "coupling_function": coupling_function,
+                "coupling_strength": float(coupling_strength),
+                "target_cycle_mode": str(group["target_cycle_mode"].iloc[0]),
+                "target_cycle_index": group["target_cycle_index"].iloc[0],
+                "selected_cycle_index_median": _series_stat(selected_cycles, "median"),
+                "phase_gap_error_mean": _series_stat(errors, "mean"),
+                "phase_gap_error_median": _series_stat(errors, "median"),
+                "phase_gap_error_q1": _series_quantile(errors, 0.25),
+                "phase_gap_error_q3": _series_quantile(errors, 0.75),
+                "phase_gap_error_std": _series_stat(errors, "std"),
+                "phase_gap_error_min": _series_stat(errors, "min"),
+                "phase_gap_error_max": _series_stat(errors, "max"),
+                "phase_gap_error_ratio_mean": _series_stat(ratios, "mean"),
+                "phase_gap_error_ratio_median": _series_stat(ratios, "median"),
+                "valid_count": int(len(errors)),
+                "count": int(len(group)),
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)
+
+
+def _series_stat(series: pd.Series, name: str) -> float | None:
+    if series.empty:
+        return None
+    value = getattr(series, name)()
+    return _nullable_float(value)
+
+
+def _series_quantile(series: pd.Series, q: float) -> float | None:
+    if series.empty:
+        return None
+    return _nullable_float(series.quantile(q))
+
+
 def _save_output(
     db_path: Path,
     aggregate_set_id: str,
@@ -2338,6 +2634,13 @@ def _interval_per_db_path(graph_dir: Path, fallback_db_path: Path) -> Path:
 def _relative_to_graph(graph_dir: Path, path: Path) -> str:
     try:
         return str(path.resolve().relative_to(graph_dir.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def _relative_to_project(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(Path.cwd().resolve()))
     except ValueError:
         return str(path)
 
