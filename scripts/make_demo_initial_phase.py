@@ -34,10 +34,10 @@ FUNCTIONS = [
 INITIAL_CONDITIONS = {
     "uniform_1ms": tuple(range(DEVICE_COUNT)),
     "four_clusters": (
-        tuple([0] * 13)
-        + tuple([2500] * 13)
-        + tuple([5000] * 12)
-        + tuple([7500] * 12)
+        tuple(range(0, 13))
+        + tuple(range(2500, 2513))
+        + tuple(range(5000, 5012))
+        + tuple(range(7500, 7512))
     ),
 }
 
