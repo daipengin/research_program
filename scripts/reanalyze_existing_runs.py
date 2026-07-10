@@ -334,15 +334,49 @@ def compute_run_metrics(
         epsilon=task.epsilon,
         stable_window=task.stable_window,
     )
+    converged_cycle_eps020 = first_stable_cycle(
+        phase_cycles=phase_cycles,
+        errors=errors,
+        epsilon=0.02,
+        stable_window=task.stable_window,
+    )
     if converged_cycle is None:
         fluctuation = np.nan
-        transient_per = np.nan
-        steady_per = np.nan
     else:
         post_errors = errors[phase_cycles >= converged_cycle]
         fluctuation = float(np.nanstd(post_errors, ddof=1)) if np.sum(np.isfinite(post_errors)) > 1 else 0.0
-        transient_per = per_for_mask(cycle_indices < converged_cycle, expected_by_cycle, actual_by_cycle)
-        steady_per = per_for_mask(cycle_indices >= converged_cycle, expected_by_cycle, actual_by_cycle)
+    if converged_cycle_eps020 is None:
+        fluctuation_eps020 = np.nan
+    else:
+        post_errors_eps020 = errors[phase_cycles >= converged_cycle_eps020]
+        fluctuation_eps020 = (
+            float(np.nanstd(post_errors_eps020, ddof=1))
+            if np.sum(np.isfinite(post_errors_eps020)) > 1
+            else 0.0
+        )
+
+    time_to_usable_legacy = moving_window_usable_cycle(
+        cycle_indices=cycle_indices,
+        expected_by_cycle=expected_by_cycle,
+        actual_by_cycle=actual_by_cycle,
+        window=task.moving_window_cycles,
+        threshold_percent=task.usable_per_threshold,
+        return_cycle="start",
+    )
+    time_to_usable = moving_window_usable_cycle(
+        cycle_indices=cycle_indices,
+        expected_by_cycle=expected_by_cycle,
+        actual_by_cycle=actual_by_cycle,
+        window=task.moving_window_cycles,
+        threshold_percent=task.usable_per_threshold,
+        return_cycle="end",
+    )
+    if np.isfinite(time_to_usable):
+        transient_per = per_for_mask(cycle_indices < int(time_to_usable), expected_by_cycle, actual_by_cycle)
+        steady_per = per_for_mask(cycle_indices >= int(time_to_usable), expected_by_cycle, actual_by_cycle)
+    else:
+        transient_per = np.nan
+        steady_per = np.nan
 
     return {
         "run_id": run_id,
@@ -350,17 +384,14 @@ def compute_run_metrics(
         "k": float(task.k_value),
         "repeat_index": int(run.repeat_index),
         "converged_cycle": np.nan if converged_cycle is None else int(converged_cycle),
+        "converged_cycle_eps020": np.nan if converged_cycle_eps020 is None else int(converged_cycle_eps020),
         "post_convergence_fluctuation": fluctuation,
+        "post_convergence_fluctuation_eps020": fluctuation_eps020,
         "overall_per": per_from_counts(expected_total, actual_total),
         "transient_per": transient_per,
         "steady_per": steady_per,
-        "time_to_usable": moving_window_usable_cycle(
-            cycle_indices=cycle_indices,
-            expected_by_cycle=expected_by_cycle,
-            actual_by_cycle=actual_by_cycle,
-            window=task.moving_window_cycles,
-            threshold_percent=task.usable_per_threshold,
-        ),
+        "time_to_usable_legacy": time_to_usable_legacy,
+        "time_to_usable": time_to_usable,
         "num_sends": num_sends,
         "num_skipped": num_skipped,
         "valid": True,
@@ -392,6 +423,7 @@ def moving_window_usable_cycle(
     actual_by_cycle: np.ndarray,
     window: int,
     threshold_percent: float,
+    return_cycle: str,
 ) -> float:
     if window < 1 or len(cycle_indices) < window:
         return np.nan
@@ -402,7 +434,11 @@ def moving_window_usable_cycle(
         expected = expected_cum[end] - expected_cum[start]
         actual = actual_cum[end] - actual_cum[start]
         if per_from_counts(expected, actual) < threshold_percent:
-            return float(cycle_indices[start])
+            if return_cycle == "start":
+                return float(cycle_indices[start])
+            if return_cycle == "end":
+                return float(cycle_indices[end - 1])
+            raise ValueError(f"unsupported return_cycle: {return_cycle}")
     return np.nan
 
 
@@ -435,10 +471,15 @@ def aggregate_function(coupling_function: str) -> None:
                 "valid_run_count": int(len(valid_group)),
                 "failed_run_count": int(len(group) - len(valid_group)),
                 "convergence_rate_percent": percent_non_null(valid_group["converged_cycle"]),
+                "convergence_rate_eps020_percent": percent_non_null(valid_group["converged_cycle_eps020"]),
                 "usable_rate_percent": percent_non_null(valid_group["time_to_usable"]),
+                "usable_rate_legacy_percent": percent_non_null(valid_group["time_to_usable_legacy"]),
                 **metric_quantiles(valid_group, "converged_cycle"),
+                **metric_quantiles(valid_group, "converged_cycle_eps020"),
                 **metric_quantiles(valid_group, "time_to_usable"),
+                **metric_quantiles(valid_group, "time_to_usable_legacy"),
                 **metric_quantiles(valid_group, "post_convergence_fluctuation"),
+                **metric_quantiles(valid_group, "post_convergence_fluctuation_eps020"),
                 "overall_per_mean": mean_or_nan(valid_group["overall_per"]),
                 "overall_per_std": std_or_nan(valid_group["overall_per"]),
                 "transient_per_mean": mean_or_nan(valid_group["transient_per"]),
