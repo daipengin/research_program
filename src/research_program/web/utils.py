@@ -226,9 +226,6 @@ def read_aggregate_interval_per(db_path: Path) -> pd.DataFrame:
 def interval_per_db_path(db_path_or_graph_dir: Path) -> Path:
     path = Path(db_path_or_graph_dir)
     graph_dir = path if path.is_dir() else path.parent
-    split_db = graph_dir / INTERVAL_PER_DB_NAME
-    if split_db.exists():
-        return split_db
     migrated_db = ensure_interval_per_db(graph_dir)
     if migrated_db.exists():
         return migrated_db

@@ -779,17 +779,24 @@ def get_storage_overview() -> dict[str, Any]:
 def ensure_interval_per_db(graph_dir: str | Path) -> Path:
     graph_path = Path(graph_dir)
     split_db_path = graph_path / INTERVAL_PER_DB_NAME
-    if split_db_path.exists():
-        return split_db_path
-
     source_db_path = graph_path / "graph_data.sqlite"
     if not source_db_path.exists():
         return split_db_path
+    if split_db_path.exists():
+        try:
+            with _connect(split_db_path) as split_conn:
+                split_row = split_conn.execute(
+                    "SELECT COUNT(*) AS n FROM aggregate_interval_per"
+                ).fetchone()
+                if int(split_row["n"] if split_row else 0) > 0:
+                    return split_db_path
+        except sqlite3.Error:
+            pass
 
     try:
         with _connect(source_db_path) as source_conn:
             row = source_conn.execute(
-                "SELECT COUNT(*) AS n FROM run_interval_per"
+                "SELECT COUNT(*) AS n FROM aggregate_interval_per"
             ).fetchone()
             has_interval_data = int(row["n"] if row else 0) > 0
     except sqlite3.Error:
@@ -805,27 +812,24 @@ def ensure_interval_per_db(graph_dir: str | Path) -> Path:
     ]
     with _connect(split_db_path) as conn:
         conn.execute("ATTACH DATABASE ? AS source_db", (str(source_db_path),))
-        try:
-            for table in tables:
-                try:
-                    conn.execute(
-                        f"INSERT OR IGNORE INTO {table} SELECT * FROM source_db.{table}"
-                    )
-                except sqlite3.Error:
-                    continue
-            conn.execute(
-                """
-                INSERT INTO history (event_type, detail_json, created_at)
-                VALUES (?, ?, ?)
-                """,
-                (
-                    "interval_per_db_migrated",
-                    json.dumps({"source": str(source_db_path)}, ensure_ascii=False),
-                    utc_now_iso(),
-                ),
+        for table in tables:
+            try:
+                conn.execute(
+                    f"INSERT OR IGNORE INTO {table} SELECT * FROM source_db.{table}"
+                )
+            except sqlite3.Error:
+                continue
+        conn.execute(
+            """
+            INSERT INTO history (event_type, detail_json, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (
+                "interval_per_db_migrated",
+                json.dumps({"source": str(source_db_path)}, ensure_ascii=False),
+                utc_now_iso(),
             )
-        finally:
-            conn.execute("DETACH DATABASE source_db")
+        )
     return split_db_path
 
 
