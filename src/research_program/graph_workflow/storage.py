@@ -14,6 +14,8 @@ from research_program.io import sqlite_runs
 
 GRAPH_RUNS_ROOT = Path("outputs") / "graph_runs"
 GRAPH_TYPE_INTERVAL_PER_VS_K = "interval_per_vs_k"
+GRAPH_TYPE_CONVERGENCE_CYCLE_VS_K = "convergence_cycle_vs_k"
+GRAPH_TYPE_PHASE_GAP_ERROR_VS_K = "phase_gap_error_vs_k"
 RAW_RUN_DB_NAME = "raw_run.sqlite"
 
 
@@ -87,6 +89,62 @@ CREATE TABLE IF NOT EXISTS aggregate_interval_per (
     per_percent_max REAL,
     expected_packets_sum INTEGER,
     actual_packets_sum INTEGER,
+    count INTEGER NOT NULL,
+    PRIMARY KEY (aggregate_set_id, coupling_strength)
+);
+
+CREATE TABLE IF NOT EXISTS run_convergence_cycles (
+    aggregate_set_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    coupling_function TEXT NOT NULL,
+    coupling_strength REAL NOT NULL,
+    stable_cycle_count INTEGER NOT NULL,
+    phase_gap_change_threshold REAL NOT NULL,
+    convergence_cycle INTEGER,
+    converged INTEGER NOT NULL,
+    checked_cycle_count INTEGER NOT NULL,
+    max_gap_change_at_convergence REAL,
+    PRIMARY KEY (aggregate_set_id, run_id)
+);
+
+CREATE TABLE IF NOT EXISTS aggregate_convergence_cycles (
+    aggregate_set_id TEXT NOT NULL,
+    coupling_function TEXT NOT NULL,
+    coupling_strength REAL NOT NULL,
+    convergence_cycle_mean REAL,
+    convergence_cycle_std REAL,
+    convergence_cycle_min REAL,
+    convergence_cycle_max REAL,
+    convergence_rate_percent REAL NOT NULL,
+    count INTEGER NOT NULL,
+    converged_count INTEGER NOT NULL,
+    PRIMARY KEY (aggregate_set_id, coupling_strength)
+);
+
+CREATE TABLE IF NOT EXISTS run_phase_gap_error_points (
+    aggregate_set_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    coupling_function TEXT NOT NULL,
+    coupling_strength REAL NOT NULL,
+    target_cycle_mode TEXT NOT NULL,
+    target_cycle_index INTEGER,
+    selected_cycle_index INTEGER,
+    phase_gap_error REAL,
+    phase_gap_error_ratio REAL,
+    has_value INTEGER NOT NULL,
+    PRIMARY KEY (aggregate_set_id, run_id)
+);
+
+CREATE TABLE IF NOT EXISTS aggregate_phase_gap_error_points (
+    aggregate_set_id TEXT NOT NULL,
+    coupling_function TEXT NOT NULL,
+    coupling_strength REAL NOT NULL,
+    phase_gap_error_mean REAL,
+    phase_gap_error_std REAL,
+    phase_gap_error_min REAL,
+    phase_gap_error_max REAL,
+    phase_gap_error_ratio_mean REAL,
+    valid_count INTEGER NOT NULL,
     count INTEGER NOT NULL,
     PRIMARY KEY (aggregate_set_id, coupling_strength)
 );
@@ -173,7 +231,10 @@ def create_interval_per_vs_k_job(params: dict[str, Any]) -> GraphJobSummary:
     finally:
         raw_conn.close()
 
-    total_runs = len(params["k_values"]) * int(params["runs_per_k"])
+    if params.get("source_mode") == "existing_graph" and params.get("selected_run_count") is not None:
+        total_runs = int(params.get("selected_run_count", 0) or 0)
+    else:
+        total_runs = len(params["k_values"]) * int(params["runs_per_k"])
     aggregate_set_id = _interval_aggregate_set_id(
         float(params["interval_start_ms"]),
         float(params["interval_end_ms"]),
@@ -289,6 +350,345 @@ def create_interval_per_vs_k_job(params: dict[str, Any]) -> GraphJobSummary:
             "created_at": now,
             "storage_policy": {
                 "raw_data": "raw_run_sqlite",
+                "raw_run_sqlite": RAW_RUN_DB_NAME,
+                "sqlite": "metadata_intermediate_aggregate",
+            },
+        },
+    )
+
+    return load_graph_job(graph_dir)
+
+
+def create_convergence_cycle_vs_k_job(params: dict[str, Any]) -> GraphJobSummary:
+    ensure_graph_runs_root()
+
+    now = utc_now_iso()
+    graph_id = _build_graph_id()
+    graph_type = GRAPH_TYPE_CONVERGENCE_CYCLE_VS_K
+    graph_key = {
+        "coupling_function": params["coupling_function"],
+        "source_mode": params.get("source_mode", "new_simulation"),
+    }
+    if params.get("source_graph_id"):
+        graph_key["source_graph_id"] = params["source_graph_id"]
+
+    graph_dir = GRAPH_RUNS_ROOT / graph_type / graph_id
+    figures_dir = graph_dir / "figures"
+    logs_dir = graph_dir / "logs"
+
+    graph_dir.mkdir(parents=True, exist_ok=False)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    db_path = graph_dir / "graph_data.sqlite"
+    _init_db(db_path)
+    if params.get("source_mode", "new_simulation") == "new_simulation":
+        raw_conn = sqlite_runs.connect(graph_dir / RAW_RUN_DB_NAME)
+        try:
+            sqlite_runs.initialize(raw_conn)
+        finally:
+            raw_conn.close()
+
+    total_runs = len(params["k_values"]) * int(params["runs_per_k"])
+    aggregate_set_id = _convergence_aggregate_set_id(
+        int(params["stable_cycle_count"]),
+        float(params["phase_gap_change_threshold"]),
+    )
+
+    request = {
+        "request_id": graph_id,
+        "graph_type": graph_type,
+        "graph_key": graph_key,
+        "params": params,
+        "created_at": now,
+    }
+    manifest = {
+        "schema_version": 1,
+        "graph_id": graph_id,
+        "graph_type": graph_type,
+        "graph_key": graph_key,
+        "created_at": now,
+        "updated_at": now,
+        "status": "queued",
+        "input": params,
+        "simulation_base": params.get("simulation_base", {}),
+        "sweep": {
+            "k_values": params["k_values"],
+            "runs_per_k": params["runs_per_k"],
+        },
+        "outputs": {},
+        "run_summary": {
+            "total_runs": total_runs,
+            "completed_runs": 0,
+        },
+        "history": [{"event_type": "job_created", "created_at": now}],
+    }
+    status = {
+        "job_id": graph_id,
+        "status": "queued",
+        "cancel_requested": False,
+        "cancel_requested_at": None,
+        "cancel_reason": "",
+        "total_runs": total_runs,
+        "completed_runs": 0,
+        "current_run_id": "",
+        "started_at": None,
+        "updated_at": now,
+        "finished_at": None,
+        "estimated_finish_at": None,
+        "error": "",
+    }
+
+    _write_json(graph_dir / "manifest.json", manifest)
+    _write_json(graph_dir / "status.json", status)
+    _write_json(graph_dir / "requests.json", request)
+
+    with _connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO simulation_requests
+                (request_id, graph_type, graph_key, params_json, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                graph_id,
+                graph_type,
+                json.dumps(graph_key, ensure_ascii=False),
+                json.dumps(params, ensure_ascii=False),
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO aggregate_sets
+                (aggregate_set_id, label, interval_start_ms, interval_end_ms,
+                 per_method, run_filter_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                aggregate_set_id,
+                (
+                    f"convergence: {params['stable_cycle_count']} cycles, "
+                    f"threshold {params['phase_gap_change_threshold']}"
+                ),
+                0.0,
+                0.0,
+                "phase_gap_change_stability",
+                json.dumps(
+                    {
+                        "stable_cycle_count": params["stable_cycle_count"],
+                        "phase_gap_change_threshold": params["phase_gap_change_threshold"],
+                    },
+                    ensure_ascii=False,
+                ),
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO plot_settings
+                (settings_id, aggregate_set_id, settings_json, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                "current",
+                aggregate_set_id,
+                json.dumps(params.get("plot_settings", {}), ensure_ascii=False),
+                now,
+            ),
+        )
+
+    _insert_meta(
+        db_path,
+        {
+            "schema_version": 1,
+            "graph_id": graph_id,
+            "graph_type": graph_type,
+            "graph_key": graph_key,
+            "input_params": params,
+            "simulation_base": params.get("simulation_base", {}),
+            "sweep": {
+                "k_values": params["k_values"],
+                "runs_per_k": params["runs_per_k"],
+            },
+            "created_at": now,
+            "storage_policy": {
+                "raw_data": (
+                    "source_graph_folder"
+                    if params.get("source_mode") == "existing_graph"
+                    else "raw_run_sqlite"
+                ),
+                "raw_run_sqlite": RAW_RUN_DB_NAME,
+                "sqlite": "metadata_intermediate_aggregate",
+            },
+        },
+    )
+
+    return load_graph_job(graph_dir)
+
+
+def create_phase_gap_error_vs_k_job(params: dict[str, Any]) -> GraphJobSummary:
+    ensure_graph_runs_root()
+
+    now = utc_now_iso()
+    graph_id = _build_graph_id()
+    graph_type = GRAPH_TYPE_PHASE_GAP_ERROR_VS_K
+    graph_key = {
+        "coupling_function": params["coupling_function"],
+        "source_mode": params.get("source_mode", "new_simulation"),
+    }
+    if params.get("source_graph_id"):
+        graph_key["source_graph_id"] = params["source_graph_id"]
+
+    graph_dir = GRAPH_RUNS_ROOT / graph_type / graph_id
+    figures_dir = graph_dir / "figures"
+    logs_dir = graph_dir / "logs"
+
+    graph_dir.mkdir(parents=True, exist_ok=False)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    db_path = graph_dir / "graph_data.sqlite"
+    _init_db(db_path)
+    if params.get("source_mode", "new_simulation") == "new_simulation":
+        raw_conn = sqlite_runs.connect(graph_dir / RAW_RUN_DB_NAME)
+        try:
+            sqlite_runs.initialize(raw_conn)
+        finally:
+            raw_conn.close()
+
+    if params.get("source_mode") == "existing_graph" and params.get("selected_run_count") is not None:
+        total_runs = int(params.get("selected_run_count", 0) or 0)
+    else:
+        total_runs = len(params["k_values"]) * int(params["runs_per_k"])
+    aggregate_set_id = _phase_gap_error_aggregate_set_id(
+        str(params.get("target_cycle_mode", "last")),
+        params.get("target_cycle_index"),
+    )
+
+    request = {
+        "request_id": graph_id,
+        "graph_type": graph_type,
+        "graph_key": graph_key,
+        "params": params,
+        "created_at": now,
+    }
+    manifest = {
+        "schema_version": 1,
+        "graph_id": graph_id,
+        "graph_type": graph_type,
+        "graph_key": graph_key,
+        "created_at": now,
+        "updated_at": now,
+        "status": "queued",
+        "input": params,
+        "simulation_base": params.get("simulation_base", {}),
+        "sweep": {
+            "k_values": params["k_values"],
+            "runs_per_k": params["runs_per_k"],
+        },
+        "outputs": {},
+        "run_summary": {
+            "total_runs": total_runs,
+            "completed_runs": 0,
+        },
+        "history": [{"event_type": "job_created", "created_at": now}],
+    }
+    status = {
+        "job_id": graph_id,
+        "status": "queued",
+        "cancel_requested": False,
+        "cancel_requested_at": None,
+        "cancel_reason": "",
+        "total_runs": total_runs,
+        "completed_runs": 0,
+        "current_run_id": "",
+        "started_at": None,
+        "updated_at": now,
+        "finished_at": None,
+        "estimated_finish_at": None,
+        "error": "",
+    }
+
+    _write_json(graph_dir / "manifest.json", manifest)
+    _write_json(graph_dir / "status.json", status)
+    _write_json(graph_dir / "requests.json", request)
+
+    with _connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO simulation_requests
+                (request_id, graph_type, graph_key, params_json, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                graph_id,
+                graph_type,
+                json.dumps(graph_key, ensure_ascii=False),
+                json.dumps(params, ensure_ascii=False),
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO aggregate_sets
+                (aggregate_set_id, label, interval_start_ms, interval_end_ms,
+                 per_method, run_filter_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                aggregate_set_id,
+                _phase_gap_error_label(
+                    str(params.get("target_cycle_mode", "last")),
+                    params.get("target_cycle_index"),
+                ),
+                0.0,
+                0.0,
+                "phase_gap_error_snapshot",
+                json.dumps(
+                    {
+                        "target_cycle_mode": params.get("target_cycle_mode", "last"),
+                        "target_cycle_index": params.get("target_cycle_index"),
+                    },
+                    ensure_ascii=False,
+                ),
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO plot_settings
+                (settings_id, aggregate_set_id, settings_json, updated_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                "current",
+                aggregate_set_id,
+                json.dumps(params.get("plot_settings", {}), ensure_ascii=False),
+                now,
+            ),
+        )
+
+    _insert_meta(
+        db_path,
+        {
+            "schema_version": 1,
+            "graph_id": graph_id,
+            "graph_type": graph_type,
+            "graph_key": graph_key,
+            "input_params": params,
+            "simulation_base": params.get("simulation_base", {}),
+            "sweep": {
+                "k_values": params["k_values"],
+                "runs_per_k": params["runs_per_k"],
+            },
+            "created_at": now,
+            "storage_policy": {
+                "raw_data": (
+                    "source_graph_folder"
+                    if params.get("source_mode") == "existing_graph"
+                    else "raw_run_sqlite"
+                ),
                 "raw_run_sqlite": RAW_RUN_DB_NAME,
                 "sqlite": "metadata_intermediate_aggregate",
             },
@@ -481,3 +881,26 @@ def _interval_aggregate_set_id(interval_start_ms: float, interval_end_ms: float)
     start = int(interval_start_ms)
     end = int(interval_end_ms)
     return f"interval_{start}_to_{end}"
+
+
+def _convergence_aggregate_set_id(stable_cycle_count: int, threshold: float) -> str:
+    threshold_text = f"{threshold:g}".replace("-", "m").replace(".", "p")
+    return f"convergence_{int(stable_cycle_count)}cycles_thr_{threshold_text}"
+
+
+def _phase_gap_error_aggregate_set_id(
+    target_cycle_mode: str,
+    target_cycle_index: object | None,
+) -> str:
+    if target_cycle_mode == "cycle_index":
+        return f"phase_gap_cycle_{int(target_cycle_index or 0)}"
+    return "phase_gap_last"
+
+
+def _phase_gap_error_label(
+    target_cycle_mode: str,
+    target_cycle_index: object | None,
+) -> str:
+    if target_cycle_mode == "cycle_index":
+        return f"phase-gap error at cycle {int(target_cycle_index or 0)}"
+    return "phase-gap error at final available cycle"
