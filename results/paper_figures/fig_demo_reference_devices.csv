@@ -1,0 +1,9 @@
+figure_stem,condition,function,label,reference_device_id,reference_initial_event_time_ms
+fig_demo_uniform_kuramoto,uniform_1ms,KURAMOTO,Kuramoto based,25,1275.0
+fig_demo_uniform_frog,uniform_1ms,LINEAR,frog chorus based,25,1275.0
+fig_demo_uniform_modified_frog,uniform_1ms,LINEAR_4,modified frog chorus based,25,1275.0
+fig_demo_uniform_1sin,uniform_1ms,NewSIN,1-sin based,25,1275.0
+fig_demo_clusters_kuramoto,four_clusters,KURAMOTO,Kuramoto based,25,3762.0
+fig_demo_clusters_frog,four_clusters,LINEAR,frog chorus based,25,3762.0
+fig_demo_clusters_modified_frog,four_clusters,LINEAR_4,modified frog chorus based,25,3762.0
+fig_demo_clusters_1sin,four_clusters,NewSIN,1-sin based,25,3762.0

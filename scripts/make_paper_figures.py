@@ -84,8 +84,10 @@ def main() -> int:
     frames = load_metrics()
 
     make_coupling_function_panels()
-    make_demo_panels("uniform_1ms", "fig_demo_uniform")
-    make_demo_panels("four_clusters", "fig_demo_clusters")
+    demo_meta = []
+    demo_meta.extend(make_demo_panels("uniform_1ms", "fig_demo_uniform"))
+    demo_meta.extend(make_demo_panels("four_clusters", "fig_demo_clusters"))
+    pd.DataFrame(demo_meta).to_csv(OUTPUT_ROOT / "fig_demo_reference_devices.csv", index=False)
     make_per_vs_k(frames)
     make_ttu_vs_k(frames)
     make_usable_rate_vs_k(frames)
@@ -170,28 +172,55 @@ def coupling_curve(coupling_enum: CouplingFunction) -> tuple[np.ndarray, np.ndar
     return np.array(xs, dtype=float), np.array(ys, dtype=float)
 
 
-def make_demo_panels(condition: str, stem_prefix: str) -> None:
+def make_demo_panels(condition: str, stem_prefix: str) -> list[dict[str, object]]:
+    metadata_rows: list[dict[str, object]] = []
     for slug, spec in SERIES.items():
         path = DEMO_ROOT / f"{slug}_{condition}_run1.csv"
-        df = pd.read_csv(path, usecols=["cycle_index", "device_id", "phase_diff_rad"])
-        df["phase_diff_wrapped_rad"] = wrap_to_pi(pd.to_numeric(df["phase_diff_rad"], errors="coerce"))
+        df = pd.read_csv(
+            path,
+            usecols=["cycle_index", "device_id", "phase_diff_rad", "device_event_time_ms"],
+        )
+        reference_device_id, reference_initial_event_time_ms = select_reference_device(df)
+        reference_phase = (
+            df[df["device_id"] == reference_device_id][["cycle_index", "phase_diff_rad"]]
+            .rename(columns={"phase_diff_rad": "reference_phase_diff_rad"})
+        )
+        df = df.merge(reference_phase, how="left", on="cycle_index")
+        df["phase_diff_rebased_rad"] = wrap_to_pi(
+            pd.to_numeric(df["phase_diff_rad"], errors="coerce")
+            - pd.to_numeric(df["reference_phase_diff_rad"], errors="coerce")
+        )
         df.insert(0, "label", spec["label"])
         df.insert(0, "function", spec["function"])
         df.insert(0, "condition", condition)
+        df.insert(3, "reference_device_id", reference_device_id)
+        df.insert(4, "reference_initial_event_time_ms", reference_initial_event_time_ms)
         output_stem = f"{stem_prefix}_{spec['demo_slug']}"
         df.to_csv(OUTPUT_ROOT / f"{output_stem}.csv", index=False)
+        metadata_rows.append(
+            {
+                "figure_stem": output_stem,
+                "condition": condition,
+                "function": spec["function"],
+                "label": spec["label"],
+                "reference_device_id": reference_device_id,
+                "reference_initial_event_time_ms": reference_initial_event_time_ms,
+            }
+        )
 
         fig, ax = plt.subplots(figsize=(3.5, 2.6))
         device_ids = sorted(df["device_id"].dropna().unique())
         for index, device_id in enumerate(device_ids):
             device_df = df[df["device_id"] == device_id]
+            is_reference = int(device_id) == int(reference_device_id)
             ax.scatter(
                 device_df["cycle_index"],
-                device_df["phase_diff_wrapped_rad"],
-                s=0.8,
-                color=device_color(str(spec["color"]), index, len(device_ids)),
-                alpha=0.6,
+                device_df["phase_diff_rebased_rad"],
+                s=1.5 if is_reference else 0.8,
+                color="black" if is_reference else device_color(str(spec["color"]), index, len(device_ids)),
+                alpha=0.9 if is_reference else 0.6,
                 linewidths=0,
+                zorder=4 if is_reference else 2,
             )
         ax.set_xlim(1, 180)
         ax.set_ylim(-math.pi, math.pi)
@@ -202,6 +231,7 @@ def make_demo_panels(condition: str, stem_prefix: str) -> None:
         fig.tight_layout(pad=0.3)
         fig.savefig(OUTPUT_ROOT / f"{output_stem}.pdf")
         plt.close(fig)
+    return metadata_rows
 
 
 def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
@@ -394,6 +424,22 @@ def write_plot_csv(stem: str, frames: list[pd.DataFrame]) -> None:
 
 def cycles_to_minutes(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce") * CYCLE_SECONDS / 60.0
+
+
+def select_reference_device(df: pd.DataFrame) -> tuple[int, float]:
+    initial = df[df["cycle_index"] == 1][["device_id", "device_event_time_ms"]].copy()
+    initial["device_event_time_ms"] = pd.to_numeric(initial["device_event_time_ms"], errors="coerce")
+    initial = initial.dropna(subset=["device_id", "device_event_time_ms"])
+    if initial.empty:
+        raise ValueError("cannot select reference device: missing cycle_index==1 event times")
+    median_time = float(initial["device_event_time_ms"].median())
+    initial["distance_from_median"] = (initial["device_event_time_ms"] - median_time).abs()
+    # When two devices are equally close to the median, choose the upper-side timing.
+    selected = initial.sort_values(
+        ["distance_from_median", "device_event_time_ms", "device_id"],
+        ascending=[True, False, False],
+    ).iloc[0]
+    return int(selected["device_id"]), float(selected["device_event_time_ms"])
 
 
 def wrap_to_pi(series: pd.Series) -> pd.Series:
