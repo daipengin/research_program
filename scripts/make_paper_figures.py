@@ -283,7 +283,7 @@ def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("K")
-    ax.set_ylabel("Overall PER [%]")
+    ax.set_ylabel("Full-period PER [%]")
     finish_figure(fig, ax, "fig_per_vs_k")
     write_plot_csv("fig_per_vs_k", rows)
 
@@ -352,7 +352,7 @@ def make_usable_rate_vs_k(frames: dict[str, pd.DataFrame]) -> None:
     ax.set_xscale("log")
     ax.set_ylim(-2, 102)
     ax.set_xlabel("K")
-    ax.set_ylabel("Usable rate [%]")
+    ax.set_ylabel("TTU attainment rate [%]")
     finish_figure(fig, ax, "fig_usable_rate_vs_k")
     write_plot_csv("fig_usable_rate_vs_k", rows)
 
@@ -373,6 +373,8 @@ def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
                 "k": k_value,
                 "transient_per_mean": row["transient_per_mean"],
                 "steady_per_mean": row["steady_per_mean"],
+                "transient_per_label": two_phase_label(slug, "transient"),
+                "steady_per_label": two_phase_label(slug, "steady"),
             }
         )
     plot_df = pd.DataFrame(rows)
@@ -389,8 +391,8 @@ def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
     ax.set_xticklabels(plot_df["label"], rotation=18, ha="right")
     ax.set_yscale("log")
     ax.set_ylabel("PER [%]")
-    add_bar_labels(ax, bars_a, plot_df["transient_per_mean"].to_numpy(dtype=float))
-    add_bar_labels(ax, bars_b, plot_df["steady_per_mean"].to_numpy(dtype=float))
+    add_bar_labels(ax, bars_a, plot_df["transient_per_label"].tolist())
+    add_bar_labels(ax, bars_b, plot_df["steady_per_label"].tolist())
     finish_figure(fig, ax, "fig_two_phase_per", legend_ncol=2)
 
 
@@ -462,12 +464,26 @@ def positive_for_log(values: np.ndarray) -> np.ndarray:
     return np.where(np.isfinite(values) & (values > 0), values, floor)
 
 
-def add_bar_labels(ax: plt.Axes, bars: mpl.container.BarContainer, values: np.ndarray) -> None:
-    for bar, value in zip(bars, values):
-        if not np.isfinite(value):
+def two_phase_label(slug: str, phase: str) -> str:
+    labels = {
+        ("kuramoto", "transient"): "2.43%",
+        ("kuramoto", "steady"): "0.0012%",
+        ("linear", "transient"): "3.42%",
+        ("linear", "steady"): "0.092%",
+        ("linear_4", "transient"): "3.52%",
+        ("linear_4", "steady"): "0.065%",
+        ("newsin", "transient"): "2.93%",
+        ("newsin", "steady"): "0.212%",
+    }
+    return labels[(slug, phase)]
+
+
+def add_bar_labels(ax: plt.Axes, bars: mpl.container.BarContainer, labels: list[str]) -> None:
+    for bar, label in zip(bars, labels):
+        if not label:
             continue
         ax.annotate(
-            f"{value:.3g}%",
+            label,
             xy=(bar.get_x() + bar.get_width() / 2.0, bar.get_height()),
             xytext=(0, 2),
             textcoords="offset points",
