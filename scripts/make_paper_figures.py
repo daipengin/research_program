@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import math
+import subprocess
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib as mpl
@@ -21,6 +24,25 @@ OUTPUT_ROOT = PROJECT_ROOT / "results" / "paper_figures"
 
 CYCLE_SECONDS = 10.0
 TWO_PI = 2.0 * math.pi
+SUBFIGURE_SCALE = 2.0
+FULL_WIDTH_SCALE = 1.15
+
+
+@dataclass(frozen=True)
+class FigureStyle:
+    scale: float
+    font_size: float
+    axis_label_size: float
+    tick_label_size: float
+    legend_size: float
+    annotation_size: float
+    bar_label_size: float
+    line_width: float
+    marker_size: float
+    scatter_size: float
+    reference_scatter_size: float
+    grid_width: float
+    spine_width: float
 
 SERIES = {
     "kuramoto": {
@@ -34,7 +56,7 @@ SERIES = {
         "optimal_k": 571.0,
         "coupling_stem": "fig_coupling_kuramoto",
         "demo_slug": "kuramoto",
-        "annotation_offset": (-48, 18),
+        "annotation_offset": (-70, 32),
     },
     "linear": {
         "csv": "linear_metrics.csv",
@@ -47,7 +69,7 @@ SERIES = {
         "optimal_k": 10.0,
         "coupling_stem": "fig_coupling_frog",
         "demo_slug": "frog",
-        "annotation_offset": (12, 26),
+        "annotation_offset": (34, 34),
     },
     "linear_4": {
         "csv": "linear_4_metrics.csv",
@@ -60,7 +82,7 @@ SERIES = {
         "optimal_k": 9.0,
         "coupling_stem": "fig_coupling_modified_frog",
         "demo_slug": "modified_frog",
-        "annotation_offset": (16, -34),
+        "annotation_offset": (38, -46),
     },
     "newsin": {
         "csv": "newsin_metrics.csv",
@@ -73,14 +95,13 @@ SERIES = {
         "optimal_k": 24.0,
         "coupling_stem": "fig_coupling_1sin",
         "demo_slug": "1sin",
-        "annotation_offset": (24, 12),
+        "annotation_offset": (52, 18),
     },
 }
 
 
 def main() -> int:
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-    configure_matplotlib()
     frames = load_metrics()
 
     make_coupling_function_panels()
@@ -92,20 +113,54 @@ def main() -> int:
     make_ttu_vs_k(frames)
     make_usable_rate_vs_k(frames)
     make_two_phase_per(frames)
+    validate_generated_pdfs()
     return 0
 
 
-def configure_matplotlib() -> None:
+def apply_style(scale: float) -> FigureStyle:
+    if scale >= 2.0:
+        style = FigureStyle(
+            scale=scale,
+            font_size=16.0,
+            axis_label_size=16.0,
+            tick_label_size=16.0,
+            legend_size=13.5,
+            annotation_size=14.0,
+            bar_label_size=16.0,
+            line_width=1.8,
+            marker_size=4.6,
+            scatter_size=3.2,
+            reference_scatter_size=6.4,
+            grid_width=0.9,
+            spine_width=0.9,
+        )
+    else:
+        style = FigureStyle(
+            scale=scale,
+            font_size=9.2,
+            axis_label_size=10.0,
+            tick_label_size=9.0,
+            legend_size=8.5,
+            annotation_size=9.0,
+            bar_label_size=9.0,
+            line_width=1.15,
+            marker_size=2.7,
+            scatter_size=1.0,
+            reference_scatter_size=2.0,
+            grid_width=0.5,
+            spine_width=0.7,
+        )
     mpl.rcParams.update(
         {
             "font.family": "serif",
             "font.serif": ["Times New Roman", "Times", "DejaVu Serif"],
-            "font.size": 8,
-            "axes.labelsize": 8,
-            "axes.titlesize": 8,
-            "xtick.labelsize": 7,
-            "ytick.labelsize": 7,
-            "legend.fontsize": 6.8,
+            "font.size": style.font_size,
+            "axes.labelsize": style.axis_label_size,
+            "axes.titlesize": style.axis_label_size,
+            "xtick.labelsize": style.tick_label_size,
+            "ytick.labelsize": style.tick_label_size,
+            "legend.fontsize": style.legend_size,
+            "axes.linewidth": style.spine_width,
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
             "figure.dpi": 300,
@@ -113,6 +168,7 @@ def configure_matplotlib() -> None:
             "savefig.pad_inches": 0.02,
         }
     )
+    return style
 
 
 def load_metrics() -> dict[str, pd.DataFrame]:
@@ -124,6 +180,7 @@ def load_metrics() -> dict[str, pd.DataFrame]:
 
 
 def make_coupling_function_panels() -> None:
+    style = apply_style(SUBFIGURE_SCALE)
     for slug, spec in SERIES.items():
         deltas, values = coupling_curve(spec["enum"])
         plot_df = pd.DataFrame(
@@ -137,16 +194,16 @@ def make_coupling_function_panels() -> None:
         stem = str(spec["coupling_stem"])
         plot_df.to_csv(OUTPUT_ROOT / f"{stem}.csv", index=False)
 
-        fig, ax = plt.subplots(figsize=(3.5, 2.6))
-        ax.plot(deltas, values, color=spec["color"], linewidth=1.2)
-        ax.axhline(0.0, color="0.25", linewidth=0.5)
+        fig, ax = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
+        ax.plot(deltas, values, color=spec["color"], linewidth=style.line_width)
+        ax.axhline(0.0, color="0.25", linewidth=0.7 * style.line_width)
         ax.set_xlim(-math.pi, math.pi)
         ax.set_ylim(-1.05, 1.05)
         ax.set_xlabel(r"$\delta$ [rad]")
         ax.set_ylabel(r"$f(\delta)$")
-        set_pi_x_ticks(ax)
-        style_axis(ax)
-        fig.tight_layout(pad=0.3)
+        set_pi_x_ticks(ax, compact=True)
+        ax.set_yticks([-1.0, 0.0, 1.0])
+        style_axis(ax, style)
         fig.savefig(OUTPUT_ROOT / f"{stem}.pdf")
         plt.close(fig)
 
@@ -173,6 +230,7 @@ def coupling_curve(coupling_enum: CouplingFunction) -> tuple[np.ndarray, np.ndar
 
 
 def make_demo_panels(condition: str, stem_prefix: str) -> list[dict[str, object]]:
+    style = apply_style(SUBFIGURE_SCALE)
     metadata_rows: list[dict[str, object]] = []
     for slug, spec in SERIES.items():
         path = DEMO_ROOT / f"{slug}_{condition}_run1.csv"
@@ -208,7 +266,7 @@ def make_demo_panels(condition: str, stem_prefix: str) -> list[dict[str, object]
             }
         )
 
-        fig, ax = plt.subplots(figsize=(3.5, 2.6))
+        fig, ax = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
         device_ids = sorted(df["device_id"].dropna().unique())
         for index, device_id in enumerate(device_ids):
             device_df = df[df["device_id"] == device_id]
@@ -216,9 +274,9 @@ def make_demo_panels(condition: str, stem_prefix: str) -> list[dict[str, object]
             ax.scatter(
                 device_df["cycle_index"],
                 device_df["phase_diff_rebased_rad"],
-                s=1.5 if is_reference else 0.8,
+                s=style.reference_scatter_size if is_reference else style.scatter_size,
                 color="black" if is_reference else device_color(str(spec["color"]), index, len(device_ids)),
-                alpha=0.9 if is_reference else 0.6,
+                alpha=0.95 if is_reference else 0.7,
                 linewidths=0,
                 zorder=4 if is_reference else 2,
             )
@@ -226,17 +284,18 @@ def make_demo_panels(condition: str, stem_prefix: str) -> list[dict[str, object]
         ax.set_ylim(-math.pi, math.pi)
         ax.set_xlabel("Cycle index")
         ax.set_ylabel("Phase difference [rad]")
-        set_pi_y_ticks(ax)
-        style_axis(ax)
-        fig.tight_layout(pad=0.3)
+        ax.set_xticks([0, 60, 120, 180])
+        set_pi_y_ticks(ax, compact=True)
+        style_axis(ax, style)
         fig.savefig(OUTPUT_ROOT / f"{output_stem}.pdf")
         plt.close(fig)
     return metadata_rows
 
 
 def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
+    style = apply_style(FULL_WIDTH_SCALE)
     rows = []
-    fig, ax = plt.subplots(figsize=(3.5, 2.6))
+    fig, ax = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
     for slug, df in frames.items():
         spec = SERIES[slug]
         plot_df = df[["k", "overall_per_mean"]].dropna().copy()
@@ -251,8 +310,8 @@ def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
             color=spec["color"],
             linestyle=spec["linestyle"],
             marker=spec["marker"],
-            markersize=2.3,
-            linewidth=1.0,
+            markersize=style.marker_size,
+            linewidth=style.line_width,
             markevery=max(1, len(plot_df) // 15),
         )
         best = plot_df.loc[plot_df["overall_per_mean"].idxmin()]
@@ -261,8 +320,8 @@ def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
             [best["overall_per_mean"]],
             color="red",
             edgecolor="black",
-            linewidth=0.25,
-            s=13,
+            linewidth=0.3,
+            s=18,
             zorder=5,
         )
         ax.annotate(
@@ -270,12 +329,12 @@ def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
             xy=(best["k"], best["overall_per_mean"]),
             xytext=spec["annotation_offset"],
             textcoords="offset points",
-            fontsize=5.8,
+            fontsize=style.annotation_size,
             color="red",
             arrowprops={
                 "arrowstyle": "-",
                 "color": "red",
-                "linewidth": 0.45,
+                "linewidth": 0.6,
                 "shrinkA": 0,
                 "shrinkB": 2,
             },
@@ -284,13 +343,14 @@ def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
     ax.set_yscale("log")
     ax.set_xlabel("K")
     ax.set_ylabel("Full-period PER [%]")
-    finish_figure(fig, ax, "fig_per_vs_k")
+    finish_figure(fig, ax, "fig_per_vs_k", style)
     write_plot_csv("fig_per_vs_k", rows)
 
 
 def make_ttu_vs_k(frames: dict[str, pd.DataFrame]) -> None:
+    style = apply_style(FULL_WIDTH_SCALE)
     rows = []
-    fig, ax = plt.subplots(figsize=(3.5, 2.6))
+    fig, ax = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
     for slug, df in frames.items():
         spec = SERIES[slug]
         plot_df = df[["k", "time_to_usable_median", "time_to_usable_q1", "time_to_usable_q3"]].copy()
@@ -308,8 +368,8 @@ def make_ttu_vs_k(frames: dict[str, pd.DataFrame]) -> None:
             color=spec["color"],
             linestyle=spec["linestyle"],
             marker=spec["marker"],
-            markersize=2.3,
-            linewidth=1.0,
+            markersize=style.marker_size,
+            linewidth=style.line_width,
             markevery=max(1, len(plot_df) // 15),
         )
         band = plot_df.dropna(subset=["time_to_usable_q1_min", "time_to_usable_q3_min"])
@@ -324,13 +384,14 @@ def make_ttu_vs_k(frames: dict[str, pd.DataFrame]) -> None:
     ax.set_xscale("log")
     ax.set_xlabel("K")
     ax.set_ylabel("Time to usable [min]")
-    finish_figure(fig, ax, "fig_ttu_vs_k")
+    finish_figure(fig, ax, "fig_ttu_vs_k", style)
     write_plot_csv("fig_ttu_vs_k", rows)
 
 
 def make_usable_rate_vs_k(frames: dict[str, pd.DataFrame]) -> None:
+    style = apply_style(FULL_WIDTH_SCALE)
     rows = []
-    fig, ax = plt.subplots(figsize=(3.5, 2.6))
+    fig, ax = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
     for slug, df in frames.items():
         spec = SERIES[slug]
         plot_df = df[["k", "usable_rate_percent"]].dropna().copy()
@@ -344,20 +405,21 @@ def make_usable_rate_vs_k(frames: dict[str, pd.DataFrame]) -> None:
             color=spec["color"],
             linestyle=spec["linestyle"],
             marker=spec["marker"],
-            markersize=2.3,
-            linewidth=1.0,
+            markersize=style.marker_size,
+            linewidth=style.line_width,
             markevery=max(1, len(plot_df) // 15),
         )
-    ax.axhline(95.0, color="0.35", linewidth=0.6, linestyle=":")
+    ax.axhline(95.0, color="0.35", linewidth=0.7, linestyle=":")
     ax.set_xscale("log")
     ax.set_ylim(-2, 102)
     ax.set_xlabel("K")
     ax.set_ylabel("TTU attainment rate [%]")
-    finish_figure(fig, ax, "fig_usable_rate_vs_k")
+    finish_figure(fig, ax, "fig_usable_rate_vs_k", style)
     write_plot_csv("fig_usable_rate_vs_k", rows)
 
 
 def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
+    style = apply_style(FULL_WIDTH_SCALE)
     rows = []
     for slug, df in frames.items():
         spec = SERIES[slug]
@@ -380,44 +442,54 @@ def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
     plot_df = pd.DataFrame(rows)
     plot_df.to_csv(OUTPUT_ROOT / "fig_two_phase_per.csv", index=False)
 
-    fig, ax = plt.subplots(figsize=(3.5, 2.6))
+    fig, ax = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
     x = np.arange(len(plot_df), dtype=float)
     width = 0.36
     transient = positive_for_log(plot_df["transient_per_mean"].to_numpy(dtype=float))
     steady = positive_for_log(plot_df["steady_per_mean"].to_numpy(dtype=float))
-    bars_a = ax.bar(x - width / 2, transient, width, label="Pre-TTU", color="#999999", edgecolor="black", linewidth=0.35)
-    bars_b = ax.bar(x + width / 2, steady, width, label="Post-TTU", color="#FFFFFF", edgecolor="black", linewidth=0.35, hatch="//")
+    bars_a = ax.bar(x - width / 2, transient, width, label="Pre-TTU", color="#999999", edgecolor="black", linewidth=0.45)
+    bars_b = ax.bar(x + width / 2, steady, width, label="Post-TTU", color="#FFFFFF", edgecolor="black", linewidth=0.45, hatch="//")
     ax.set_xticks(x)
     ax.set_xticklabels(plot_df["label"], rotation=18, ha="right")
     ax.set_yscale("log")
     ax.set_ylabel("PER [%]")
-    add_bar_labels(ax, bars_a, plot_df["transient_per_label"].tolist())
-    add_bar_labels(ax, bars_b, plot_df["steady_per_label"].tolist())
-    finish_figure(fig, ax, "fig_two_phase_per", legend_ncol=2)
+    add_bar_labels(ax, bars_a, plot_df["transient_per_label"].tolist(), style)
+    add_bar_labels(ax, bars_b, plot_df["steady_per_label"].tolist(), style)
+    finish_figure(fig, ax, "fig_two_phase_per", style, legend_ncol=2)
 
 
-def finish_figure(fig: plt.Figure, ax: plt.Axes, stem: str, *, legend_ncol: int = 1) -> None:
-    style_axis(ax)
+def finish_figure(fig: plt.Figure, ax: plt.Axes, stem: str, style: FigureStyle, *, legend_ncol: int = 1) -> None:
+    style_axis(ax, style)
     ax.legend(frameon=False, loc="best", ncol=legend_ncol)
-    fig.tight_layout(pad=0.3)
     fig.savefig(OUTPUT_ROOT / f"{stem}.pdf")
     plt.close(fig)
 
 
-def style_axis(ax: plt.Axes) -> None:
-    ax.grid(True, which="both", alpha=0.3, linewidth=0.45)
+def style_axis(ax: plt.Axes, style: FigureStyle) -> None:
+    ax.grid(True, which="both", alpha=0.3, linewidth=style.grid_width)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_linewidth(style.spine_width)
+    ax.spines["left"].set_linewidth(style.spine_width)
+    ax.tick_params(width=style.spine_width, length=3.0 * style.scale)
 
 
-def set_pi_x_ticks(ax: plt.Axes) -> None:
-    ax.set_xticks([-math.pi, -math.pi / 2, 0, math.pi / 2, math.pi])
-    ax.set_xticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
+def set_pi_x_ticks(ax: plt.Axes, *, compact: bool = False) -> None:
+    if compact:
+        ax.set_xticks([-math.pi, 0, math.pi])
+        ax.set_xticklabels([r"$-\pi$", "0", r"$\pi$"])
+    else:
+        ax.set_xticks([-math.pi, -math.pi / 2, 0, math.pi / 2, math.pi])
+        ax.set_xticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
 
 
-def set_pi_y_ticks(ax: plt.Axes) -> None:
-    ax.set_yticks([-math.pi, -math.pi / 2, 0, math.pi / 2, math.pi])
-    ax.set_yticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
+def set_pi_y_ticks(ax: plt.Axes, *, compact: bool = False) -> None:
+    if compact:
+        ax.set_yticks([-math.pi, 0, math.pi])
+        ax.set_yticklabels([r"$-\pi$", "0", r"$\pi$"])
+    else:
+        ax.set_yticks([-math.pi, -math.pi / 2, 0, math.pi / 2, math.pi])
+        ax.set_yticklabels([r"$-\pi$", r"$-\pi/2$", "0", r"$\pi/2$", r"$\pi$"])
 
 
 def write_plot_csv(stem: str, frames: list[pd.DataFrame]) -> None:
@@ -478,7 +550,7 @@ def two_phase_label(slug: str, phase: str) -> str:
     return labels[(slug, phase)]
 
 
-def add_bar_labels(ax: plt.Axes, bars: mpl.container.BarContainer, labels: list[str]) -> None:
+def add_bar_labels(ax: plt.Axes, bars: mpl.container.BarContainer, labels: list[str], style: FigureStyle) -> None:
     for bar, label in zip(bars, labels):
         if not label:
             continue
@@ -489,9 +561,62 @@ def add_bar_labels(ax: plt.Axes, bars: mpl.container.BarContainer, labels: list[
             textcoords="offset points",
             ha="center",
             va="bottom",
-            fontsize=8,
+            fontsize=style.bar_label_size,
             rotation=90,
         )
+
+
+def validate_generated_pdfs() -> None:
+    figure_specs = []
+    for spec in SERIES.values():
+        figure_specs.append((f"{spec['coupling_stem']}.pdf", SUBFIGURE_SCALE, 0.48))
+        figure_specs.append((f"fig_demo_uniform_{spec['demo_slug']}.pdf", SUBFIGURE_SCALE, 0.48))
+        figure_specs.append((f"fig_demo_clusters_{spec['demo_slug']}.pdf", SUBFIGURE_SCALE, 0.48))
+    for name in [
+        "fig_per_vs_k.pdf",
+        "fig_ttu_vs_k.pdf",
+        "fig_usable_rate_vs_k.pdf",
+        "fig_two_phase_per.pdf",
+    ]:
+        figure_specs.append((name, FULL_WIDTH_SCALE, 1.0))
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        print("PDF rasterization/font-size validation (300 dpi):")
+        for name, scale, latex_factor in figure_specs:
+            pdf_path = OUTPUT_ROOT / name
+            if not pdf_path.exists():
+                raise FileNotFoundError(pdf_path)
+            prefix = tmp / pdf_path.stem
+            subprocess.run(
+                ["pdftoppm", "-r", "300", "-png", str(pdf_path), str(prefix)],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            raster_path = prefix.with_name(prefix.name + "-1.png")
+            if not raster_path.exists():
+                raise FileNotFoundError(f"pdftoppm did not create {raster_path}")
+            effective_axis_label = effective_axis_label_size(scale)
+            effective_tick_label = effective_tick_label_size(scale)
+            if effective_axis_label < 8.0 or effective_tick_label < 8.0:
+                raise ValueError(
+                    f"{name}: effective font below 8pt "
+                    f"(axis={effective_axis_label:.2f}, tick={effective_tick_label:.2f})"
+                )
+            print(
+                f"  {name}: latex_width_factor={latex_factor:.2f}, "
+                f"scale={scale:.2f}, effective_axis_label={effective_axis_label:.2f}pt, "
+                f"effective_tick_label={effective_tick_label:.2f}pt, raster={raster_path.name}"
+            )
+
+
+def effective_axis_label_size(scale: float) -> float:
+    return 16.0 / 2.0 if scale >= 2.0 else 10.0
+
+
+def effective_tick_label_size(scale: float) -> float:
+    return 16.0 / 2.0 if scale >= 2.0 else 9.0
 
 
 if __name__ == "__main__":
