@@ -1,0 +1,1 @@
+1-sin based. Minimum PER: 0.4517% at K=24. Minimum residual phase-spacing error: 0.01248 rad at K=4.

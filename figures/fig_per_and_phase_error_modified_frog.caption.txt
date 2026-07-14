@@ -1,0 +1,1 @@
+modified frog chorus based. Minimum PER: 0.5884% at K=9. Minimum residual phase-spacing error: 0.01254 rad at K=4.

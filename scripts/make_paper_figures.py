@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.lines import Line2D
+from matplotlib.text import Annotation
 
 from research_program.simulation.coupling_functions import (
     CouplingFunction,
@@ -21,7 +22,7 @@ from research_program.simulation.coupling_functions import (
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REANALYSIS_ROOT = PROJECT_ROOT / "results" / "reanalysis"
 DEMO_ROOT = PROJECT_ROOT / "results" / "demo_initial_phase"
-OUTPUT_ROOT = PROJECT_ROOT / "results" / "paper_figures"
+OUTPUT_ROOT = PROJECT_ROOT / "figures"
 
 CYCLE_SECONDS = 10.0
 TWO_PI = 2.0 * math.pi
@@ -57,7 +58,7 @@ SERIES = {
         "optimal_k": 571.0,
         "coupling_stem": "fig_coupling_kuramoto",
         "demo_slug": "kuramoto",
-        "annotation_offset": (-70, 32),
+        "annotation_offset": (-76, 48),
     },
     "linear": {
         "csv": "linear_metrics.csv",
@@ -70,7 +71,7 @@ SERIES = {
         "optimal_k": 10.0,
         "coupling_stem": "fig_coupling_frog",
         "demo_slug": "frog",
-        "annotation_offset": (34, 34),
+        "annotation_offset": (-54, -56),
     },
     "linear_4": {
         "csv": "linear_4_metrics.csv",
@@ -83,7 +84,7 @@ SERIES = {
         "optimal_k": 9.0,
         "coupling_stem": "fig_coupling_modified_frog",
         "demo_slug": "modified_frog",
-        "annotation_offset": (38, -46),
+        "annotation_offset": (44, -56),
     },
     "newsin": {
         "csv": "newsin_metrics.csv",
@@ -96,8 +97,15 @@ SERIES = {
         "optimal_k": 24.0,
         "coupling_stem": "fig_coupling_1sin",
         "demo_slug": "1sin",
-        "annotation_offset": (52, 18),
+        "annotation_offset": (58, 38),
     },
+}
+
+DUAL_AXIS_ANNOTATION_OFFSETS = {
+    "kuramoto": {"per": (-118, 86), "residual": (92, -92)},
+    "linear": {"per": (36, 46), "residual": (-74, -52)},
+    "linear_4": {"per": (38, 48), "residual": (-74, -54)},
+    "newsin": {"per": (38, 48), "residual": (-74, -54)},
 }
 
 
@@ -117,6 +125,7 @@ def main() -> int:
     make_phase_error_overlay_vs_k()
     make_per_and_phase_error_panels(frames)
     make_two_phase_per(frames)
+    write_preview_index()
     validate_generated_pdfs()
     return 0
 
@@ -216,7 +225,15 @@ def make_coupling_function_panels() -> None:
         set_pi_x_ticks(ax, compact=True)
         ax.set_yticks([-1.0, 0.0, 1.0])
         style_axis(ax, style)
-        fig.savefig(OUTPUT_ROOT / f"{stem}.pdf")
+        save_figure_artifacts(
+            fig,
+            stem,
+            caption=(
+                f"{spec['label']} coupling-function curve generated from the "
+                "implementation over delta in [-pi, pi]."
+            ),
+            axes=[ax],
+        )
         plt.close(fig)
 
 
@@ -299,7 +316,16 @@ def make_demo_panels(condition: str, stem_prefix: str) -> list[dict[str, object]
         ax.set_xticks([0, 60, 120, 180])
         set_pi_y_ticks(ax, compact=True)
         style_axis(ax, style)
-        fig.savefig(OUTPUT_ROOT / f"{output_stem}.pdf")
+        save_figure_artifacts(
+            fig,
+            output_stem,
+            caption=(
+                f"{spec['label']} phase-difference demo for {condition}. "
+                f"Reference device: id={reference_device_id}, "
+                f"initial event time={reference_initial_event_time_ms:g} ms."
+            ),
+            axes=[ax],
+        )
         plt.close(fig)
     return metadata_rows
 
@@ -336,26 +362,18 @@ def make_per_vs_k(frames: dict[str, pd.DataFrame]) -> None:
             s=18,
             zorder=5,
         )
-        ax.annotate(
-            f'{best["overall_per_mean"]:.3g}%\nK={best["k"]:g}',
-            xy=(best["k"], best["overall_per_mean"]),
-            xytext=spec["annotation_offset"],
-            textcoords="offset points",
-            fontsize=style.annotation_size,
-            color="red",
-            arrowprops={
-                "arrowstyle": "-",
-                "color": "red",
-                "linewidth": 0.6,
-                "shrinkA": 0,
-                "shrinkB": 2,
-            },
-        )
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("K")
     ax.set_ylabel("Full-period PER [%]")
-    finish_figure(fig, ax, "fig_per_vs_k", style)
+    minima = []
+    for slug, df in frames.items():
+        spec = SERIES[slug]
+        plot_df = df[["k", "overall_per_mean"]].dropna().copy()
+        plot_df = plot_df[plot_df["overall_per_mean"] > 0]
+        best = plot_df.loc[plot_df["overall_per_mean"].idxmin()]
+        minima.append(f"{spec['label']}: {float(best['overall_per_mean']):.4g}% at K={float(best['k']):g}.")
+    finish_figure(fig, ax, "fig_per_vs_k", style, caption="Minimum full-period PER values: " + " ".join(minima))
     write_plot_csv("fig_per_vs_k", rows)
 
 
@@ -396,7 +414,13 @@ def make_ttu_vs_k(frames: dict[str, pd.DataFrame]) -> None:
     ax.set_xscale("log")
     ax.set_xlabel("K")
     ax.set_ylabel("Time to usable [min]")
-    finish_figure(fig, ax, "fig_ttu_vs_k", style)
+    finish_figure(
+        fig,
+        ax,
+        "fig_ttu_vs_k",
+        style,
+        caption="Median time-to-usable and interquartile ranges are plotted for all available K values.",
+    )
     write_plot_csv("fig_ttu_vs_k", rows)
 
 
@@ -426,7 +450,13 @@ def make_usable_rate_vs_k(frames: dict[str, pd.DataFrame]) -> None:
     ax.set_ylim(-2, 102)
     ax.set_xlabel("K")
     ax.set_ylabel("TTU attainment rate [%]")
-    finish_figure(fig, ax, "fig_usable_rate_vs_k", style)
+    finish_figure(
+        fig,
+        ax,
+        "fig_usable_rate_vs_k",
+        style,
+        caption="TTU attainment rate is plotted for all available K values. The horizontal reference is 95%.",
+    )
     write_plot_csv("fig_usable_rate_vs_k", rows)
 
 
@@ -467,8 +497,22 @@ def make_phase_error_vs_k() -> None:
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("K")
-    ax.set_ylabel("residual phase-spacing error [rad]")
-    finish_figure(fig, ax, "fig_phase_error_vs_k", style)
+    ax.set_ylabel("Residual phase-spacing error [rad]")
+    minima = []
+    for slug in SERIES:
+        spec = SERIES[slug]
+        df = pd.read_csv(REANALYSIS_ROOT / f"{slug}_phase_error.csv")
+        valid = df.dropna(subset=["residual_median"])
+        valid = valid[valid["residual_median"] > 0]
+        best = valid.loc[valid["residual_median"].idxmin()]
+        minima.append(f"{spec['label']}: {float(best['residual_median']):.4g} rad at K={float(best['k']):g}.")
+    finish_figure(
+        fig,
+        ax,
+        "fig_phase_error_vs_k",
+        style,
+        caption="Minimum 30-min residual phase-spacing errors: " + " ".join(minima),
+    )
     write_plot_csv("fig_phase_error_vs_k", rows)
 
 
@@ -516,7 +560,7 @@ def make_phase_error_overlay_vs_k() -> None:
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel("K")
-    ax.set_ylabel("residual phase-spacing error [rad]")
+    ax.set_ylabel("Residual phase-spacing error [rad]")
     style_axis(ax, style)
     function_handles = [
         Line2D(
@@ -533,10 +577,21 @@ def make_phase_error_overlay_vs_k() -> None:
         Line2D([0], [0], color="0.25", linewidth=style.line_width, label="30 min"),
         Line2D([0], [0], color="0.65", linewidth=style.line_width * 0.7, alpha=0.65, label="3 min"),
     ]
-    legend_functions = ax.legend(handles=function_handles, frameon=False, loc="lower left")
-    ax.add_artist(legend_functions)
-    ax.legend(handles=time_handles, frameon=False, loc="upper right")
-    fig.savefig(OUTPUT_ROOT / "fig_phase_error_vs_k_overlay.pdf")
+    fig.legend(
+        handles=function_handles + time_handles,
+        frameon=False,
+        loc="outside upper center",
+        ncol=3,
+    )
+    save_figure_artifacts(
+        fig,
+        "fig_phase_error_vs_k_overlay",
+        caption=(
+            "Median residual phase-spacing errors are plotted at 30 min and 3 min. "
+            "The 3-min curves use lighter colors."
+        ),
+        axes=[ax],
+    )
     plt.close(fig)
     write_plot_csv("fig_phase_error_vs_k_overlay", rows)
 
@@ -626,9 +681,10 @@ def make_per_and_phase_error_panels(frames: dict[str, pd.DataFrame]) -> None:
         ax_right.scatter(
             [best_residual["k"]],
             [best_residual["residual_median"]],
-            color="red",
-            edgecolor="black",
-            linewidth=0.3,
+            facecolors="white",
+            edgecolor="red",
+            marker="s",
+            linewidth=1.0,
             s=45,
             zorder=5,
         )
@@ -636,17 +692,17 @@ def make_per_and_phase_error_panels(frames: dict[str, pd.DataFrame]) -> None:
             ax_left,
             x=float(best_per["k"]),
             y=float(best_per["overall_per_mean"]),
-            text=f"min PER\n{format_percent(float(best_per['overall_per_mean']))}\nK={best_per['k']:g}",
+            text=f"K={best_per['k']:g}",
             style=style,
-            offset=(-46, 28),
+            offset=DUAL_AXIS_ANNOTATION_OFFSETS[slug]["per"],
         )
         annotate_minimum(
             ax_right,
             x=float(best_residual["k"]),
             y=float(best_residual["residual_median"]),
-            text=f"min residual\n{float(best_residual['residual_median']):.3g} rad\nK={best_residual['k']:g}",
+            text=f"K={best_residual['k']:g}",
             style=style,
-            offset=(30, -42),
+            offset=DUAL_AXIS_ANNOTATION_OFFSETS[slug]["residual"],
         )
         ax_left.set_xscale("log")
         ax_left.set_yscale("log")
@@ -659,14 +715,24 @@ def make_per_and_phase_error_panels(frames: dict[str, pd.DataFrame]) -> None:
         style_dual_axis(ax_left, ax_right, style)
         handles_left, labels_left = ax_left.get_legend_handles_labels()
         handles_right, labels_right = ax_right.get_legend_handles_labels()
-        ax_left.legend(
+        fig.legend(
             handles_left + handles_right,
             labels_left + labels_right,
             frameon=False,
-            loc="best",
+            loc="outside upper center",
+            ncol=2,
             fontsize=style.legend_size,
         )
-        fig.savefig(OUTPUT_ROOT / f"{output_stem}.pdf")
+        save_figure_artifacts(
+            fig,
+            output_stem,
+            caption=(
+                f"{spec['label']}. Minimum PER: {float(best_per['overall_per_mean']):.4g}% "
+                f"at K={float(best_per['k']):g}. Minimum residual phase-spacing error: "
+                f"{float(best_residual['residual_median']):.4g} rad at K={float(best_residual['k']):g}."
+            ),
+            axes=[ax_left, ax_right],
+        )
         plt.close(fig)
 
     pd.DataFrame(minima_rows).to_csv(OUTPUT_ROOT / "phase_error_minima.csv", index=False)
@@ -707,16 +773,92 @@ def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
     ax.set_xticklabels(plot_df["label"], rotation=18, ha="right")
     ax.set_yscale("log")
     ax.set_ylabel("PER [%]")
-    add_bar_labels(ax, bars_a, plot_df["transient_per_label"].tolist(), style)
-    add_bar_labels(ax, bars_b, plot_df["steady_per_label"].tolist(), style)
-    finish_figure(fig, ax, "fig_two_phase_per", style, legend_ncol=2)
+    caption_bits = [
+        (
+            f"{row.label}: pre-TTU PER {float(row.transient_per_mean):.4g}%, "
+            f"post-TTU PER {float(row.steady_per_mean):.4g}% at K={float(row.k):g}."
+        )
+        for row in plot_df.itertuples(index=False)
+    ]
+    finish_figure(
+        fig,
+        ax,
+        "fig_two_phase_per",
+        style,
+        legend_ncol=2,
+        caption=" ".join(caption_bits),
+    )
 
 
-def finish_figure(fig: plt.Figure, ax: plt.Axes, stem: str, style: FigureStyle, *, legend_ncol: int = 1) -> None:
+def finish_figure(
+    fig: plt.Figure,
+    ax: plt.Axes,
+    stem: str,
+    style: FigureStyle,
+    *,
+    legend_ncol: int = 1,
+    caption: str = "",
+) -> None:
     style_axis(ax, style)
-    ax.legend(frameon=False, loc="best", ncol=legend_ncol)
-    fig.savefig(OUTPUT_ROOT / f"{stem}.pdf")
+    handles, labels = ax.get_legend_handles_labels()
+    if labels:
+        fig.legend(
+            handles,
+            labels,
+            frameon=False,
+            loc="outside upper center",
+            ncol=max(legend_ncol, min(4, len(labels))),
+        )
+    save_figure_artifacts(fig, stem, caption=caption, axes=[ax])
     plt.close(fig)
+
+
+def save_figure_artifacts(
+    fig: plt.Figure,
+    stem: str,
+    *,
+    caption: str = "",
+    axes: list[plt.Axes] | None = None,
+) -> None:
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    check_figure_overlap(fig, axes or list(fig.axes), stem)
+    fig.savefig(OUTPUT_ROOT / f"{stem}.pdf")
+    fig.savefig(OUTPUT_ROOT / f"{stem}.png", dpi=300)
+    (OUTPUT_ROOT / f"{stem}.caption.txt").write_text(caption.strip() + "\n", encoding="utf-8")
+
+
+def check_figure_overlap(fig: plt.Figure, axes: list[plt.Axes], stem: str) -> None:
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    annotations: list[Annotation] = []
+    for ax in axes:
+        annotations.extend(
+            child
+            for child in ax.get_children()
+            if isinstance(child, Annotation) and child.get_visible() and child.get_text().strip()
+        )
+    annotation_boxes = [(ann.get_text(), ann.get_window_extent(renderer)) for ann in annotations]
+    for index, (label_a, box_a) in enumerate(annotation_boxes):
+        for label_b, box_b in annotation_boxes[index + 1 :]:
+            if box_a.overlaps(box_b):
+                raise ValueError(f"{stem}: annotation overlap: {label_a!r} vs {label_b!r}")
+
+    axes_boxes = [ax.get_window_extent(renderer) for ax in axes if ax.get_visible()]
+    for legend in fig.legends:
+        if not legend.get_visible():
+            continue
+        legend_box = legend.get_window_extent(renderer)
+        for axes_box in axes_boxes:
+            if legend_box.overlaps(axes_box):
+                raise ValueError(f"{stem}: legend overlaps axes region")
+
+
+def write_preview_index() -> None:
+    pngs = sorted(OUTPUT_ROOT.glob("*.png"))
+    lines = ["# Figure Preview", ""]
+    for png in pngs:
+        lines.extend([f"## {png.name}", "", f"![{png.name}]({png.name})", ""])
+    (OUTPUT_ROOT / "preview.md").write_text("\n".join(lines), encoding="utf-8")
 
 
 def style_axis(ax: plt.Axes, style: FigureStyle) -> None:
@@ -835,13 +977,6 @@ def annotate_minimum(
         textcoords="offset points",
         fontsize=max(style.annotation_size, 16.0),
         color="red",
-        arrowprops={
-            "arrowstyle": "-",
-            "color": "red",
-            "linewidth": 0.7 * style.scale,
-            "shrinkA": 0,
-            "shrinkB": 2,
-        },
     )
 
 

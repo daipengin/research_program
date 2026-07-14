@@ -1,0 +1,1 @@
+Minimum full-period PER values: Kuramoto based: 0.1714% at K=571. frog chorus based: 0.7156% at K=10. modified frog chorus based: 0.5884% at K=9. 1-sin based: 0.4517% at K=24.

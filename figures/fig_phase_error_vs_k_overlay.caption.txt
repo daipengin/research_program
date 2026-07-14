@@ -1,0 +1,1 @@
+Median residual phase-spacing errors are plotted at 30 min and 3 min. The 3-min curves use lighter colors.

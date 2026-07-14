@@ -1,0 +1,1 @@
+Minimum 30-min residual phase-spacing errors: Kuramoto based: 0.01025 rad at K=81. frog chorus based: 0.01281 rad at K=4. modified frog chorus based: 0.01254 rad at K=4. 1-sin based: 0.01248 rad at K=4.

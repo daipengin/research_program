@@ -1,0 +1,1 @@
+TTU attainment rate is plotted for all available K values. The horizontal reference is 95%.

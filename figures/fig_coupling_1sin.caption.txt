@@ -1,0 +1,1 @@
+1-sin based coupling-function curve generated from the implementation over delta in [-pi, pi].

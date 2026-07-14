@@ -542,7 +542,7 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
         if sub.empty:
             continue
 
-        plt.figure(figsize=(CFG.figure_width, CFG.figure_height))
+        plt.figure(figsize=(CFG.figure_width, CFG.figure_height), constrained_layout=True)
 
         yerr = error_bar_yerr(sub)
 
@@ -590,8 +590,6 @@ def save_plots(df: pd.DataFrame, output_dir: Path) -> list[Path]:
         plt.xticks(fontsize=CFG.font_size_ticks)
         plt.yticks(fontsize=CFG.font_size_ticks)
         plt.grid(True)
-        plt.tight_layout()
-
         output_path = output_dir / f"{graph_stem_for_coupling_function(str(coupling_function))}.pdf"
         plt.savefig(output_path, dpi=CFG.save_dpi)
         plt.close()

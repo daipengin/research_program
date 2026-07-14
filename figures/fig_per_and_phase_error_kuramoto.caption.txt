@@ -1,0 +1,1 @@
+Kuramoto based. Minimum PER: 0.1714% at K=571. Minimum residual phase-spacing error: 0.01025 rad at K=81.

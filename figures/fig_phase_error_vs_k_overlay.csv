@@ -1,0 +1,1201 @@
+function,label,residual_column,time_point_min,k,residual_phase_spacing_error,n_runs
+KURAMOTO,Kuramoto based,residual_median,30,1.0,0.0820649291584692,499
+KURAMOTO,Kuramoto based,residual_median,30,11.0,0.0434480482338751,500
+KURAMOTO,Kuramoto based,residual_median,30,21.0,0.025895585163704,500
+KURAMOTO,Kuramoto based,residual_median,30,31.0,0.0172578882003557,500
+KURAMOTO,Kuramoto based,residual_median,30,41.0,0.0128680716816921,498
+KURAMOTO,Kuramoto based,residual_median,30,51.0,0.0115283142068392,499
+KURAMOTO,Kuramoto based,residual_median,30,61.0,0.010725391009476,499
+KURAMOTO,Kuramoto based,residual_median,30,71.0,0.0105307240631197,500
+KURAMOTO,Kuramoto based,residual_median,30,81.0,0.0102544674887421,500
+KURAMOTO,Kuramoto based,residual_median,30,91.0,0.0103498828757472,500
+KURAMOTO,Kuramoto based,residual_median,30,101.0,0.0104523492791596,500
+KURAMOTO,Kuramoto based,residual_median,30,111.0,0.0104222766755888,500
+KURAMOTO,Kuramoto based,residual_median,30,121.0,0.0106950962255083,500
+KURAMOTO,Kuramoto based,residual_median,30,131.0,0.0109963173350267,500
+KURAMOTO,Kuramoto based,residual_median,30,141.0,0.011317675385252,500
+KURAMOTO,Kuramoto based,residual_median,30,151.0,0.0118517479162329,500
+KURAMOTO,Kuramoto based,residual_median,30,161.0,0.0122165409278527,500
+KURAMOTO,Kuramoto based,residual_median,30,171.0,0.0126018346301722,500
+KURAMOTO,Kuramoto based,residual_median,30,181.0,0.0131100758923702,500
+KURAMOTO,Kuramoto based,residual_median,30,191.0,0.0137619879754539,500
+KURAMOTO,Kuramoto based,residual_median,30,201.0,0.014168560880729,500
+KURAMOTO,Kuramoto based,residual_median,30,211.0,0.0148422782562795,500
+KURAMOTO,Kuramoto based,residual_median,30,221.0,0.015350865043054,500
+KURAMOTO,Kuramoto based,residual_median,30,231.0,0.0158548509359909,500
+KURAMOTO,Kuramoto based,residual_median,30,241.0,0.016454065036267,500
+KURAMOTO,Kuramoto based,residual_median,30,251.0,0.0171012903328528,500
+KURAMOTO,Kuramoto based,residual_median,30,261.0,0.0176538713524527,500
+KURAMOTO,Kuramoto based,residual_median,30,271.0,0.0182189338250931,500
+KURAMOTO,Kuramoto based,residual_median,30,281.0,0.018911956203801,500
+KURAMOTO,Kuramoto based,residual_median,30,291.0,0.0194360882357544,500
+KURAMOTO,Kuramoto based,residual_median,30,301.0,0.0200964973762211,500
+KURAMOTO,Kuramoto based,residual_median,30,311.0,0.0205596284770478,500
+KURAMOTO,Kuramoto based,residual_median,30,321.0,0.0212050929547121,500
+KURAMOTO,Kuramoto based,residual_median,30,331.0,0.0217697021641402,500
+KURAMOTO,Kuramoto based,residual_median,30,341.0,0.022261355757164,500
+KURAMOTO,Kuramoto based,residual_median,30,351.0,0.0228298425684266,500
+KURAMOTO,Kuramoto based,residual_median,30,361.0,0.0232589172068165,500
+KURAMOTO,Kuramoto based,residual_median,30,371.0,0.0240790666129405,500
+KURAMOTO,Kuramoto based,residual_median,30,381.0,0.0245366845188788,500
+KURAMOTO,Kuramoto based,residual_median,30,391.0,0.0251526560887221,500
+KURAMOTO,Kuramoto based,residual_median,30,401.0,0.0256596177251602,500
+KURAMOTO,Kuramoto based,residual_median,30,411.0,0.0261234548320273,500
+KURAMOTO,Kuramoto based,residual_median,30,421.0,0.0267677847186782,500
+KURAMOTO,Kuramoto based,residual_median,30,431.0,0.0274487639670572,500
+KURAMOTO,Kuramoto based,residual_median,30,441.0,0.0279803680124185,500
+KURAMOTO,Kuramoto based,residual_median,30,451.0,0.028411068459816,500
+KURAMOTO,Kuramoto based,residual_median,30,461.0,0.0290115556485902,500
+KURAMOTO,Kuramoto based,residual_median,30,471.0,0.0297727832851,500
+KURAMOTO,Kuramoto based,residual_median,30,481.0,0.0302350269910189,500
+KURAMOTO,Kuramoto based,residual_median,30,491.0,0.0307645493420733,500
+KURAMOTO,Kuramoto based,residual_median,30,501.0,0.0313396690660108,500
+KURAMOTO,Kuramoto based,residual_median,30,511.0,0.031901949673156,500
+KURAMOTO,Kuramoto based,residual_median,30,521.0,0.0325699508248348,500
+KURAMOTO,Kuramoto based,residual_median,30,531.0,0.0331624070976808,500
+KURAMOTO,Kuramoto based,residual_median,30,541.0,0.0336634634615575,500
+KURAMOTO,Kuramoto based,residual_median,30,551.0,0.0343164990739445,500
+KURAMOTO,Kuramoto based,residual_median,30,561.0,0.0348612337886332,500
+KURAMOTO,Kuramoto based,residual_median,30,571.0,0.0353630491848425,500
+KURAMOTO,Kuramoto based,residual_median,30,581.0,0.0361460376349496,500
+KURAMOTO,Kuramoto based,residual_median,30,591.0,0.0368102478613988,500
+KURAMOTO,Kuramoto based,residual_median,30,601.0,0.0372498948732173,500
+KURAMOTO,Kuramoto based,residual_median,30,611.0,0.0379369521605051,500
+KURAMOTO,Kuramoto based,residual_median,30,621.0,0.0385104633747558,500
+KURAMOTO,Kuramoto based,residual_median,30,631.0,0.0391316558346196,500
+KURAMOTO,Kuramoto based,residual_median,30,641.0,0.0398774464830329,500
+KURAMOTO,Kuramoto based,residual_median,30,651.0,0.0403292133511052,500
+KURAMOTO,Kuramoto based,residual_median,30,661.0,0.0410461388911207,500
+KURAMOTO,Kuramoto based,residual_median,30,671.0,0.0417979702064298,500
+KURAMOTO,Kuramoto based,residual_median,30,681.0,0.0422571359270052,500
+KURAMOTO,Kuramoto based,residual_median,30,691.0,0.0430345803619127,500
+KURAMOTO,Kuramoto based,residual_median,30,701.0,0.0435861312337313,500
+KURAMOTO,Kuramoto based,residual_median,30,711.0,0.0441359030425098,500
+KURAMOTO,Kuramoto based,residual_median,30,721.0,0.0446336756366006,500
+KURAMOTO,Kuramoto based,residual_median,30,731.0,0.0453365282692299,500
+KURAMOTO,Kuramoto based,residual_median,30,741.0,0.0458516472140712,500
+KURAMOTO,Kuramoto based,residual_median,30,751.0,0.0464631734323292,500
+KURAMOTO,Kuramoto based,residual_median,30,761.0,0.0470564732170031,500
+KURAMOTO,Kuramoto based,residual_median,30,771.0,0.0474738778893993,500
+KURAMOTO,Kuramoto based,residual_median,30,781.0,0.0479551513542194,500
+KURAMOTO,Kuramoto based,residual_median,30,791.0,0.0484556829021133,500
+KURAMOTO,Kuramoto based,residual_median,30,801.0,0.0487712424967986,500
+KURAMOTO,Kuramoto based,residual_median,30,811.0,0.0494129606917588,500
+KURAMOTO,Kuramoto based,residual_median,30,821.0,0.0498182727812553,500
+KURAMOTO,Kuramoto based,residual_median,30,831.0,0.0502865388055508,500
+KURAMOTO,Kuramoto based,residual_median,30,841.0,0.0506296551258777,500
+KURAMOTO,Kuramoto based,residual_median,30,851.0,0.0509662587107371,500
+KURAMOTO,Kuramoto based,residual_median,30,861.0,0.0515205139084212,500
+KURAMOTO,Kuramoto based,residual_median,30,871.0,0.0516994086830194,500
+KURAMOTO,Kuramoto based,residual_median,30,881.0,0.0523255738378163,500
+KURAMOTO,Kuramoto based,residual_median,30,891.0,0.052602070782702,500
+KURAMOTO,Kuramoto based,residual_median,30,901.0,0.0531360509690975,500
+KURAMOTO,Kuramoto based,residual_median,30,911.0,0.0536847510886408,500
+KURAMOTO,Kuramoto based,residual_median,30,921.0,0.0539846658628913,500
+KURAMOTO,Kuramoto based,residual_median,30,931.0,0.0542784942121263,500
+KURAMOTO,Kuramoto based,residual_median,30,941.0,0.0548180222090965,500
+KURAMOTO,Kuramoto based,residual_median,30,951.0,0.0550088076294876,500
+KURAMOTO,Kuramoto based,residual_median,30,961.0,0.05547412708803,500
+KURAMOTO,Kuramoto based,residual_median,30,971.0,0.055710074202,500
+KURAMOTO,Kuramoto based,residual_median,30,981.0,0.0562671829372235,500
+KURAMOTO,Kuramoto based,residual_median,30,991.0,0.056634845035529,500
+KURAMOTO,Kuramoto based,residual_median,30,1001.0,0.0569277404228267,500
+KURAMOTO,Kuramoto based,residual_median,30,1011.0,0.0572078710977267,500
+KURAMOTO,Kuramoto based,residual_median,30,1021.0,0.0575351962294281,500
+KURAMOTO,Kuramoto based,residual_median,30,1031.0,0.0577858147730283,500
+KURAMOTO,Kuramoto based,residual_median,30,1041.0,0.0582574911428447,500
+KURAMOTO,Kuramoto based,residual_median,30,1051.0,0.0588801067798281,500
+KURAMOTO,Kuramoto based,residual_median,30,1061.0,0.0586311400884951,500
+KURAMOTO,Kuramoto based,residual_median,30,1071.0,0.0591403985110082,500
+KURAMOTO,Kuramoto based,residual_median,30,1081.0,0.0592913425554749,500
+KURAMOTO,Kuramoto based,residual_median,30,1091.0,0.0597085721442577,500
+KURAMOTO,Kuramoto based,residual_median,30,1101.0,0.0600983257863352,500
+KURAMOTO,Kuramoto based,residual_median,30,1111.0,0.0602947065073257,500
+KURAMOTO,Kuramoto based,residual_median,30,1121.0,0.0604517638934351,500
+KURAMOTO,Kuramoto based,residual_median,30,1131.0,0.0608029263132327,500
+KURAMOTO,Kuramoto based,residual_median,30,1141.0,0.0611808212426993,500
+KURAMOTO,Kuramoto based,residual_median,30,1151.0,0.0614126741213473,500
+KURAMOTO,Kuramoto based,residual_median,30,1161.0,0.0615175404480228,500
+KURAMOTO,Kuramoto based,residual_median,30,1171.0,0.0618865045139875,500
+KURAMOTO,Kuramoto based,residual_median,30,1181.0,0.0618638051644481,500
+KURAMOTO,Kuramoto based,residual_median,30,1191.0,0.062352772478268,500
+KURAMOTO,Kuramoto based,residual_median,30,1201.0,0.0624686251772061,500
+KURAMOTO,Kuramoto based,residual_median,30,1211.0,0.0626993991879034,500
+KURAMOTO,Kuramoto based,residual_median,30,1221.0,0.0631054835451243,500
+KURAMOTO,Kuramoto based,residual_median,30,1231.0,0.0631788098742588,500
+KURAMOTO,Kuramoto based,residual_median,30,1241.0,0.0635124879872969,500
+KURAMOTO,Kuramoto based,residual_median,30,1251.0,0.0637222285849294,500
+KURAMOTO,Kuramoto based,residual_median,30,1261.0,0.0638275252331464,500
+KURAMOTO,Kuramoto based,residual_median,30,1271.0,0.064145102988089,500
+KURAMOTO,Kuramoto based,residual_median,30,1281.0,0.0642869026713778,500
+KURAMOTO,Kuramoto based,residual_median,30,1291.0,0.0642109384157349,500
+KURAMOTO,Kuramoto based,residual_median,30,1301.0,0.0642123149109424,500
+KURAMOTO,Kuramoto based,residual_median,30,1311.0,0.0645535290507561,500
+KURAMOTO,Kuramoto based,residual_median,30,1321.0,0.0648938412072281,500
+KURAMOTO,Kuramoto based,residual_median,30,1331.0,0.0651481883539775,500
+KURAMOTO,Kuramoto based,residual_median,30,1341.0,0.0654477250532066,500
+KURAMOTO,Kuramoto based,residual_median,30,1351.0,0.0653081648238841,500
+KURAMOTO,Kuramoto based,residual_median,30,1361.0,0.0652176321992517,500
+KURAMOTO,Kuramoto based,residual_median,30,1371.0,0.0658631651720073,500
+KURAMOTO,Kuramoto based,residual_median,30,1381.0,0.0657619589536331,500
+KURAMOTO,Kuramoto based,residual_median,30,1391.0,0.06554383390595,500
+KURAMOTO,Kuramoto based,residual_median,30,1401.0,0.0659199335035363,500
+KURAMOTO,Kuramoto based,residual_median,30,1411.0,0.0657765805220537,500
+KURAMOTO,Kuramoto based,residual_median,30,1421.0,0.0663030833135712,500
+KURAMOTO,Kuramoto based,residual_median,30,1431.0,0.0662230358429653,500
+KURAMOTO,Kuramoto based,residual_median,30,1441.0,0.0662788277981297,500
+KURAMOTO,Kuramoto based,residual_median,30,1451.0,0.0665120688208139,500
+KURAMOTO,Kuramoto based,residual_median,30,1461.0,0.0664638326769928,500
+KURAMOTO,Kuramoto based,residual_median,30,1471.0,0.0665447999237094,500
+KURAMOTO,Kuramoto based,residual_median,30,1481.0,0.0668645401609507,500
+KURAMOTO,Kuramoto based,residual_median,30,1491.0,0.0667820879359752,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1.0,0.0871862816683466,499
+KURAMOTO,Kuramoto based,residual_3min_median,3,11.0,0.0831655778061853,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,21.0,0.0795098502328495,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,31.0,0.0760168936680703,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,41.0,0.0725011973760984,498
+KURAMOTO,Kuramoto based,residual_3min_median,3,51.0,0.0692888189741147,499
+KURAMOTO,Kuramoto based,residual_3min_median,3,61.0,0.0663775067478782,499
+KURAMOTO,Kuramoto based,residual_3min_median,3,71.0,0.0632693864337721,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,81.0,0.0604163660956102,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,91.0,0.0573373703167973,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,101.0,0.0551010637679801,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,111.0,0.0529478626729223,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,121.0,0.0508335249075141,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,131.0,0.0489360706569416,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,141.0,0.0476293841136887,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,151.0,0.0463301229314415,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,161.0,0.044747310694474,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,171.0,0.0435278417908277,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,181.0,0.0422066093782417,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,191.0,0.0411580758495108,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,201.0,0.0402513654896965,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,211.0,0.0395138389143145,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,221.0,0.0388866727638296,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,231.0,0.0385020676039346,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,241.0,0.0383684955723362,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,251.0,0.0377140664239136,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,261.0,0.0374296688036398,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,271.0,0.0373740780385888,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,281.0,0.0373691096742423,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,291.0,0.0369364276857147,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,301.0,0.0370084428281401,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,311.0,0.037140946457151,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,321.0,0.0371609824338933,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,331.0,0.0374925589505013,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,341.0,0.0372797589415334,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,351.0,0.0370897821255032,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,361.0,0.0376097027634481,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,371.0,0.0377474803508153,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,381.0,0.0379532937453468,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,391.0,0.0381939827526934,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,401.0,0.0385726653895394,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,411.0,0.0388823714115803,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,421.0,0.0389041095783633,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,431.0,0.0391170911302088,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,441.0,0.0394514576525029,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,451.0,0.0400215105931176,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,461.0,0.0401384547354134,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,471.0,0.0404349897596407,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,481.0,0.04077392155397,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,491.0,0.0412973151779068,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,501.0,0.0416270082750571,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,511.0,0.0417967314830032,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,521.0,0.04235303421663,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,531.0,0.0425663083018954,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,541.0,0.0429388008075844,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,551.0,0.0433911127684006,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,561.0,0.043875093218065,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,571.0,0.0440860028704854,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,581.0,0.0448122018702362,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,591.0,0.0451955115227574,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,601.0,0.045421501753158,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,611.0,0.0460450566884636,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,621.0,0.0464574385523009,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,631.0,0.0469903391011125,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,641.0,0.0477567011963808,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,651.0,0.0478826873858905,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,661.0,0.0484715990692335,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,671.0,0.0489984770917527,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,681.0,0.0494930201308957,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,691.0,0.0500153129120996,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,701.0,0.0502690462166835,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,711.0,0.0510300295733852,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,721.0,0.0512935229191248,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,731.0,0.0519480404170094,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,741.0,0.0522825961531215,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,751.0,0.0525127282730343,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,761.0,0.0530508204424122,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,771.0,0.0533178516290984,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,781.0,0.053555719675837,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,791.0,0.0540460697839196,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,801.0,0.054331534287079,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,811.0,0.0549921487447233,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,821.0,0.0553643323436373,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,831.0,0.0555404596185354,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,841.0,0.055935822443788,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,851.0,0.0561051786075383,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,861.0,0.056491866890994,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,871.0,0.0570776576235762,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,881.0,0.0571420113162552,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,891.0,0.0574567799600244,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,901.0,0.0579131316617867,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,911.0,0.0579977596683011,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,921.0,0.0584427385715864,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,931.0,0.0586681615388834,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,941.0,0.0593242568946188,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,951.0,0.0595252418330364,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,961.0,0.0598313174021856,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,971.0,0.0603442205322214,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,981.0,0.0602674605483408,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,991.0,0.0608970402921507,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1001.0,0.060839624003837,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1011.0,0.0612719823788741,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1021.0,0.0614200437777476,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1031.0,0.0620476749908423,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1041.0,0.0619667680020345,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1051.0,0.0623461088357189,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1061.0,0.0626003551355859,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1071.0,0.062837486783125,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1081.0,0.0630819682158192,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1091.0,0.0632580055490233,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1101.0,0.0635518517970733,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1111.0,0.0637989360268806,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1121.0,0.0639821218137284,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1131.0,0.0643735987947006,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1141.0,0.0644457215274979,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1151.0,0.0643090935086853,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1161.0,0.0651401481360458,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1171.0,0.0649731843473135,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1181.0,0.0653104197186475,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1191.0,0.0655740467705206,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1201.0,0.0658230383971637,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1211.0,0.0658312755279676,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1221.0,0.0661354385740532,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1231.0,0.0660155520741634,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1241.0,0.0661265681223434,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1251.0,0.0663843127453675,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1261.0,0.066966486273593,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1271.0,0.0668597890946569,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1281.0,0.0669370753899879,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1291.0,0.0670714356465095,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1301.0,0.0673664152864278,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1311.0,0.0675887429324645,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1321.0,0.0674786678147448,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1331.0,0.0676970859461993,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1341.0,0.0677985764293749,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1351.0,0.0682028587626066,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1361.0,0.0682201686370385,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1371.0,0.0683237601082912,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1381.0,0.0685059897975905,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1391.0,0.0680434734365961,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1401.0,0.0685528808662382,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1411.0,0.0688954805271473,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1421.0,0.0685714190817126,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1431.0,0.0687908751659572,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1441.0,0.0691149285289502,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1451.0,0.0688084598132768,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1461.0,0.0691414246547813,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1471.0,0.0690728569654068,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1481.0,0.0690705386792749,500
+KURAMOTO,Kuramoto based,residual_3min_median,3,1491.0,0.0695897813385253,500
+LINEAR,frog chorus based,residual_median,30,1.0,0.0389878868018989,499
+LINEAR,frog chorus based,residual_median,30,2.0,0.0219620919864286,499
+LINEAR,frog chorus based,residual_median,30,3.0,0.0142884348278048,500
+LINEAR,frog chorus based,residual_median,30,4.0,0.0128090912189966,500
+LINEAR,frog chorus based,residual_median,30,5.0,0.0137036325472703,500
+LINEAR,frog chorus based,residual_median,30,6.0,0.0147300869257993,500
+LINEAR,frog chorus based,residual_median,30,7.0,0.0159776906237672,500
+LINEAR,frog chorus based,residual_median,30,8.0,0.0170198297514131,500
+LINEAR,frog chorus based,residual_median,30,9.0,0.0180177147871788,499
+LINEAR,frog chorus based,residual_median,30,10.0,0.0189925535946108,498
+LINEAR,frog chorus based,residual_median,30,11.0,0.0199385961964565,498
+LINEAR,frog chorus based,residual_median,30,12.0,0.0204039914215895,498
+LINEAR,frog chorus based,residual_median,30,13.0,0.0213802559926009,499
+LINEAR,frog chorus based,residual_median,30,14.0,0.0222839328111741,495
+LINEAR,frog chorus based,residual_median,30,15.0,0.0232365059881466,496
+LINEAR,frog chorus based,residual_median,30,16.0,0.0235327153468858,495
+LINEAR,frog chorus based,residual_median,30,17.0,0.0241238042071746,498
+LINEAR,frog chorus based,residual_median,30,18.0,0.0245276891586591,493
+LINEAR,frog chorus based,residual_median,30,19.0,0.0251932236021771,494
+LINEAR,frog chorus based,residual_median,30,20.0,0.0259384885313494,495
+LINEAR,frog chorus based,residual_median,30,21.0,0.0257897036440674,491
+LINEAR,frog chorus based,residual_median,30,22.0,0.0267311743889646,491
+LINEAR,frog chorus based,residual_median,30,23.0,0.0272249704759441,491
+LINEAR,frog chorus based,residual_median,30,24.0,0.0277894526091967,490
+LINEAR,frog chorus based,residual_median,30,25.0,0.02821993959603,493
+LINEAR,frog chorus based,residual_median,30,26.0,0.0288184899171491,492
+LINEAR,frog chorus based,residual_median,30,27.0,0.0293948742197627,493
+LINEAR,frog chorus based,residual_median,30,28.0,0.0298128639052628,496
+LINEAR,frog chorus based,residual_median,30,29.0,0.0296528801743024,492
+LINEAR,frog chorus based,residual_median,30,30.0,0.0303930484891677,494
+LINEAR,frog chorus based,residual_median,30,31.0,0.0304723023961568,491
+LINEAR,frog chorus based,residual_median,30,32.0,0.03081671301479,489
+LINEAR,frog chorus based,residual_median,30,33.0,0.0308590989885858,493
+LINEAR,frog chorus based,residual_median,30,34.0,0.0315995804203996,492
+LINEAR,frog chorus based,residual_median,30,35.0,0.0319802891083514,489
+LINEAR,frog chorus based,residual_median,30,36.0,0.032249860184088,494
+LINEAR,frog chorus based,residual_median,30,37.0,0.0327573514829793,492
+LINEAR,frog chorus based,residual_median,30,38.0,0.0329359150638331,488
+LINEAR,frog chorus based,residual_median,30,39.0,0.0335005419705675,491
+LINEAR,frog chorus based,residual_median,30,40.0,0.0338454441172023,494
+LINEAR,frog chorus based,residual_median,30,41.0,0.0340447136997201,489
+LINEAR,frog chorus based,residual_median,30,42.0,0.0345073526068544,492
+LINEAR,frog chorus based,residual_median,30,43.0,0.0347996322985014,495
+LINEAR,frog chorus based,residual_median,30,44.0,0.0351267805983739,492
+LINEAR,frog chorus based,residual_median,30,45.0,0.0353699575913327,494
+LINEAR,frog chorus based,residual_median,30,46.0,0.0354607680117856,494
+LINEAR,frog chorus based,residual_median,30,47.0,0.0356321339121692,491
+LINEAR,frog chorus based,residual_median,30,48.0,0.0358639513716345,495
+LINEAR,frog chorus based,residual_median,30,49.0,0.0361984085934644,491
+LINEAR,frog chorus based,residual_median,30,50.0,0.0365557856364693,492
+LINEAR,frog chorus based,residual_median,30,51.0,0.0370248183603411,494
+LINEAR,frog chorus based,residual_median,30,52.0,0.037122955478288,491
+LINEAR,frog chorus based,residual_median,30,53.0,0.0372500637941948,487
+LINEAR,frog chorus based,residual_median,30,54.0,0.0377588495051489,491
+LINEAR,frog chorus based,residual_median,30,55.0,0.0380787877089746,495
+LINEAR,frog chorus based,residual_median,30,56.0,0.0384595649169122,494
+LINEAR,frog chorus based,residual_median,30,57.0,0.0389165779615503,494
+LINEAR,frog chorus based,residual_median,30,58.0,0.0391627318145458,492
+LINEAR,frog chorus based,residual_median,30,59.0,0.0395967076353003,495
+LINEAR,frog chorus based,residual_median,30,60.0,0.0400228438312967,490
+LINEAR,frog chorus based,residual_median,30,61.0,0.040449926641039,497
+LINEAR,frog chorus based,residual_median,30,62.0,0.0407102347732745,489
+LINEAR,frog chorus based,residual_median,30,63.0,0.0411997459556229,494
+LINEAR,frog chorus based,residual_median,30,64.0,0.0415852171331662,493
+LINEAR,frog chorus based,residual_median,30,65.0,0.0420856441081503,491
+LINEAR,frog chorus based,residual_median,30,66.0,0.042513846578299,498
+LINEAR,frog chorus based,residual_median,30,67.0,0.0428641669588245,491
+LINEAR,frog chorus based,residual_median,30,68.0,0.0432317077559356,494
+LINEAR,frog chorus based,residual_median,30,69.0,0.0436497791279685,494
+LINEAR,frog chorus based,residual_median,30,70.0,0.044151359446309,493
+LINEAR,frog chorus based,residual_median,30,71.0,0.0444285070519678,494
+LINEAR,frog chorus based,residual_median,30,72.0,0.0449439358584322,493
+LINEAR,frog chorus based,residual_median,30,73.0,0.0454209152507439,493
+LINEAR,frog chorus based,residual_median,30,74.0,0.0458999712780838,494
+LINEAR,frog chorus based,residual_median,30,75.0,0.046178041986614,491
+LINEAR,frog chorus based,residual_median,30,76.0,0.04668354116625,497
+LINEAR,frog chorus based,residual_median,30,77.0,0.0471396067597493,494
+LINEAR,frog chorus based,residual_median,30,78.0,0.0475855775036201,494
+LINEAR,frog chorus based,residual_median,30,79.0,0.048103224839824,494
+LINEAR,frog chorus based,residual_median,30,80.0,0.0486565990938013,493
+LINEAR,frog chorus based,residual_median,30,81.0,0.0491401541783743,494
+LINEAR,frog chorus based,residual_median,30,82.0,0.0496406005999471,496
+LINEAR,frog chorus based,residual_median,30,83.0,0.0500595284338357,492
+LINEAR,frog chorus based,residual_median,30,84.0,0.0505832083128344,495
+LINEAR,frog chorus based,residual_median,30,85.0,0.0510142384886265,492
+LINEAR,frog chorus based,residual_median,30,86.0,0.0516046292203541,493
+LINEAR,frog chorus based,residual_median,30,87.0,0.0520356199691299,491
+LINEAR,frog chorus based,residual_median,30,88.0,0.0526056894060108,493
+LINEAR,frog chorus based,residual_median,30,89.0,0.0530524007144384,490
+LINEAR,frog chorus based,residual_median,30,90.0,0.0535708644320974,492
+LINEAR,frog chorus based,residual_median,30,91.0,0.0540643804723844,494
+LINEAR,frog chorus based,residual_median,30,92.0,0.0545860129097558,495
+LINEAR,frog chorus based,residual_median,30,93.0,0.0552583249550904,493
+LINEAR,frog chorus based,residual_median,30,94.0,0.0555814258653265,491
+LINEAR,frog chorus based,residual_median,30,95.0,0.0562151732346843,495
+LINEAR,frog chorus based,residual_median,30,96.0,0.0567822121351543,494
+LINEAR,frog chorus based,residual_median,30,97.0,0.057214118162823,493
+LINEAR,frog chorus based,residual_median,30,98.0,0.05766848145056,491
+LINEAR,frog chorus based,residual_median,30,99.0,0.0582908371348129,489
+LINEAR,frog chorus based,residual_median,30,100.0,0.0588699936678309,493
+LINEAR,frog chorus based,residual_median,30,101.0,0.0594210517730458,494
+LINEAR,frog chorus based,residual_median,30,102.0,0.0597585408444789,491
+LINEAR,frog chorus based,residual_median,30,103.0,0.0603167715486338,490
+LINEAR,frog chorus based,residual_median,30,104.0,0.0609967344723055,491
+LINEAR,frog chorus based,residual_median,30,105.0,0.0616982106134941,494
+LINEAR,frog chorus based,residual_median,30,106.0,0.0621728030993443,495
+LINEAR,frog chorus based,residual_median,30,107.0,0.0623940894468203,497
+LINEAR,frog chorus based,residual_median,30,108.0,0.0632619043904474,494
+LINEAR,frog chorus based,residual_median,30,109.0,0.0637908497454137,489
+LINEAR,frog chorus based,residual_median,30,110.0,0.0640847784741761,488
+LINEAR,frog chorus based,residual_median,30,111.0,0.0649520619358037,493
+LINEAR,frog chorus based,residual_median,30,112.0,0.065271704856054,494
+LINEAR,frog chorus based,residual_median,30,113.0,0.0657133671212384,493
+LINEAR,frog chorus based,residual_median,30,114.0,0.0663120974256065,495
+LINEAR,frog chorus based,residual_median,30,115.0,0.0668437205645091,493
+LINEAR,frog chorus based,residual_median,30,116.0,0.0673075141191647,492
+LINEAR,frog chorus based,residual_median,30,117.0,0.0679035901969716,493
+LINEAR,frog chorus based,residual_median,30,118.0,0.0684186200797949,494
+LINEAR,frog chorus based,residual_median,30,119.0,0.0688509905334044,492
+LINEAR,frog chorus based,residual_median,30,120.0,0.06914216934421,496
+LINEAR,frog chorus based,residual_median,30,121.0,0.0696038822664786,496
+LINEAR,frog chorus based,residual_median,30,122.0,0.0701243447923538,495
+LINEAR,frog chorus based,residual_median,30,123.0,0.070500270818566,496
+LINEAR,frog chorus based,residual_median,30,124.0,0.0710805721684258,493
+LINEAR,frog chorus based,residual_median,30,125.0,0.071671430172716,494
+LINEAR,frog chorus based,residual_median,30,126.0,0.0716457123599448,491
+LINEAR,frog chorus based,residual_median,30,127.0,0.0725003516473765,493
+LINEAR,frog chorus based,residual_median,30,128.0,0.0726953899994569,486
+LINEAR,frog chorus based,residual_median,30,129.0,0.0730780009353179,493
+LINEAR,frog chorus based,residual_median,30,130.0,0.0736679808309121,485
+LINEAR,frog chorus based,residual_median,30,131.0,0.0739353941310894,493
+LINEAR,frog chorus based,residual_median,30,132.0,0.0745950451515674,493
+LINEAR,frog chorus based,residual_median,30,133.0,0.0750065962891678,490
+LINEAR,frog chorus based,residual_median,30,134.0,0.0753425448566834,489
+LINEAR,frog chorus based,residual_median,30,135.0,0.0760026911464683,491
+LINEAR,frog chorus based,residual_median,30,136.0,0.0764089898804593,494
+LINEAR,frog chorus based,residual_median,30,137.0,0.0764793402474328,490
+LINEAR,frog chorus based,residual_median,30,138.0,0.076922744802643,490
+LINEAR,frog chorus based,residual_median,30,139.0,0.077755280938067,497
+LINEAR,frog chorus based,residual_median,30,140.0,0.0782440619643966,493
+LINEAR,frog chorus based,residual_median,30,141.0,0.0786289092746779,493
+LINEAR,frog chorus based,residual_median,30,142.0,0.0789294487204844,486
+LINEAR,frog chorus based,residual_median,30,143.0,0.0792843866663544,492
+LINEAR,frog chorus based,residual_median,30,144.0,0.0799717418708648,496
+LINEAR,frog chorus based,residual_median,30,145.0,0.080605609307124,490
+LINEAR,frog chorus based,residual_median,30,146.0,0.0805120330055223,489
+LINEAR,frog chorus based,residual_median,30,147.0,0.0810161611983419,493
+LINEAR,frog chorus based,residual_median,30,148.0,0.0819871983399445,489
+LINEAR,frog chorus based,residual_median,30,149.0,0.0824314285709022,490
+LINEAR,frog chorus based,residual_median,30,150.0,0.0829446205882786,492
+LINEAR,frog chorus based,residual_3min_median,3,1.0,0.0821557856127752,499
+LINEAR,frog chorus based,residual_3min_median,3,2.0,0.0765222887710779,499
+LINEAR,frog chorus based,residual_3min_median,3,3.0,0.0711568291488798,500
+LINEAR,frog chorus based,residual_3min_median,3,4.0,0.0659823448877444,500
+LINEAR,frog chorus based,residual_3min_median,3,5.0,0.0617259233762278,500
+LINEAR,frog chorus based,residual_3min_median,3,6.0,0.0580577963402744,500
+LINEAR,frog chorus based,residual_3min_median,3,7.0,0.0548139634406456,500
+LINEAR,frog chorus based,residual_3min_median,3,8.0,0.0521047734280451,500
+LINEAR,frog chorus based,residual_3min_median,3,9.0,0.0498567026398087,499
+LINEAR,frog chorus based,residual_3min_median,3,10.0,0.0476465582374012,498
+LINEAR,frog chorus based,residual_3min_median,3,11.0,0.045699267838828,498
+LINEAR,frog chorus based,residual_3min_median,3,12.0,0.0437794550123898,498
+LINEAR,frog chorus based,residual_3min_median,3,13.0,0.0420733958976122,499
+LINEAR,frog chorus based,residual_3min_median,3,14.0,0.0408249197645059,495
+LINEAR,frog chorus based,residual_3min_median,3,15.0,0.0394556720485328,496
+LINEAR,frog chorus based,residual_3min_median,3,16.0,0.0383758791229895,495
+LINEAR,frog chorus based,residual_3min_median,3,17.0,0.0373294937056889,498
+LINEAR,frog chorus based,residual_3min_median,3,18.0,0.0365751537960052,493
+LINEAR,frog chorus based,residual_3min_median,3,19.0,0.0358234969956895,494
+LINEAR,frog chorus based,residual_3min_median,3,20.0,0.0351726644099547,495
+LINEAR,frog chorus based,residual_3min_median,3,21.0,0.034894872937385,491
+LINEAR,frog chorus based,residual_3min_median,3,22.0,0.0346007854567476,491
+LINEAR,frog chorus based,residual_3min_median,3,23.0,0.0343824551850118,491
+LINEAR,frog chorus based,residual_3min_median,3,24.0,0.0341039176369859,490
+LINEAR,frog chorus based,residual_3min_median,3,25.0,0.033948176380072,493
+LINEAR,frog chorus based,residual_3min_median,3,26.0,0.0342463474457534,492
+LINEAR,frog chorus based,residual_3min_median,3,27.0,0.034168989168344,493
+LINEAR,frog chorus based,residual_3min_median,3,28.0,0.0343899078542686,496
+LINEAR,frog chorus based,residual_3min_median,3,29.0,0.0341532033152591,492
+LINEAR,frog chorus based,residual_3min_median,3,30.0,0.0342560042438219,494
+LINEAR,frog chorus based,residual_3min_median,3,31.0,0.0344431295046337,491
+LINEAR,frog chorus based,residual_3min_median,3,32.0,0.0350015199101583,489
+LINEAR,frog chorus based,residual_3min_median,3,33.0,0.0349757468601112,493
+LINEAR,frog chorus based,residual_3min_median,3,34.0,0.0352929998493184,492
+LINEAR,frog chorus based,residual_3min_median,3,35.0,0.035590671071973,489
+LINEAR,frog chorus based,residual_3min_median,3,36.0,0.0357092916969274,494
+LINEAR,frog chorus based,residual_3min_median,3,37.0,0.0363116788640445,492
+LINEAR,frog chorus based,residual_3min_median,3,38.0,0.0366676851157544,488
+LINEAR,frog chorus based,residual_3min_median,3,39.0,0.0371548564261341,491
+LINEAR,frog chorus based,residual_3min_median,3,40.0,0.0372926798507185,494
+LINEAR,frog chorus based,residual_3min_median,3,41.0,0.0375434474880903,489
+LINEAR,frog chorus based,residual_3min_median,3,42.0,0.0377410952655136,492
+LINEAR,frog chorus based,residual_3min_median,3,43.0,0.0383099354882555,495
+LINEAR,frog chorus based,residual_3min_median,3,44.0,0.0384953264084076,492
+LINEAR,frog chorus based,residual_3min_median,3,45.0,0.0388171975180384,494
+LINEAR,frog chorus based,residual_3min_median,3,46.0,0.0392460418983829,494
+LINEAR,frog chorus based,residual_3min_median,3,47.0,0.0394356766391211,491
+LINEAR,frog chorus based,residual_3min_median,3,48.0,0.0397971405432134,495
+LINEAR,frog chorus based,residual_3min_median,3,49.0,0.0401975944719229,491
+LINEAR,frog chorus based,residual_3min_median,3,50.0,0.0406609411455616,492
+LINEAR,frog chorus based,residual_3min_median,3,51.0,0.040980144360976,494
+LINEAR,frog chorus based,residual_3min_median,3,52.0,0.0414819497696971,491
+LINEAR,frog chorus based,residual_3min_median,3,53.0,0.0418670446774643,487
+LINEAR,frog chorus based,residual_3min_median,3,54.0,0.0422802687543353,491
+LINEAR,frog chorus based,residual_3min_median,3,55.0,0.0426283650775921,495
+LINEAR,frog chorus based,residual_3min_median,3,56.0,0.0430345887124091,494
+LINEAR,frog chorus based,residual_3min_median,3,57.0,0.0434308009278711,494
+LINEAR,frog chorus based,residual_3min_median,3,58.0,0.0436075636480803,492
+LINEAR,frog chorus based,residual_3min_median,3,59.0,0.0440385960507626,495
+LINEAR,frog chorus based,residual_3min_median,3,60.0,0.0443345615024277,490
+LINEAR,frog chorus based,residual_3min_median,3,61.0,0.0449080213158397,497
+LINEAR,frog chorus based,residual_3min_median,3,62.0,0.0451949789460195,489
+LINEAR,frog chorus based,residual_3min_median,3,63.0,0.0454802032632767,494
+LINEAR,frog chorus based,residual_3min_median,3,64.0,0.0456314651244196,493
+LINEAR,frog chorus based,residual_3min_median,3,65.0,0.0460696114837412,491
+LINEAR,frog chorus based,residual_3min_median,3,66.0,0.0462572610874819,498
+LINEAR,frog chorus based,residual_3min_median,3,67.0,0.046404646676534,491
+LINEAR,frog chorus based,residual_3min_median,3,68.0,0.0467930300314578,494
+LINEAR,frog chorus based,residual_3min_median,3,69.0,0.0469730688746923,494
+LINEAR,frog chorus based,residual_3min_median,3,70.0,0.0473217254378023,493
+LINEAR,frog chorus based,residual_3min_median,3,71.0,0.047540497231637,494
+LINEAR,frog chorus based,residual_3min_median,3,72.0,0.0476875162624977,493
+LINEAR,frog chorus based,residual_3min_median,3,73.0,0.0479665113015219,493
+LINEAR,frog chorus based,residual_3min_median,3,74.0,0.0484676816071702,494
+LINEAR,frog chorus based,residual_3min_median,3,75.0,0.0485810953941821,491
+LINEAR,frog chorus based,residual_3min_median,3,76.0,0.0489319889939207,497
+LINEAR,frog chorus based,residual_3min_median,3,77.0,0.0493386676095144,494
+LINEAR,frog chorus based,residual_3min_median,3,78.0,0.0494857981618887,494
+LINEAR,frog chorus based,residual_3min_median,3,79.0,0.0497812411592639,494
+LINEAR,frog chorus based,residual_3min_median,3,80.0,0.0500862864010055,493
+LINEAR,frog chorus based,residual_3min_median,3,81.0,0.0502379623233231,494
+LINEAR,frog chorus based,residual_3min_median,3,82.0,0.050655630447962,496
+LINEAR,frog chorus based,residual_3min_median,3,83.0,0.0510578233941031,492
+LINEAR,frog chorus based,residual_3min_median,3,84.0,0.0514040321781746,495
+LINEAR,frog chorus based,residual_3min_median,3,85.0,0.0517720230165081,492
+LINEAR,frog chorus based,residual_3min_median,3,86.0,0.0520207398069395,493
+LINEAR,frog chorus based,residual_3min_median,3,87.0,0.0522820033079506,491
+LINEAR,frog chorus based,residual_3min_median,3,88.0,0.0527526301789508,493
+LINEAR,frog chorus based,residual_3min_median,3,89.0,0.0531602174902785,490
+LINEAR,frog chorus based,residual_3min_median,3,90.0,0.0535518875827104,492
+LINEAR,frog chorus based,residual_3min_median,3,91.0,0.0537424564735168,494
+LINEAR,frog chorus based,residual_3min_median,3,92.0,0.0543486521378874,495
+LINEAR,frog chorus based,residual_3min_median,3,93.0,0.0545718399549907,493
+LINEAR,frog chorus based,residual_3min_median,3,94.0,0.0552483887912133,491
+LINEAR,frog chorus based,residual_3min_median,3,95.0,0.0556853003796951,495
+LINEAR,frog chorus based,residual_3min_median,3,96.0,0.0558684383149436,494
+LINEAR,frog chorus based,residual_3min_median,3,97.0,0.0563533086470557,493
+LINEAR,frog chorus based,residual_3min_median,3,98.0,0.0566934814257666,491
+LINEAR,frog chorus based,residual_3min_median,3,99.0,0.0572167397695213,489
+LINEAR,frog chorus based,residual_3min_median,3,100.0,0.057556856429249,493
+LINEAR,frog chorus based,residual_3min_median,3,101.0,0.0580395670334533,494
+LINEAR,frog chorus based,residual_3min_median,3,102.0,0.0586307820063743,491
+LINEAR,frog chorus based,residual_3min_median,3,103.0,0.0592391968564882,490
+LINEAR,frog chorus based,residual_3min_median,3,104.0,0.0596906825552375,491
+LINEAR,frog chorus based,residual_3min_median,3,105.0,0.0601870924091621,494
+LINEAR,frog chorus based,residual_3min_median,3,106.0,0.0607010635800015,495
+LINEAR,frog chorus based,residual_3min_median,3,107.0,0.0611790844943225,497
+LINEAR,frog chorus based,residual_3min_median,3,108.0,0.0618006740685985,494
+LINEAR,frog chorus based,residual_3min_median,3,109.0,0.0622842169353691,489
+LINEAR,frog chorus based,residual_3min_median,3,110.0,0.0628317653952729,488
+LINEAR,frog chorus based,residual_3min_median,3,111.0,0.063500316741002,493
+LINEAR,frog chorus based,residual_3min_median,3,112.0,0.0637126129322379,494
+LINEAR,frog chorus based,residual_3min_median,3,113.0,0.0642566119218006,493
+LINEAR,frog chorus based,residual_3min_median,3,114.0,0.0646402687179701,495
+LINEAR,frog chorus based,residual_3min_median,3,115.0,0.0652486325023582,493
+LINEAR,frog chorus based,residual_3min_median,3,116.0,0.0656974738348206,492
+LINEAR,frog chorus based,residual_3min_median,3,117.0,0.0663582058528348,493
+LINEAR,frog chorus based,residual_3min_median,3,118.0,0.0670190916072287,494
+LINEAR,frog chorus based,residual_3min_median,3,119.0,0.0672250983942628,492
+LINEAR,frog chorus based,residual_3min_median,3,120.0,0.0679964562624777,496
+LINEAR,frog chorus based,residual_3min_median,3,121.0,0.0686051036804298,496
+LINEAR,frog chorus based,residual_3min_median,3,122.0,0.0690473495677068,495
+LINEAR,frog chorus based,residual_3min_median,3,123.0,0.0696588163328437,496
+LINEAR,frog chorus based,residual_3min_median,3,124.0,0.0702648482455035,493
+LINEAR,frog chorus based,residual_3min_median,3,125.0,0.0707563094115263,494
+LINEAR,frog chorus based,residual_3min_median,3,126.0,0.0712860719579975,491
+LINEAR,frog chorus based,residual_3min_median,3,127.0,0.0714491394652984,493
+LINEAR,frog chorus based,residual_3min_median,3,128.0,0.0721434381328961,486
+LINEAR,frog chorus based,residual_3min_median,3,129.0,0.0725713599908279,493
+LINEAR,frog chorus based,residual_3min_median,3,130.0,0.0731403272209891,485
+LINEAR,frog chorus based,residual_3min_median,3,131.0,0.0736437018835689,493
+LINEAR,frog chorus based,residual_3min_median,3,132.0,0.0741067029791432,493
+LINEAR,frog chorus based,residual_3min_median,3,133.0,0.0746288504432265,490
+LINEAR,frog chorus based,residual_3min_median,3,134.0,0.0753614367820679,489
+LINEAR,frog chorus based,residual_3min_median,3,135.0,0.0756551593591118,491
+LINEAR,frog chorus based,residual_3min_median,3,136.0,0.0760895009208217,494
+LINEAR,frog chorus based,residual_3min_median,3,137.0,0.0766406542517907,490
+LINEAR,frog chorus based,residual_3min_median,3,138.0,0.0770491148119949,490
+LINEAR,frog chorus based,residual_3min_median,3,139.0,0.0776405730884044,497
+LINEAR,frog chorus based,residual_3min_median,3,140.0,0.0782640855390573,493
+LINEAR,frog chorus based,residual_3min_median,3,141.0,0.0787453055410367,493
+LINEAR,frog chorus based,residual_3min_median,3,142.0,0.0791274653449386,486
+LINEAR,frog chorus based,residual_3min_median,3,143.0,0.0795866184555626,492
+LINEAR,frog chorus based,residual_3min_median,3,144.0,0.080163642210361,496
+LINEAR,frog chorus based,residual_3min_median,3,145.0,0.0805203199227757,490
+LINEAR,frog chorus based,residual_3min_median,3,146.0,0.0811039756021888,489
+LINEAR,frog chorus based,residual_3min_median,3,147.0,0.0817165162654546,493
+LINEAR,frog chorus based,residual_3min_median,3,148.0,0.0818735368930729,489
+LINEAR,frog chorus based,residual_3min_median,3,149.0,0.0825320300536455,490
+LINEAR,frog chorus based,residual_3min_median,3,150.0,0.0830117942429186,492
+LINEAR_4,modified frog chorus based,residual_median,30,1.0,0.0403850076546017,499
+LINEAR_4,modified frog chorus based,residual_median,30,2.0,0.0235900153806362,500
+LINEAR_4,modified frog chorus based,residual_median,30,3.0,0.0161703888858478,500
+LINEAR_4,modified frog chorus based,residual_median,30,4.0,0.0125402784440331,500
+LINEAR_4,modified frog chorus based,residual_median,30,5.0,0.0128167023390039,500
+LINEAR_4,modified frog chorus based,residual_median,30,6.0,0.0138061867205733,500
+LINEAR_4,modified frog chorus based,residual_median,30,7.0,0.0148470596905495,500
+LINEAR_4,modified frog chorus based,residual_median,30,8.0,0.0157281065617708,500
+LINEAR_4,modified frog chorus based,residual_median,30,9.0,0.016650679137341,499
+LINEAR_4,modified frog chorus based,residual_median,30,10.0,0.0172655266143106,498
+LINEAR_4,modified frog chorus based,residual_median,30,11.0,0.0182616318624926,497
+LINEAR_4,modified frog chorus based,residual_median,30,12.0,0.0187756268519873,499
+LINEAR_4,modified frog chorus based,residual_median,30,13.0,0.0192161840682986,499
+LINEAR_4,modified frog chorus based,residual_median,30,14.0,0.0201325643713997,499
+LINEAR_4,modified frog chorus based,residual_median,30,15.0,0.0205878429444171,496
+LINEAR_4,modified frog chorus based,residual_median,30,16.0,0.0213860735905357,499
+LINEAR_4,modified frog chorus based,residual_median,30,17.0,0.021689356328202,496
+LINEAR_4,modified frog chorus based,residual_median,30,18.0,0.021929271306524,498
+LINEAR_4,modified frog chorus based,residual_median,30,19.0,0.0226745388481738,497
+LINEAR_4,modified frog chorus based,residual_median,30,20.0,0.0229408066409917,496
+LINEAR_4,modified frog chorus based,residual_median,30,21.0,0.0235125632078777,494
+LINEAR_4,modified frog chorus based,residual_median,30,22.0,0.0238688937019027,494
+LINEAR_4,modified frog chorus based,residual_median,30,23.0,0.0239116951758373,493
+LINEAR_4,modified frog chorus based,residual_median,30,24.0,0.024418663587348,491
+LINEAR_4,modified frog chorus based,residual_median,30,25.0,0.0245713836187053,492
+LINEAR_4,modified frog chorus based,residual_median,30,26.0,0.0252994161200632,492
+LINEAR_4,modified frog chorus based,residual_median,30,27.0,0.0257158767155096,494
+LINEAR_4,modified frog chorus based,residual_median,30,28.0,0.0258507622234119,492
+LINEAR_4,modified frog chorus based,residual_median,30,29.0,0.0258164692517453,489
+LINEAR_4,modified frog chorus based,residual_median,30,30.0,0.0262415344887762,494
+LINEAR_4,modified frog chorus based,residual_median,30,31.0,0.0263881526191138,489
+LINEAR_4,modified frog chorus based,residual_median,30,32.0,0.0265223779360054,489
+LINEAR_4,modified frog chorus based,residual_median,30,33.0,0.0270345905154107,491
+LINEAR_4,modified frog chorus based,residual_median,30,34.0,0.0269976250719246,484
+LINEAR_4,modified frog chorus based,residual_median,30,35.0,0.0273921591468619,491
+LINEAR_4,modified frog chorus based,residual_median,30,36.0,0.027815415873069,486
+LINEAR_4,modified frog chorus based,residual_median,30,37.0,0.0279820599579993,488
+LINEAR_4,modified frog chorus based,residual_median,30,38.0,0.0282316512694411,485
+LINEAR_4,modified frog chorus based,residual_median,30,39.0,0.0283100961947385,488
+LINEAR_4,modified frog chorus based,residual_median,30,40.0,0.0290901659653228,490
+LINEAR_4,modified frog chorus based,residual_median,30,41.0,0.0290611972599787,489
+LINEAR_4,modified frog chorus based,residual_median,30,42.0,0.0291922249529525,488
+LINEAR_4,modified frog chorus based,residual_median,30,43.0,0.0295161075673049,492
+LINEAR_4,modified frog chorus based,residual_median,30,44.0,0.0299025798547466,486
+LINEAR_4,modified frog chorus based,residual_median,30,45.0,0.0300932237790231,487
+LINEAR_4,modified frog chorus based,residual_median,30,46.0,0.0303203334816701,488
+LINEAR_4,modified frog chorus based,residual_median,30,47.0,0.0306734681332559,490
+LINEAR_4,modified frog chorus based,residual_median,30,48.0,0.0308435076913192,490
+LINEAR_4,modified frog chorus based,residual_median,30,49.0,0.0310411516835885,494
+LINEAR_4,modified frog chorus based,residual_median,30,50.0,0.0314573978472931,486
+LINEAR_4,modified frog chorus based,residual_median,30,51.0,0.0318229598312655,494
+LINEAR_4,modified frog chorus based,residual_median,30,52.0,0.0318768872314986,487
+LINEAR_4,modified frog chorus based,residual_median,30,53.0,0.0322711836699998,486
+LINEAR_4,modified frog chorus based,residual_median,30,54.0,0.032611572135244,491
+LINEAR_4,modified frog chorus based,residual_median,30,55.0,0.0328710152704848,491
+LINEAR_4,modified frog chorus based,residual_median,30,56.0,0.0333697635252411,490
+LINEAR_4,modified frog chorus based,residual_median,30,57.0,0.0337154219874747,491
+LINEAR_4,modified frog chorus based,residual_median,30,58.0,0.0339589913236954,491
+LINEAR_4,modified frog chorus based,residual_median,30,59.0,0.0343329165357952,492
+LINEAR_4,modified frog chorus based,residual_median,30,60.0,0.0347157242775102,493
+LINEAR_4,modified frog chorus based,residual_median,30,61.0,0.0352897663152062,496
+LINEAR_4,modified frog chorus based,residual_median,30,62.0,0.0356361362362256,492
+LINEAR_4,modified frog chorus based,residual_median,30,63.0,0.0359176333112644,491
+LINEAR_4,modified frog chorus based,residual_median,30,64.0,0.0364275384068306,489
+LINEAR_4,modified frog chorus based,residual_median,30,65.0,0.0368366299356242,494
+LINEAR_4,modified frog chorus based,residual_median,30,66.0,0.0373374008465314,493
+LINEAR_4,modified frog chorus based,residual_median,30,67.0,0.0378043554471643,493
+LINEAR_4,modified frog chorus based,residual_median,30,68.0,0.0383386287910167,492
+LINEAR_4,modified frog chorus based,residual_median,30,69.0,0.0387628859354533,488
+LINEAR_4,modified frog chorus based,residual_median,30,70.0,0.0392240911418109,482
+LINEAR_4,modified frog chorus based,residual_median,30,71.0,0.0397434920866856,487
+LINEAR_4,modified frog chorus based,residual_median,30,72.0,0.040308985163153,487
+LINEAR_4,modified frog chorus based,residual_median,30,73.0,0.0408698063561924,492
+LINEAR_4,modified frog chorus based,residual_median,30,74.0,0.0413934636930847,484
+LINEAR_4,modified frog chorus based,residual_median,30,75.0,0.0419920622170935,487
+LINEAR_4,modified frog chorus based,residual_median,30,76.0,0.0426409062529097,493
+LINEAR_4,modified frog chorus based,residual_median,30,77.0,0.0430982206177097,485
+LINEAR_4,modified frog chorus based,residual_median,30,78.0,0.0436444237604874,482
+LINEAR_4,modified frog chorus based,residual_median,30,79.0,0.0442280404265427,493
+LINEAR_4,modified frog chorus based,residual_median,30,80.0,0.0448344361740728,489
+LINEAR_4,modified frog chorus based,residual_median,30,81.0,0.0454082781828529,493
+LINEAR_4,modified frog chorus based,residual_median,30,82.0,0.0459484252085318,487
+LINEAR_4,modified frog chorus based,residual_median,30,83.0,0.0465586418499476,487
+LINEAR_4,modified frog chorus based,residual_median,30,84.0,0.0472187638052485,491
+LINEAR_4,modified frog chorus based,residual_median,30,85.0,0.0477697321741763,489
+LINEAR_4,modified frog chorus based,residual_median,30,86.0,0.0483325559681614,485
+LINEAR_4,modified frog chorus based,residual_median,30,87.0,0.0489251856497975,486
+LINEAR_4,modified frog chorus based,residual_median,30,88.0,0.0494370771154814,487
+LINEAR_4,modified frog chorus based,residual_median,30,89.0,0.0500874783318318,490
+LINEAR_4,modified frog chorus based,residual_median,30,90.0,0.0506439625210233,488
+LINEAR_4,modified frog chorus based,residual_median,30,91.0,0.0512321906296324,484
+LINEAR_4,modified frog chorus based,residual_median,30,92.0,0.0518023244232839,483
+LINEAR_4,modified frog chorus based,residual_median,30,93.0,0.052440872360982,484
+LINEAR_4,modified frog chorus based,residual_median,30,94.0,0.0530203617588294,488
+LINEAR_4,modified frog chorus based,residual_median,30,95.0,0.0536591191707902,484
+LINEAR_4,modified frog chorus based,residual_median,30,96.0,0.0542405812776822,488
+LINEAR_4,modified frog chorus based,residual_median,30,97.0,0.0548574693270516,488
+LINEAR_4,modified frog chorus based,residual_median,30,98.0,0.0553962273596496,487
+LINEAR_4,modified frog chorus based,residual_median,30,99.0,0.0559478486740682,485
+LINEAR_4,modified frog chorus based,residual_median,30,100.0,0.056671107401787,487
+LINEAR_4,modified frog chorus based,residual_median,30,101.0,0.0571833693518632,484
+LINEAR_4,modified frog chorus based,residual_median,30,102.0,0.0578643292593493,489
+LINEAR_4,modified frog chorus based,residual_median,30,103.0,0.0584530481833501,488
+LINEAR_4,modified frog chorus based,residual_median,30,104.0,0.0592188897279841,490
+LINEAR_4,modified frog chorus based,residual_median,30,105.0,0.0597488335878289,487
+LINEAR_4,modified frog chorus based,residual_median,30,106.0,0.0603976187664589,486
+LINEAR_4,modified frog chorus based,residual_median,30,107.0,0.0610647108730344,492
+LINEAR_4,modified frog chorus based,residual_median,30,108.0,0.0616370103637297,483
+LINEAR_4,modified frog chorus based,residual_median,30,109.0,0.0622804905216217,477
+LINEAR_4,modified frog chorus based,residual_median,30,110.0,0.0629260965701161,487
+LINEAR_4,modified frog chorus based,residual_median,30,111.0,0.0635616991311545,483
+LINEAR_4,modified frog chorus based,residual_median,30,112.0,0.0642704408105999,488
+LINEAR_4,modified frog chorus based,residual_median,30,113.0,0.06472099772504,488
+LINEAR_4,modified frog chorus based,residual_median,30,114.0,0.0653829383686882,486
+LINEAR_4,modified frog chorus based,residual_median,30,115.0,0.0659377149031592,481
+LINEAR_4,modified frog chorus based,residual_median,30,116.0,0.0666454939103857,486
+LINEAR_4,modified frog chorus based,residual_median,30,117.0,0.0671795410266007,484
+LINEAR_4,modified frog chorus based,residual_median,30,118.0,0.0677522005690788,483
+LINEAR_4,modified frog chorus based,residual_median,30,119.0,0.0683332312640744,482
+LINEAR_4,modified frog chorus based,residual_median,30,120.0,0.0688966643839007,484
+LINEAR_4,modified frog chorus based,residual_median,30,121.0,0.0694583133521737,484
+LINEAR_4,modified frog chorus based,residual_median,30,122.0,0.0700554018022373,477
+LINEAR_4,modified frog chorus based,residual_median,30,123.0,0.0705020857986918,482
+LINEAR_4,modified frog chorus based,residual_median,30,124.0,0.0711162203378551,487
+LINEAR_4,modified frog chorus based,residual_median,30,125.0,0.0716522473319231,483
+LINEAR_4,modified frog chorus based,residual_median,30,126.0,0.0720080764377291,484
+LINEAR_4,modified frog chorus based,residual_median,30,127.0,0.0724273426130673,480
+LINEAR_4,modified frog chorus based,residual_median,30,128.0,0.0730530725332334,490
+LINEAR_4,modified frog chorus based,residual_median,30,129.0,0.0734503074091992,483
+LINEAR_4,modified frog chorus based,residual_median,30,130.0,0.0740116281400455,476
+LINEAR_4,modified frog chorus based,residual_median,30,131.0,0.0744217026589977,485
+LINEAR_4,modified frog chorus based,residual_median,30,132.0,0.0747071282083018,485
+LINEAR_4,modified frog chorus based,residual_median,30,133.0,0.0756563092061789,487
+LINEAR_4,modified frog chorus based,residual_median,30,134.0,0.0759196243716048,482
+LINEAR_4,modified frog chorus based,residual_median,30,135.0,0.0765161627474795,486
+LINEAR_4,modified frog chorus based,residual_median,30,136.0,0.0768115265401278,471
+LINEAR_4,modified frog chorus based,residual_median,30,137.0,0.0772854453428364,482
+LINEAR_4,modified frog chorus based,residual_median,30,138.0,0.0777256371582458,482
+LINEAR_4,modified frog chorus based,residual_median,30,139.0,0.0783234991460344,486
+LINEAR_4,modified frog chorus based,residual_median,30,140.0,0.0789099060111714,482
+LINEAR_4,modified frog chorus based,residual_median,30,141.0,0.0792660548015549,479
+LINEAR_4,modified frog chorus based,residual_median,30,142.0,0.0795689316788903,478
+LINEAR_4,modified frog chorus based,residual_median,30,143.0,0.0800015101555369,483
+LINEAR_4,modified frog chorus based,residual_median,30,144.0,0.0805740700132857,482
+LINEAR_4,modified frog chorus based,residual_median,30,145.0,0.0807990802586658,484
+LINEAR_4,modified frog chorus based,residual_median,30,146.0,0.0813098778472183,482
+LINEAR_4,modified frog chorus based,residual_median,30,147.0,0.0817290371687225,473
+LINEAR_4,modified frog chorus based,residual_median,30,148.0,0.0827099749583516,480
+LINEAR_4,modified frog chorus based,residual_median,30,149.0,0.0827611398247375,484
+LINEAR_4,modified frog chorus based,residual_median,30,150.0,0.0833892524222472,479
+LINEAR_4,modified frog chorus based,residual_3min_median,3,1.0,0.0824805989710862,499
+LINEAR_4,modified frog chorus based,residual_3min_median,3,2.0,0.0771503761957151,500
+LINEAR_4,modified frog chorus based,residual_3min_median,3,3.0,0.0721516799200974,500
+LINEAR_4,modified frog chorus based,residual_3min_median,3,4.0,0.0674417103731942,500
+LINEAR_4,modified frog chorus based,residual_3min_median,3,5.0,0.0635279522262097,500
+LINEAR_4,modified frog chorus based,residual_3min_median,3,6.0,0.0597735023717277,500
+LINEAR_4,modified frog chorus based,residual_3min_median,3,7.0,0.0565984244795208,500
+LINEAR_4,modified frog chorus based,residual_3min_median,3,8.0,0.0540112202284985,500
+LINEAR_4,modified frog chorus based,residual_3min_median,3,9.0,0.0513788601724918,499
+LINEAR_4,modified frog chorus based,residual_3min_median,3,10.0,0.0491549042143645,498
+LINEAR_4,modified frog chorus based,residual_3min_median,3,11.0,0.0470704720436648,497
+LINEAR_4,modified frog chorus based,residual_3min_median,3,12.0,0.0452231922751871,499
+LINEAR_4,modified frog chorus based,residual_3min_median,3,13.0,0.0436566981240561,499
+LINEAR_4,modified frog chorus based,residual_3min_median,3,14.0,0.0420580210633131,499
+LINEAR_4,modified frog chorus based,residual_3min_median,3,15.0,0.0407249236815424,496
+LINEAR_4,modified frog chorus based,residual_3min_median,3,16.0,0.0396532400561763,499
+LINEAR_4,modified frog chorus based,residual_3min_median,3,17.0,0.0382896564326822,496
+LINEAR_4,modified frog chorus based,residual_3min_median,3,18.0,0.037523691415017,498
+LINEAR_4,modified frog chorus based,residual_3min_median,3,19.0,0.0365739892918904,497
+LINEAR_4,modified frog chorus based,residual_3min_median,3,20.0,0.0362060046727471,496
+LINEAR_4,modified frog chorus based,residual_3min_median,3,21.0,0.0354195909006403,494
+LINEAR_4,modified frog chorus based,residual_3min_median,3,22.0,0.0347503789385817,494
+LINEAR_4,modified frog chorus based,residual_3min_median,3,23.0,0.034265318771939,493
+LINEAR_4,modified frog chorus based,residual_3min_median,3,24.0,0.0344399060978869,491
+LINEAR_4,modified frog chorus based,residual_3min_median,3,25.0,0.0339658292611048,492
+LINEAR_4,modified frog chorus based,residual_3min_median,3,26.0,0.0337794898362181,492
+LINEAR_4,modified frog chorus based,residual_3min_median,3,27.0,0.0338556930301742,494
+LINEAR_4,modified frog chorus based,residual_3min_median,3,28.0,0.0333854995722245,492
+LINEAR_4,modified frog chorus based,residual_3min_median,3,29.0,0.0332702614155491,489
+LINEAR_4,modified frog chorus based,residual_3min_median,3,30.0,0.0336079334223715,494
+LINEAR_4,modified frog chorus based,residual_3min_median,3,31.0,0.033744035766355,489
+LINEAR_4,modified frog chorus based,residual_3min_median,3,32.0,0.0336810672575256,489
+LINEAR_4,modified frog chorus based,residual_3min_median,3,33.0,0.0340773739841809,491
+LINEAR_4,modified frog chorus based,residual_3min_median,3,34.0,0.0342304680347021,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,35.0,0.0343532998031088,491
+LINEAR_4,modified frog chorus based,residual_3min_median,3,36.0,0.0345075449925263,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,37.0,0.0346592786701466,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,38.0,0.035007679605765,485
+LINEAR_4,modified frog chorus based,residual_3min_median,3,39.0,0.0352646852085371,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,40.0,0.0352973098418817,490
+LINEAR_4,modified frog chorus based,residual_3min_median,3,41.0,0.0358097890354612,489
+LINEAR_4,modified frog chorus based,residual_3min_median,3,42.0,0.036089795586586,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,43.0,0.036128483315055,492
+LINEAR_4,modified frog chorus based,residual_3min_median,3,44.0,0.036549995343362,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,45.0,0.036896730851842,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,46.0,0.037073148601287,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,47.0,0.0372064799973011,490
+LINEAR_4,modified frog chorus based,residual_3min_median,3,48.0,0.0375275569403452,490
+LINEAR_4,modified frog chorus based,residual_3min_median,3,49.0,0.0379948663935533,494
+LINEAR_4,modified frog chorus based,residual_3min_median,3,50.0,0.0381484253506065,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,51.0,0.0384030207260192,494
+LINEAR_4,modified frog chorus based,residual_3min_median,3,52.0,0.0385497149940055,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,53.0,0.03892528627819,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,54.0,0.0393957193846282,491
+LINEAR_4,modified frog chorus based,residual_3min_median,3,55.0,0.0395410266860244,491
+LINEAR_4,modified frog chorus based,residual_3min_median,3,56.0,0.0399938409096352,490
+LINEAR_4,modified frog chorus based,residual_3min_median,3,57.0,0.0403459821988783,491
+LINEAR_4,modified frog chorus based,residual_3min_median,3,58.0,0.0408599868588209,491
+LINEAR_4,modified frog chorus based,residual_3min_median,3,59.0,0.0412763365426855,492
+LINEAR_4,modified frog chorus based,residual_3min_median,3,60.0,0.041538176880089,493
+LINEAR_4,modified frog chorus based,residual_3min_median,3,61.0,0.0416731686332084,496
+LINEAR_4,modified frog chorus based,residual_3min_median,3,62.0,0.042049265389885,492
+LINEAR_4,modified frog chorus based,residual_3min_median,3,63.0,0.0423720501339409,491
+LINEAR_4,modified frog chorus based,residual_3min_median,3,64.0,0.0426889791333759,489
+LINEAR_4,modified frog chorus based,residual_3min_median,3,65.0,0.0430898895391202,494
+LINEAR_4,modified frog chorus based,residual_3min_median,3,66.0,0.0435053676484628,493
+LINEAR_4,modified frog chorus based,residual_3min_median,3,67.0,0.0437183048955626,493
+LINEAR_4,modified frog chorus based,residual_3min_median,3,68.0,0.0440118547058312,492
+LINEAR_4,modified frog chorus based,residual_3min_median,3,69.0,0.0444087272579977,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,70.0,0.0446811702676428,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,71.0,0.044913184507859,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,72.0,0.0450243898087442,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,73.0,0.0454793163896443,492
+LINEAR_4,modified frog chorus based,residual_3min_median,3,74.0,0.0458515997335184,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,75.0,0.0462430444090771,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,76.0,0.0465944641076256,493
+LINEAR_4,modified frog chorus based,residual_3min_median,3,77.0,0.0470016935249189,485
+LINEAR_4,modified frog chorus based,residual_3min_median,3,78.0,0.0471718620229507,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,79.0,0.0475842098511198,493
+LINEAR_4,modified frog chorus based,residual_3min_median,3,80.0,0.0479587095204574,489
+LINEAR_4,modified frog chorus based,residual_3min_median,3,81.0,0.0481451442156607,493
+LINEAR_4,modified frog chorus based,residual_3min_median,3,82.0,0.0484859846863702,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,83.0,0.0489190902493152,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,84.0,0.0491409580817406,491
+LINEAR_4,modified frog chorus based,residual_3min_median,3,85.0,0.0494932697893815,489
+LINEAR_4,modified frog chorus based,residual_3min_median,3,86.0,0.049819355619025,485
+LINEAR_4,modified frog chorus based,residual_3min_median,3,87.0,0.0502585925990453,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,88.0,0.0504136851588618,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,89.0,0.0510418075497199,490
+LINEAR_4,modified frog chorus based,residual_3min_median,3,90.0,0.0514738459290269,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,91.0,0.0519305723233948,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,92.0,0.0523946378538995,483
+LINEAR_4,modified frog chorus based,residual_3min_median,3,93.0,0.0524758051870936,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,94.0,0.0528965531633794,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,95.0,0.0531033632262482,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,96.0,0.0534916370641531,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,97.0,0.0539334771768923,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,98.0,0.0543931276032215,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,99.0,0.0548334394220265,485
+LINEAR_4,modified frog chorus based,residual_3min_median,3,100.0,0.0551335209010852,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,101.0,0.0554281797252146,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,102.0,0.0559892518661716,489
+LINEAR_4,modified frog chorus based,residual_3min_median,3,103.0,0.0562823032247432,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,104.0,0.0569020659451892,490
+LINEAR_4,modified frog chorus based,residual_3min_median,3,105.0,0.0572414441243036,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,106.0,0.0577073692833077,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,107.0,0.0581174300312335,492
+LINEAR_4,modified frog chorus based,residual_3min_median,3,108.0,0.0586203052531043,483
+LINEAR_4,modified frog chorus based,residual_3min_median,3,109.0,0.0591301835583267,477
+LINEAR_4,modified frog chorus based,residual_3min_median,3,110.0,0.0595606616004459,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,111.0,0.0596544415609249,483
+LINEAR_4,modified frog chorus based,residual_3min_median,3,112.0,0.0602163297392886,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,113.0,0.0605409913922459,488
+LINEAR_4,modified frog chorus based,residual_3min_median,3,114.0,0.0609670171840227,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,115.0,0.0614034380920867,481
+LINEAR_4,modified frog chorus based,residual_3min_median,3,116.0,0.0618901101946322,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,117.0,0.0623596811781235,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,118.0,0.0626525545506208,483
+LINEAR_4,modified frog chorus based,residual_3min_median,3,119.0,0.0632646489665348,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,120.0,0.0638433471845321,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,121.0,0.0640251564255026,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,122.0,0.0645382631943878,477
+LINEAR_4,modified frog chorus based,residual_3min_median,3,123.0,0.0651158800692599,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,124.0,0.0654955931626379,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,125.0,0.0660436947987546,483
+LINEAR_4,modified frog chorus based,residual_3min_median,3,126.0,0.0665597925650709,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,127.0,0.0669808824957384,480
+LINEAR_4,modified frog chorus based,residual_3min_median,3,128.0,0.0672082458112802,490
+LINEAR_4,modified frog chorus based,residual_3min_median,3,129.0,0.0676979538910907,483
+LINEAR_4,modified frog chorus based,residual_3min_median,3,130.0,0.0683986263406904,476
+LINEAR_4,modified frog chorus based,residual_3min_median,3,131.0,0.0687195733758831,485
+LINEAR_4,modified frog chorus based,residual_3min_median,3,132.0,0.0691434219901548,485
+LINEAR_4,modified frog chorus based,residual_3min_median,3,133.0,0.0697367422626274,487
+LINEAR_4,modified frog chorus based,residual_3min_median,3,134.0,0.070341512293259,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,135.0,0.0708379533123467,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,136.0,0.0712599766096622,471
+LINEAR_4,modified frog chorus based,residual_3min_median,3,137.0,0.0713965680223464,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,138.0,0.0718229393797914,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,139.0,0.0725254917402253,486
+LINEAR_4,modified frog chorus based,residual_3min_median,3,140.0,0.0727611271987238,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,141.0,0.0732412732866496,479
+LINEAR_4,modified frog chorus based,residual_3min_median,3,142.0,0.0736933554662089,478
+LINEAR_4,modified frog chorus based,residual_3min_median,3,143.0,0.0741748807970524,483
+LINEAR_4,modified frog chorus based,residual_3min_median,3,144.0,0.0747700840087247,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,145.0,0.07517949219117,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,146.0,0.0756096672151061,482
+LINEAR_4,modified frog chorus based,residual_3min_median,3,147.0,0.0759353956716283,473
+LINEAR_4,modified frog chorus based,residual_3min_median,3,148.0,0.0765907769541648,480
+LINEAR_4,modified frog chorus based,residual_3min_median,3,149.0,0.0771132281678291,484
+LINEAR_4,modified frog chorus based,residual_3min_median,3,150.0,0.0775151308614967,479
+NewSIN,1-sin based,residual_median,30,1.0,0.0398823573094475,499
+NewSIN,1-sin based,residual_median,30,2.0,0.0230067555655644,500
+NewSIN,1-sin based,residual_median,30,3.0,0.0156009678024866,500
+NewSIN,1-sin based,residual_median,30,4.0,0.0124750280848567,500
+NewSIN,1-sin based,residual_median,30,5.0,0.013073171324871,500
+NewSIN,1-sin based,residual_median,30,6.0,0.0139947014792852,500
+NewSIN,1-sin based,residual_median,30,7.0,0.0150907920477252,500
+NewSIN,1-sin based,residual_median,30,8.0,0.0160060545826551,500
+NewSIN,1-sin based,residual_median,30,9.0,0.0170514662314835,500
+NewSIN,1-sin based,residual_median,30,10.0,0.017482216282939,500
+NewSIN,1-sin based,residual_median,30,11.0,0.018733310988551,499
+NewSIN,1-sin based,residual_median,30,12.0,0.0195103880702953,500
+NewSIN,1-sin based,residual_median,30,13.0,0.0199856938256431,500
+NewSIN,1-sin based,residual_median,30,14.0,0.0207324053113188,500
+NewSIN,1-sin based,residual_median,30,15.0,0.0215036395893619,500
+NewSIN,1-sin based,residual_median,30,16.0,0.0217297844262056,499
+NewSIN,1-sin based,residual_median,30,17.0,0.0223473410985212,500
+NewSIN,1-sin based,residual_median,30,18.0,0.022930695997704,500
+NewSIN,1-sin based,residual_median,30,19.0,0.0234355770208066,500
+NewSIN,1-sin based,residual_median,30,20.0,0.0238815433885548,500
+NewSIN,1-sin based,residual_median,30,21.0,0.0243776159749798,500
+NewSIN,1-sin based,residual_median,30,22.0,0.0245114126153546,500
+NewSIN,1-sin based,residual_median,30,23.0,0.0250725435578905,500
+NewSIN,1-sin based,residual_median,30,24.0,0.0249710028343179,500
+NewSIN,1-sin based,residual_median,30,25.0,0.0254731200718597,500
+NewSIN,1-sin based,residual_median,30,26.0,0.0261662068094367,500
+NewSIN,1-sin based,residual_median,30,27.0,0.0262475969448609,500
+NewSIN,1-sin based,residual_median,30,28.0,0.0265473267840798,500
+NewSIN,1-sin based,residual_median,30,29.0,0.0269666354611826,500
+NewSIN,1-sin based,residual_median,30,30.0,0.0270061404451792,500
+NewSIN,1-sin based,residual_median,30,31.0,0.027457072422478,500
+NewSIN,1-sin based,residual_median,30,32.0,0.027436471638162,500
+NewSIN,1-sin based,residual_median,30,33.0,0.0277564009226536,500
+NewSIN,1-sin based,residual_median,30,34.0,0.0281969726374133,500
+NewSIN,1-sin based,residual_median,30,35.0,0.0284227734286921,500
+NewSIN,1-sin based,residual_median,30,36.0,0.0289848035446987,500
+NewSIN,1-sin based,residual_median,30,37.0,0.0288222060852423,500
+NewSIN,1-sin based,residual_median,30,38.0,0.0294861057860123,500
+NewSIN,1-sin based,residual_median,30,39.0,0.0295274717529908,500
+NewSIN,1-sin based,residual_median,30,40.0,0.0297385599334309,500
+NewSIN,1-sin based,residual_median,30,41.0,0.029982943066574,500
+NewSIN,1-sin based,residual_median,30,42.0,0.0302918571285768,500
+NewSIN,1-sin based,residual_median,30,43.0,0.0306501451746931,500
+NewSIN,1-sin based,residual_median,30,44.0,0.030937636934375,500
+NewSIN,1-sin based,residual_median,30,45.0,0.0310558978096095,500
+NewSIN,1-sin based,residual_median,30,46.0,0.0315306712951136,500
+NewSIN,1-sin based,residual_median,30,47.0,0.0318150162143631,500
+NewSIN,1-sin based,residual_median,30,48.0,0.0319741705473646,500
+NewSIN,1-sin based,residual_median,30,49.0,0.0322763572270364,500
+NewSIN,1-sin based,residual_median,30,50.0,0.0324661374190606,500
+NewSIN,1-sin based,residual_median,30,51.0,0.0328449345492485,500
+NewSIN,1-sin based,residual_median,30,52.0,0.0330562728925497,500
+NewSIN,1-sin based,residual_median,30,53.0,0.0332759077575567,500
+NewSIN,1-sin based,residual_median,30,54.0,0.0335789077487352,500
+NewSIN,1-sin based,residual_median,30,55.0,0.0342239005168094,499
+NewSIN,1-sin based,residual_median,30,56.0,0.0343488082935856,500
+NewSIN,1-sin based,residual_median,30,57.0,0.0347598681175047,500
+NewSIN,1-sin based,residual_median,30,58.0,0.0351926291628865,500
+NewSIN,1-sin based,residual_median,30,59.0,0.0355602342158261,500
+NewSIN,1-sin based,residual_median,30,60.0,0.0358941615678624,500
+NewSIN,1-sin based,residual_median,30,61.0,0.0362967021949413,500
+NewSIN,1-sin based,residual_median,30,62.0,0.0367143482524926,500
+NewSIN,1-sin based,residual_median,30,63.0,0.0370214906380679,500
+NewSIN,1-sin based,residual_median,30,64.0,0.0376069801707644,500
+NewSIN,1-sin based,residual_median,30,65.0,0.0381708938905727,500
+NewSIN,1-sin based,residual_median,30,66.0,0.0385389428847882,500
+NewSIN,1-sin based,residual_median,30,67.0,0.0389987395630137,500
+NewSIN,1-sin based,residual_median,30,68.0,0.0395317974193464,500
+NewSIN,1-sin based,residual_median,30,69.0,0.0400219342682393,500
+NewSIN,1-sin based,residual_median,30,70.0,0.0405854449330936,500
+NewSIN,1-sin based,residual_median,30,71.0,0.0410678633653533,500
+NewSIN,1-sin based,residual_median,30,72.0,0.0415324697123217,500
+NewSIN,1-sin based,residual_median,30,73.0,0.0420622775303591,500
+NewSIN,1-sin based,residual_median,30,74.0,0.0425884337752672,500
+NewSIN,1-sin based,residual_median,30,75.0,0.0431457093828706,500
+NewSIN,1-sin based,residual_median,30,76.0,0.0437048867777193,500
+NewSIN,1-sin based,residual_median,30,77.0,0.0442742554617337,500
+NewSIN,1-sin based,residual_median,30,78.0,0.0447981268998353,500
+NewSIN,1-sin based,residual_median,30,79.0,0.0453628417007132,500
+NewSIN,1-sin based,residual_median,30,80.0,0.0459527110345988,500
+NewSIN,1-sin based,residual_median,30,81.0,0.0465511911330617,500
+NewSIN,1-sin based,residual_median,30,82.0,0.0471718840335262,500
+NewSIN,1-sin based,residual_median,30,83.0,0.047689996927906,500
+NewSIN,1-sin based,residual_median,30,84.0,0.0482660112226428,500
+NewSIN,1-sin based,residual_median,30,85.0,0.0488373394860146,500
+NewSIN,1-sin based,residual_median,30,86.0,0.0494082093996754,500
+NewSIN,1-sin based,residual_median,30,87.0,0.049985151446014,500
+NewSIN,1-sin based,residual_median,30,88.0,0.0504893711504953,500
+NewSIN,1-sin based,residual_median,30,89.0,0.0512170769560928,500
+NewSIN,1-sin based,residual_median,30,90.0,0.0517510751048773,500
+NewSIN,1-sin based,residual_median,30,91.0,0.0522864705906525,500
+NewSIN,1-sin based,residual_median,30,92.0,0.0529278169730836,500
+NewSIN,1-sin based,residual_median,30,93.0,0.0534434152085861,500
+NewSIN,1-sin based,residual_median,30,94.0,0.0540432669773033,500
+NewSIN,1-sin based,residual_median,30,95.0,0.0546989246525285,500
+NewSIN,1-sin based,residual_median,30,96.0,0.0552184823540442,500
+NewSIN,1-sin based,residual_median,30,97.0,0.0558618643158695,500
+NewSIN,1-sin based,residual_median,30,98.0,0.0564075791302399,500
+NewSIN,1-sin based,residual_median,30,99.0,0.0570211548720497,500
+NewSIN,1-sin based,residual_median,30,100.0,0.0576325987326162,500
+NewSIN,1-sin based,residual_median,30,101.0,0.0582571258112312,500
+NewSIN,1-sin based,residual_median,30,102.0,0.0588672126278826,500
+NewSIN,1-sin based,residual_median,30,103.0,0.0595109942398734,500
+NewSIN,1-sin based,residual_median,30,104.0,0.0601078169806865,500
+NewSIN,1-sin based,residual_median,30,105.0,0.0607696454581571,500
+NewSIN,1-sin based,residual_median,30,106.0,0.0613811205361454,500
+NewSIN,1-sin based,residual_median,30,107.0,0.0620463385856402,500
+NewSIN,1-sin based,residual_median,30,108.0,0.0625943578099842,500
+NewSIN,1-sin based,residual_median,30,109.0,0.0632535971365996,500
+NewSIN,1-sin based,residual_median,30,110.0,0.0638083124940852,500
+NewSIN,1-sin based,residual_median,30,111.0,0.0643922247376556,500
+NewSIN,1-sin based,residual_median,30,112.0,0.0649898823359176,499
+NewSIN,1-sin based,residual_median,30,113.0,0.0656830396442793,500
+NewSIN,1-sin based,residual_median,30,114.0,0.0662838341806816,500
+NewSIN,1-sin based,residual_median,30,115.0,0.0668440667281057,500
+NewSIN,1-sin based,residual_median,30,116.0,0.0672858710067043,500
+NewSIN,1-sin based,residual_median,30,117.0,0.0678221365014987,500
+NewSIN,1-sin based,residual_median,30,118.0,0.0684125058817357,500
+NewSIN,1-sin based,residual_median,30,119.0,0.069125159082428,499
+NewSIN,1-sin based,residual_median,30,120.0,0.069456387798072,499
+NewSIN,1-sin based,residual_median,30,121.0,0.0698379873549479,499
+NewSIN,1-sin based,residual_median,30,122.0,0.0705462765208838,499
+NewSIN,1-sin based,residual_median,30,123.0,0.0710652216857327,500
+NewSIN,1-sin based,residual_median,30,124.0,0.0713664489562433,499
+NewSIN,1-sin based,residual_median,30,125.0,0.0721086279014562,500
+NewSIN,1-sin based,residual_median,30,126.0,0.0723956205785098,500
+NewSIN,1-sin based,residual_median,30,127.0,0.072818864822762,500
+NewSIN,1-sin based,residual_median,30,128.0,0.0735558333550687,500
+NewSIN,1-sin based,residual_median,30,129.0,0.0742053471524943,500
+NewSIN,1-sin based,residual_median,30,130.0,0.0745060095506316,500
+NewSIN,1-sin based,residual_median,30,131.0,0.075013328179443,500
+NewSIN,1-sin based,residual_median,30,132.0,0.0753853402921908,500
+NewSIN,1-sin based,residual_median,30,133.0,0.0758052335306423,500
+NewSIN,1-sin based,residual_median,30,134.0,0.0760365605357318,499
+NewSIN,1-sin based,residual_median,30,135.0,0.07670317817575,499
+NewSIN,1-sin based,residual_median,30,136.0,0.076839794360116,500
+NewSIN,1-sin based,residual_median,30,137.0,0.0775704031177526,500
+NewSIN,1-sin based,residual_median,30,138.0,0.0777858430403704,500
+NewSIN,1-sin based,residual_median,30,139.0,0.0783116641201898,499
+NewSIN,1-sin based,residual_median,30,140.0,0.0789364209674511,499
+NewSIN,1-sin based,residual_median,30,141.0,0.0791368141752308,499
+NewSIN,1-sin based,residual_median,30,142.0,0.0793623416801959,500
+NewSIN,1-sin based,residual_median,30,143.0,0.0799272428282794,500
+NewSIN,1-sin based,residual_median,30,144.0,0.0801092894998015,500
+NewSIN,1-sin based,residual_median,30,145.0,0.0806941127269216,500
+NewSIN,1-sin based,residual_median,30,146.0,0.0809564592441827,500
+NewSIN,1-sin based,residual_median,30,147.0,0.0814388236638466,499
+NewSIN,1-sin based,residual_median,30,148.0,0.0821062721338496,500
+NewSIN,1-sin based,residual_median,30,149.0,0.0821346004241642,500
+NewSIN,1-sin based,residual_median,30,150.0,0.0827296407184656,500
+NewSIN,1-sin based,residual_3min_median,3,1.0,0.0824538234941326,499
+NewSIN,1-sin based,residual_3min_median,3,2.0,0.0769761442434051,500
+NewSIN,1-sin based,residual_3min_median,3,3.0,0.0719952900279352,500
+NewSIN,1-sin based,residual_3min_median,3,4.0,0.0670021802109969,500
+NewSIN,1-sin based,residual_3min_median,3,5.0,0.0631266421786704,500
+NewSIN,1-sin based,residual_3min_median,3,6.0,0.0594409844873292,500
+NewSIN,1-sin based,residual_3min_median,3,7.0,0.0559043521176196,500
+NewSIN,1-sin based,residual_3min_median,3,8.0,0.0532999559471746,500
+NewSIN,1-sin based,residual_3min_median,3,9.0,0.050800500902054,500
+NewSIN,1-sin based,residual_3min_median,3,10.0,0.0484217982354713,500
+NewSIN,1-sin based,residual_3min_median,3,11.0,0.0466098414790276,499
+NewSIN,1-sin based,residual_3min_median,3,12.0,0.0450884496244402,500
+NewSIN,1-sin based,residual_3min_median,3,13.0,0.0433051197221334,500
+NewSIN,1-sin based,residual_3min_median,3,14.0,0.0415828338465181,500
+NewSIN,1-sin based,residual_3min_median,3,15.0,0.0403046819772417,500
+NewSIN,1-sin based,residual_3min_median,3,16.0,0.03914427686306,499
+NewSIN,1-sin based,residual_3min_median,3,17.0,0.038137884028916,500
+NewSIN,1-sin based,residual_3min_median,3,18.0,0.0370347809860548,500
+NewSIN,1-sin based,residual_3min_median,3,19.0,0.036189915115731,500
+NewSIN,1-sin based,residual_3min_median,3,20.0,0.0356747885955348,500
+NewSIN,1-sin based,residual_3min_median,3,21.0,0.0350809009244848,500
+NewSIN,1-sin based,residual_3min_median,3,22.0,0.0343877165678874,500
+NewSIN,1-sin based,residual_3min_median,3,23.0,0.0340997165398288,500
+NewSIN,1-sin based,residual_3min_median,3,24.0,0.0339920585476058,500
+NewSIN,1-sin based,residual_3min_median,3,25.0,0.0336915935792792,500
+NewSIN,1-sin based,residual_3min_median,3,26.0,0.0338156792985512,500
+NewSIN,1-sin based,residual_3min_median,3,27.0,0.0335485742265327,500
+NewSIN,1-sin based,residual_3min_median,3,28.0,0.0334576996524863,500
+NewSIN,1-sin based,residual_3min_median,3,29.0,0.0334482692750031,500
+NewSIN,1-sin based,residual_3min_median,3,30.0,0.0336672765588948,500
+NewSIN,1-sin based,residual_3min_median,3,31.0,0.0335018518979581,500
+NewSIN,1-sin based,residual_3min_median,3,32.0,0.0339242599155912,500
+NewSIN,1-sin based,residual_3min_median,3,33.0,0.0341286020258152,500
+NewSIN,1-sin based,residual_3min_median,3,34.0,0.034302759908633,500
+NewSIN,1-sin based,residual_3min_median,3,35.0,0.0345187835162281,500
+NewSIN,1-sin based,residual_3min_median,3,36.0,0.0346534531836036,500
+NewSIN,1-sin based,residual_3min_median,3,37.0,0.0347248372147382,500
+NewSIN,1-sin based,residual_3min_median,3,38.0,0.0351114911563106,500
+NewSIN,1-sin based,residual_3min_median,3,39.0,0.035295308936386,500
+NewSIN,1-sin based,residual_3min_median,3,40.0,0.0357504155722648,500
+NewSIN,1-sin based,residual_3min_median,3,41.0,0.0359942495664854,500
+NewSIN,1-sin based,residual_3min_median,3,42.0,0.0362970015930363,500
+NewSIN,1-sin based,residual_3min_median,3,43.0,0.0365121729767325,500
+NewSIN,1-sin based,residual_3min_median,3,44.0,0.0368536524475189,500
+NewSIN,1-sin based,residual_3min_median,3,45.0,0.0370684732826277,500
+NewSIN,1-sin based,residual_3min_median,3,46.0,0.0370810111222595,500
+NewSIN,1-sin based,residual_3min_median,3,47.0,0.0378055144475196,500
+NewSIN,1-sin based,residual_3min_median,3,48.0,0.038047221697885,500
+NewSIN,1-sin based,residual_3min_median,3,49.0,0.0383937408484786,500
+NewSIN,1-sin based,residual_3min_median,3,50.0,0.0387124313367216,500
+NewSIN,1-sin based,residual_3min_median,3,51.0,0.039123006974207,500
+NewSIN,1-sin based,residual_3min_median,3,52.0,0.039352652413278,500
+NewSIN,1-sin based,residual_3min_median,3,53.0,0.0397098247024996,500
+NewSIN,1-sin based,residual_3min_median,3,54.0,0.0400207566512861,500
+NewSIN,1-sin based,residual_3min_median,3,55.0,0.0402898204873498,499
+NewSIN,1-sin based,residual_3min_median,3,56.0,0.0405645444094502,500
+NewSIN,1-sin based,residual_3min_median,3,57.0,0.0413014555257499,500
+NewSIN,1-sin based,residual_3min_median,3,58.0,0.0415160809287731,500
+NewSIN,1-sin based,residual_3min_median,3,59.0,0.0418179719227117,500
+NewSIN,1-sin based,residual_3min_median,3,60.0,0.0421345775668399,500
+NewSIN,1-sin based,residual_3min_median,3,61.0,0.042433687248926,500
+NewSIN,1-sin based,residual_3min_median,3,62.0,0.0427747282052336,500
+NewSIN,1-sin based,residual_3min_median,3,63.0,0.0430076435198134,500
+NewSIN,1-sin based,residual_3min_median,3,64.0,0.0434432366909722,500
+NewSIN,1-sin based,residual_3min_median,3,65.0,0.0438066642293739,500
+NewSIN,1-sin based,residual_3min_median,3,66.0,0.0441137946052494,500
+NewSIN,1-sin based,residual_3min_median,3,67.0,0.0443423013322189,500
+NewSIN,1-sin based,residual_3min_median,3,68.0,0.0445954636525169,500
+NewSIN,1-sin based,residual_3min_median,3,69.0,0.0450086188947373,500
+NewSIN,1-sin based,residual_3min_median,3,70.0,0.0453478395263727,500
+NewSIN,1-sin based,residual_3min_median,3,71.0,0.0457537236177915,500
+NewSIN,1-sin based,residual_3min_median,3,72.0,0.046101312793434,500
+NewSIN,1-sin based,residual_3min_median,3,73.0,0.0462039655995168,500
+NewSIN,1-sin based,residual_3min_median,3,74.0,0.0465323127943015,500
+NewSIN,1-sin based,residual_3min_median,3,75.0,0.0467631247745421,500
+NewSIN,1-sin based,residual_3min_median,3,76.0,0.0470443320340806,500
+NewSIN,1-sin based,residual_3min_median,3,77.0,0.047516581389107,500
+NewSIN,1-sin based,residual_3min_median,3,78.0,0.0476893228989654,500
+NewSIN,1-sin based,residual_3min_median,3,79.0,0.0479993115135679,500
+NewSIN,1-sin based,residual_3min_median,3,80.0,0.0483839993777807,500
+NewSIN,1-sin based,residual_3min_median,3,81.0,0.0486800160917496,500
+NewSIN,1-sin based,residual_3min_median,3,82.0,0.0492343946017789,500
+NewSIN,1-sin based,residual_3min_median,3,83.0,0.0494895189791012,500
+NewSIN,1-sin based,residual_3min_median,3,84.0,0.0498188017115907,500
+NewSIN,1-sin based,residual_3min_median,3,85.0,0.0502321185214246,500
+NewSIN,1-sin based,residual_3min_median,3,86.0,0.0505594052651725,500
+NewSIN,1-sin based,residual_3min_median,3,87.0,0.0508812488954593,500
+NewSIN,1-sin based,residual_3min_median,3,88.0,0.0511705624636354,500
+NewSIN,1-sin based,residual_3min_median,3,89.0,0.0515471008042769,500
+NewSIN,1-sin based,residual_3min_median,3,90.0,0.0520176614340594,500
+NewSIN,1-sin based,residual_3min_median,3,91.0,0.0523712117917416,500
+NewSIN,1-sin based,residual_3min_median,3,92.0,0.0526446905832827,500
+NewSIN,1-sin based,residual_3min_median,3,93.0,0.053032071878584,500
+NewSIN,1-sin based,residual_3min_median,3,94.0,0.0533375322071361,500
+NewSIN,1-sin based,residual_3min_median,3,95.0,0.0537727177736471,500
+NewSIN,1-sin based,residual_3min_median,3,96.0,0.0541615197266707,500
+NewSIN,1-sin based,residual_3min_median,3,97.0,0.0546780354427745,500
+NewSIN,1-sin based,residual_3min_median,3,98.0,0.054932637297698,500
+NewSIN,1-sin based,residual_3min_median,3,99.0,0.0552566270133909,500
+NewSIN,1-sin based,residual_3min_median,3,100.0,0.0556338038705371,500
+NewSIN,1-sin based,residual_3min_median,3,101.0,0.0561305078643062,500
+NewSIN,1-sin based,residual_3min_median,3,102.0,0.0563615083847919,500
+NewSIN,1-sin based,residual_3min_median,3,103.0,0.0569322610903392,500
+NewSIN,1-sin based,residual_3min_median,3,104.0,0.0573932936266285,500
+NewSIN,1-sin based,residual_3min_median,3,105.0,0.0578115649973913,500
+NewSIN,1-sin based,residual_3min_median,3,106.0,0.0583021969944471,500
+NewSIN,1-sin based,residual_3min_median,3,107.0,0.0587827527572602,500
+NewSIN,1-sin based,residual_3min_median,3,108.0,0.0589558859292003,500
+NewSIN,1-sin based,residual_3min_median,3,109.0,0.059528879266583,500
+NewSIN,1-sin based,residual_3min_median,3,110.0,0.0598113533831452,500
+NewSIN,1-sin based,residual_3min_median,3,111.0,0.0602738704445777,500
+NewSIN,1-sin based,residual_3min_median,3,112.0,0.0606097841997962,499
+NewSIN,1-sin based,residual_3min_median,3,113.0,0.0611415185643067,500
+NewSIN,1-sin based,residual_3min_median,3,114.0,0.0617080113099837,500
+NewSIN,1-sin based,residual_3min_median,3,115.0,0.0620888107424719,500
+NewSIN,1-sin based,residual_3min_median,3,116.0,0.0624830381904514,500
+NewSIN,1-sin based,residual_3min_median,3,117.0,0.0632164161377148,500
+NewSIN,1-sin based,residual_3min_median,3,118.0,0.0634367974996716,500
+NewSIN,1-sin based,residual_3min_median,3,119.0,0.0639240946400674,499
+NewSIN,1-sin based,residual_3min_median,3,120.0,0.0644591846683823,499
+NewSIN,1-sin based,residual_3min_median,3,121.0,0.0647968672694824,499
+NewSIN,1-sin based,residual_3min_median,3,122.0,0.0653835117523154,499
+NewSIN,1-sin based,residual_3min_median,3,123.0,0.0658035628139081,500
+NewSIN,1-sin based,residual_3min_median,3,124.0,0.0663720605032503,499
+NewSIN,1-sin based,residual_3min_median,3,125.0,0.0668478429166335,500
+NewSIN,1-sin based,residual_3min_median,3,126.0,0.0672985532436913,500
+NewSIN,1-sin based,residual_3min_median,3,127.0,0.0677765739518356,500
+NewSIN,1-sin based,residual_3min_median,3,128.0,0.0680636217544502,500
+NewSIN,1-sin based,residual_3min_median,3,129.0,0.0684086523087893,500
+NewSIN,1-sin based,residual_3min_median,3,130.0,0.0688911457866773,500
+NewSIN,1-sin based,residual_3min_median,3,131.0,0.0694163948437166,500
+NewSIN,1-sin based,residual_3min_median,3,132.0,0.0700305761184891,500
+NewSIN,1-sin based,residual_3min_median,3,133.0,0.0705072607774128,500
+NewSIN,1-sin based,residual_3min_median,3,134.0,0.0709280196570673,499
+NewSIN,1-sin based,residual_3min_median,3,135.0,0.0714580323992242,499
+NewSIN,1-sin based,residual_3min_median,3,136.0,0.0717915481819265,500
+NewSIN,1-sin based,residual_3min_median,3,137.0,0.072227833965651,500
+NewSIN,1-sin based,residual_3min_median,3,138.0,0.0727949772658013,500
+NewSIN,1-sin based,residual_3min_median,3,139.0,0.0731354777585422,499
+NewSIN,1-sin based,residual_3min_median,3,140.0,0.0737165499427533,499
+NewSIN,1-sin based,residual_3min_median,3,141.0,0.0739076960155019,499
+NewSIN,1-sin based,residual_3min_median,3,142.0,0.074609307009606,500
+NewSIN,1-sin based,residual_3min_median,3,143.0,0.0750714033401185,500
+NewSIN,1-sin based,residual_3min_median,3,144.0,0.0756041833484467,500
+NewSIN,1-sin based,residual_3min_median,3,145.0,0.0762392356148483,500
+NewSIN,1-sin based,residual_3min_median,3,146.0,0.0768463183287501,500
+NewSIN,1-sin based,residual_3min_median,3,147.0,0.0771020150568699,499
+NewSIN,1-sin based,residual_3min_median,3,148.0,0.0773988628162782,500
+NewSIN,1-sin based,residual_3min_median,3,149.0,0.0778864570969166,500
+NewSIN,1-sin based,residual_3min_median,3,150.0,0.078455876256194,500

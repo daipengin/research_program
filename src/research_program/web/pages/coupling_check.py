@@ -219,7 +219,7 @@ def render_coupling_function_page() -> None:
         return
 
     df = coupling_function_curve_data(selected_functions, int(sample_count))
-    fig, ax = plt.subplots(figsize=(float(figure_width), float(figure_height)))
+    fig, ax = plt.subplots(figsize=(float(figure_width), float(figure_height)), constrained_layout=True)
     for function_name in selected_functions:
         ax.scatter(
             df["phase_diff"],
@@ -244,7 +244,6 @@ def render_coupling_function_page() -> None:
     ax.grid(bool(show_grid), alpha=0.35)
     if show_legend:
         ax.legend(loc=str(legend_location), fontsize=int(legend_font_size))
-    fig.tight_layout()
     st.pyplot(fig)
 
     pdf_buffer = BytesIO()

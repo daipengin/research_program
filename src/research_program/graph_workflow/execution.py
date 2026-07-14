@@ -1251,7 +1251,10 @@ def render_interval_per_vs_k_pdf(
         f"interval_{int(interval_start_ms)}_to_{int(interval_end_ms)}ms.pdf"
     )
 
-    plt.figure(figsize=(float(settings.get("figure_width", 8.0)), float(settings.get("figure_height", 5.0))))
+    plt.figure(
+        figsize=(float(settings.get("figure_width", 8.0)), float(settings.get("figure_height", 5.0))),
+        constrained_layout=True,
+    )
     yerr = df["per_percent_std"].fillna(0.0).to_numpy(dtype=float)
     show_error_bars = bool(settings.get("show_error_bars", True))
     line_style = str(settings.get("line_style", "-"))
@@ -1333,7 +1336,6 @@ def render_interval_per_vs_k_pdf(
     plt.yticks(fontsize=int(settings.get("font_size_ticks", 10)))
     _add_x_axis_multiplier(ax, strength_ratio, int(settings.get("font_size_ticks", 10)))
     plt.grid(bool(settings.get("show_grid", True)))
-    plt.tight_layout()
     plt.savefig(output_path, dpi=int(settings.get("save_dpi", 300)), bbox_inches="tight")
     plt.close()
     _append_history(db_path, "pdf_rendered", {"output": _relative_to_graph(graph_dir, output_path)})
@@ -1379,7 +1381,10 @@ def render_convergence_cycle_vs_k_pdf(
     if plot_df.empty:
         raise ValueError("No converged runs to render")
 
-    plt.figure(figsize=(float(settings.get("figure_width", 8.0)), float(settings.get("figure_height", 5.0))))
+    plt.figure(
+        figsize=(float(settings.get("figure_width", 8.0)), float(settings.get("figure_height", 5.0))),
+        constrained_layout=True,
+    )
     yerr = plot_df["convergence_cycle_std"].fillna(0.0).to_numpy(dtype=float)
     show_error_bars = bool(settings.get("show_error_bars", True))
     line_style = str(settings.get("line_style", "-"))
@@ -1458,7 +1463,6 @@ def render_convergence_cycle_vs_k_pdf(
     plt.yticks(fontsize=int(settings.get("font_size_ticks", 10)))
     _add_x_axis_multiplier(ax, strength_ratio, int(settings.get("font_size_ticks", 10)))
     plt.grid(bool(settings.get("show_grid", True)))
-    plt.tight_layout()
     plt.savefig(output_path, dpi=int(settings.get("save_dpi", 300)), bbox_inches="tight")
     plt.close()
     _append_history(db_path, "pdf_rendered", {"output": _relative_to_graph(graph_dir, output_path)})
@@ -1509,7 +1513,10 @@ def render_phase_gap_error_vs_k_pdf(
     if plot_df.empty:
         raise ValueError("No valid phase-gap error values to render")
 
-    plt.figure(figsize=(float(settings.get("figure_width", 8.0)), float(settings.get("figure_height", 5.0))))
+    plt.figure(
+        figsize=(float(settings.get("figure_width", 8.0)), float(settings.get("figure_height", 5.0))),
+        constrained_layout=True,
+    )
     yerr = plot_df["phase_gap_error_std"].fillna(0.0).to_numpy(dtype=float)
     show_error_bars = bool(settings.get("show_error_bars", True))
     line_style = str(settings.get("line_style", "-"))
@@ -1590,7 +1597,6 @@ def render_phase_gap_error_vs_k_pdf(
     plt.yticks(fontsize=int(settings.get("font_size_ticks", 10)))
     _add_x_axis_multiplier(ax, strength_ratio, int(settings.get("font_size_ticks", 10)))
     plt.grid(bool(settings.get("show_grid", True)))
-    plt.tight_layout()
     plt.savefig(output_path, dpi=int(settings.get("save_dpi", 300)), bbox_inches="tight")
     plt.close()
     _append_history(db_path, "pdf_rendered", {"output": _relative_to_graph(graph_dir, output_path)})

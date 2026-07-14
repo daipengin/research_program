@@ -1,0 +1,1 @@
+Kuramoto based: pre-TTU PER 2.429%, post-TTU PER 0.001162% at K=571. frog chorus based: pre-TTU PER 3.419%, post-TTU PER 0.09179% at K=10. modified frog chorus based: pre-TTU PER 3.524%, post-TTU PER 0.06473% at K=9. 1-sin based: pre-TTU PER 2.928%, post-TTU PER 0.2116% at K=24.
