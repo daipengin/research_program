@@ -115,6 +115,7 @@ def main() -> int:
     make_usable_rate_vs_k(frames)
     make_phase_error_vs_k()
     make_phase_error_overlay_vs_k()
+    make_per_and_phase_error_panels(frames)
     make_two_phase_per(frames)
     validate_generated_pdfs()
     return 0
@@ -178,6 +179,14 @@ def load_metrics() -> dict[str, pd.DataFrame]:
     frames: dict[str, pd.DataFrame] = {}
     for slug, spec in SERIES.items():
         df = pd.read_csv(REANALYSIS_ROOT / str(spec["csv"]))
+        frames[slug] = df.sort_values("k").reset_index(drop=True)
+    return frames
+
+
+def load_phase_error_metrics() -> dict[str, pd.DataFrame]:
+    frames: dict[str, pd.DataFrame] = {}
+    for slug in SERIES:
+        df = pd.read_csv(REANALYSIS_ROOT / f"{slug}_phase_error.csv")
         frames[slug] = df.sort_values("k").reset_index(drop=True)
     return frames
 
@@ -532,6 +541,137 @@ def make_phase_error_overlay_vs_k() -> None:
     write_plot_csv("fig_phase_error_vs_k_overlay", rows)
 
 
+def make_per_and_phase_error_panels(frames: dict[str, pd.DataFrame]) -> None:
+    style = apply_style(SUBFIGURE_SCALE)
+    phase_frames = load_phase_error_metrics()
+    per_limits = common_log_limits(
+        pd.concat(
+            [
+                pd.to_numeric(df["overall_per_mean"], errors="coerce")
+                for df in frames.values()
+            ],
+            ignore_index=True,
+        )
+    )
+    residual_limits = common_log_limits(
+        pd.concat(
+            [
+                pd.to_numeric(df["residual_median"], errors="coerce")
+                for df in phase_frames.values()
+            ],
+            ignore_index=True,
+        )
+    )
+
+    minima_rows = []
+    for slug, spec in SERIES.items():
+        metrics_df = frames[slug].sort_values("k").reset_index(drop=True)
+        phase_df = phase_frames[slug].sort_values("k").reset_index(drop=True)
+        plot_df = metrics_df[["k", "overall_per_mean"]].merge(
+            phase_df[["k", "residual_median", "residual_3min_median"]],
+            on="k",
+            how="inner",
+        )
+        plot_df.insert(0, "label", spec["label"])
+        plot_df.insert(0, "function", spec["function"])
+        output_stem = f"fig_per_and_phase_error_{spec['demo_slug']}"
+        plot_df.to_csv(OUTPUT_ROOT / f"{output_stem}.csv", index=False)
+
+        per_plot = plot_df.dropna(subset=["overall_per_mean"])
+        per_plot = per_plot[per_plot["overall_per_mean"] > 0]
+        residual_plot = plot_df.dropna(subset=["residual_median"])
+        residual_plot = residual_plot[residual_plot["residual_median"] > 0]
+        best_per = per_plot.loc[per_plot["overall_per_mean"].idxmin()]
+        best_residual = residual_plot.loc[residual_plot["residual_median"].idxmin()]
+
+        minima_rows.extend(
+            phase_error_minima_rows(
+                slug=slug,
+                spec=spec,
+                metrics_df=metrics_df,
+                phase_df=phase_df,
+            )
+        )
+
+        fig, ax_left = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
+        ax_right = ax_left.twinx()
+        ax_left.plot(
+            per_plot["k"],
+            per_plot["overall_per_mean"],
+            label="Full-period PER (left)",
+            color=spec["color"],
+            linestyle=spec["linestyle"],
+            linewidth=style.line_width,
+            marker=spec["marker"],
+            markersize=style.marker_size,
+            markevery=max(1, len(per_plot) // 12),
+        )
+        ax_right.plot(
+            residual_plot["k"],
+            residual_plot["residual_median"],
+            label="Phase-spacing residual (right)",
+            color="0.20",
+            linestyle="-",
+            linewidth=style.line_width,
+        )
+        ax_left.scatter(
+            [best_per["k"]],
+            [best_per["overall_per_mean"]],
+            color="red",
+            edgecolor="black",
+            linewidth=0.3,
+            s=45,
+            zorder=5,
+        )
+        ax_right.scatter(
+            [best_residual["k"]],
+            [best_residual["residual_median"]],
+            color="red",
+            edgecolor="black",
+            linewidth=0.3,
+            s=45,
+            zorder=5,
+        )
+        annotate_minimum(
+            ax_left,
+            x=float(best_per["k"]),
+            y=float(best_per["overall_per_mean"]),
+            text=f"min PER\n{format_percent(float(best_per['overall_per_mean']))}\nK={best_per['k']:g}",
+            style=style,
+            offset=(-46, 28),
+        )
+        annotate_minimum(
+            ax_right,
+            x=float(best_residual["k"]),
+            y=float(best_residual["residual_median"]),
+            text=f"min residual\n{float(best_residual['residual_median']):.3g} rad\nK={best_residual['k']:g}",
+            style=style,
+            offset=(30, -42),
+        )
+        ax_left.set_xscale("log")
+        ax_left.set_yscale("log")
+        ax_right.set_yscale("log")
+        ax_left.set_ylim(*per_limits)
+        ax_right.set_ylim(*residual_limits)
+        ax_left.set_xlabel("K")
+        ax_left.set_ylabel("Full-period PER [%]", color="black")
+        ax_right.set_ylabel("Residual phase-spacing error [rad]", color="black")
+        style_dual_axis(ax_left, ax_right, style)
+        handles_left, labels_left = ax_left.get_legend_handles_labels()
+        handles_right, labels_right = ax_right.get_legend_handles_labels()
+        ax_left.legend(
+            handles_left + handles_right,
+            labels_left + labels_right,
+            frameon=False,
+            loc="best",
+            fontsize=style.legend_size,
+        )
+        fig.savefig(OUTPUT_ROOT / f"{output_stem}.pdf")
+        plt.close(fig)
+
+    pd.DataFrame(minima_rows).to_csv(OUTPUT_ROOT / "phase_error_minima.csv", index=False)
+
+
 def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
     style = apply_style(FULL_WIDTH_SCALE)
     rows = []
@@ -588,6 +728,21 @@ def style_axis(ax: plt.Axes, style: FigureStyle) -> None:
     ax.tick_params(width=style.spine_width, length=3.0 * style.scale)
 
 
+def style_dual_axis(ax_left: plt.Axes, ax_right: plt.Axes, style: FigureStyle) -> None:
+    ax_left.grid(True, which="both", alpha=0.3, linewidth=style.grid_width)
+    ax_right.grid(False)
+    for ax in (ax_left, ax_right):
+        ax.spines["top"].set_visible(False)
+        ax.tick_params(width=style.spine_width, length=3.0 * style.scale, colors="black")
+        ax.yaxis.label.set_color("black")
+    ax_left.spines["bottom"].set_linewidth(style.spine_width)
+    ax_left.spines["left"].set_linewidth(style.spine_width)
+    ax_left.spines["right"].set_visible(False)
+    ax_right.spines["left"].set_visible(False)
+    ax_right.spines["right"].set_visible(True)
+    ax_right.spines["right"].set_linewidth(style.spine_width)
+
+
 def set_pi_x_ticks(ax: plt.Axes, *, compact: bool = False) -> None:
     if compact:
         ax.set_xticks([-math.pi, 0, math.pi])
@@ -608,6 +763,86 @@ def set_pi_y_ticks(ax: plt.Axes, *, compact: bool = False) -> None:
 
 def write_plot_csv(stem: str, frames: list[pd.DataFrame]) -> None:
     pd.concat(frames, ignore_index=True).to_csv(OUTPUT_ROOT / f"{stem}.csv", index=False)
+
+
+def common_log_limits(values: pd.Series) -> tuple[float, float]:
+    finite = pd.to_numeric(values, errors="coerce")
+    finite = finite[np.isfinite(finite) & (finite > 0)]
+    if finite.empty:
+        return (1e-3, 1.0)
+    lower = 10.0 ** math.floor(math.log10(float(finite.min())) - 0.05)
+    upper = 10.0 ** math.ceil(math.log10(float(finite.max())) + 0.05)
+    return lower, upper
+
+
+def format_percent(value: float) -> str:
+    if value < 0.01:
+        return f"{value:.3g}%"
+    if value < 1.0:
+        return f"{value:.3g}%"
+    return f"{value:.2g}%"
+
+
+def phase_error_minima_rows(
+    *,
+    slug: str,
+    spec: dict[str, object],
+    metrics_df: pd.DataFrame,
+    phase_df: pd.DataFrame,
+) -> list[dict[str, object]]:
+    per_values = metrics_df[["k", "overall_per_mean"]].dropna().copy()
+    per_values = per_values[per_values["overall_per_mean"] > 0]
+    best_per = per_values.loc[per_values["overall_per_mean"].idxmin()]
+    per_optimal_k = float(best_per["k"])
+    rows: list[dict[str, object]] = []
+    for epoch, column in [("3min", "residual_3min_median"), ("30min", "residual_median")]:
+        residual_values = phase_df[["k", column]].dropna().copy()
+        residual_values = residual_values[residual_values[column] > 0]
+        best_residual = residual_values.loc[residual_values[column].idxmin()]
+        residual_at_per = phase_df.loc[np.isclose(phase_df["k"].astype(float), per_optimal_k), column]
+        rows.append(
+            {
+                "function": spec["function"],
+                "label": spec["label"],
+                "slug": spec["demo_slug"],
+                "epoch": epoch,
+                "min_residual": float(best_residual[column]),
+                "argmin_k": float(best_residual["k"]),
+                "per_optimal_k": per_optimal_k,
+                "residual_at_per_optimal_k": (
+                    float(residual_at_per.iloc[0]) if not residual_at_per.empty else np.nan
+                ),
+                "min_per": float(best_per["overall_per_mean"]),
+                "per_argmin_k": per_optimal_k,
+            }
+        )
+    return rows
+
+
+def annotate_minimum(
+    ax: plt.Axes,
+    *,
+    x: float,
+    y: float,
+    text: str,
+    style: FigureStyle,
+    offset: tuple[int, int],
+) -> None:
+    ax.annotate(
+        text,
+        xy=(x, y),
+        xytext=offset,
+        textcoords="offset points",
+        fontsize=max(style.annotation_size, 16.0),
+        color="red",
+        arrowprops={
+            "arrowstyle": "-",
+            "color": "red",
+            "linewidth": 0.7 * style.scale,
+            "shrinkA": 0,
+            "shrinkB": 2,
+        },
+    )
 
 
 def cycles_to_minutes(series: pd.Series) -> pd.Series:
@@ -692,6 +927,7 @@ def validate_generated_pdfs() -> None:
         figure_specs.append((f"{spec['coupling_stem']}.pdf", SUBFIGURE_SCALE, 0.48))
         figure_specs.append((f"fig_demo_uniform_{spec['demo_slug']}.pdf", SUBFIGURE_SCALE, 0.48))
         figure_specs.append((f"fig_demo_clusters_{spec['demo_slug']}.pdf", SUBFIGURE_SCALE, 0.48))
+        figure_specs.append((f"fig_per_and_phase_error_{spec['demo_slug']}.pdf", SUBFIGURE_SCALE, 0.48))
     for name in [
         "fig_per_vs_k.pdf",
         "fig_ttu_vs_k.pdf",
