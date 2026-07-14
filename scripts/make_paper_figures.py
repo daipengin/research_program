@@ -648,7 +648,7 @@ def make_per_and_phase_error_panels(frames: dict[str, pd.DataFrame]) -> None:
             )
         )
 
-        fig, ax_left = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
+        fig, ax_left = plt.subplots(figsize=(7.2, 2.8), constrained_layout=True)
         ax_right = ax_left.twinx()
         ax_left.plot(
             per_plot["k"],
@@ -1062,7 +1062,7 @@ def validate_generated_pdfs() -> None:
         figure_specs.append((f"{spec['coupling_stem']}.pdf", SUBFIGURE_SCALE, 0.48))
         figure_specs.append((f"fig_demo_uniform_{spec['demo_slug']}.pdf", SUBFIGURE_SCALE, 0.48))
         figure_specs.append((f"fig_demo_clusters_{spec['demo_slug']}.pdf", SUBFIGURE_SCALE, 0.48))
-        figure_specs.append((f"fig_per_and_phase_error_{spec['demo_slug']}.pdf", SUBFIGURE_SCALE, 0.48))
+        figure_specs.append((f"fig_per_and_phase_error_{spec['demo_slug']}.pdf", FULL_WIDTH_SCALE, 1.0))
     for name in [
         "fig_per_vs_k.pdf",
         "fig_ttu_vs_k.pdf",
