@@ -58,6 +58,11 @@ def main() -> int:
     parser.add_argument("--functions", nargs="*", choices=sorted(FUNCTION_SLUGS), default=None)
     parser.add_argument("--k-values", nargs="*", type=float, default=None)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--phase-error-only",
+        action="store_true",
+        help="Only append final-window residual phase-spacing errors to local parquet and aggregate them.",
+    )
     args = parser.parse_args()
 
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -77,6 +82,7 @@ def main() -> int:
         usable_per_threshold=args.usable_per_threshold,
         moving_window_cycles=args.moving_window_cycles,
         force=args.force,
+        phase_error_only=args.phase_error_only,
     )
     if args.k_values:
         wanted = {float(value) for value in args.k_values}
@@ -87,7 +93,8 @@ def main() -> int:
     if tasks:
         max_workers = max(1, int(args.max_workers))
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            future_by_task = {executor.submit(process_k_task, task): task for task in tasks}
+            worker = process_phase_error_task if args.phase_error_only else process_k_task
+            future_by_task = {executor.submit(worker, task): task for task in tasks}
             completed = 0
             for future in as_completed(future_by_task):
                 task = future_by_task[future]
@@ -117,7 +124,9 @@ def main() -> int:
 
     aggregate_targets = args.functions or sorted(graph_dirs)
     for coupling_function in aggregate_targets:
-        aggregate_function(coupling_function)
+        if not args.phase_error_only:
+            aggregate_function(coupling_function)
+        aggregate_phase_error_function(coupling_function)
 
     return 0
 
@@ -146,6 +155,7 @@ def build_tasks(
     usable_per_threshold: float,
     moving_window_cycles: int,
     force: bool,
+    phase_error_only: bool = False,
 ) -> list[KTask]:
     tasks: list[KTask] = []
     for coupling_function, graph_dir in graph_dirs.items():
@@ -163,10 +173,24 @@ def build_tasks(
                 moving_window_cycles=moving_window_cycles,
                 force=force,
             )
-            if not force and checkpoint_path(task).exists():
+            if phase_error_only:
+                if not phase_error_checkpoint_needs_update(task):
+                    continue
+            elif not force and checkpoint_path(task).exists():
                 continue
             tasks.append(task)
     return sorted(tasks, key=lambda task: (task.coupling_function, task.k_value))
+
+
+def phase_error_checkpoint_needs_update(task: KTask) -> bool:
+    output_path = checkpoint_path(task)
+    if task.force or not output_path.exists():
+        return True
+    try:
+        pd.read_parquet(output_path, columns=["residual_phase_spacing_error"])
+    except Exception:
+        return True
+    return False
 
 
 def graph_expected_shape(graph_dir: Path) -> tuple[int, int]:
@@ -234,6 +258,69 @@ def process_k_task(task: KTask) -> str:
                 }
             )
     pd.DataFrame(rows).to_parquet(output_path, index=False)
+    return str(output_path)
+
+
+def process_phase_error_task(task: KTask) -> str:
+    output_path = checkpoint_path(task)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    graph_db_path = task.graph_dir / "graph_data.sqlite"
+    raw_db_path = task.graph_dir / "raw_run.sqlite"
+    run_df = read_runs_for_k(graph_db_path, task.k_value)
+    if run_df.empty:
+        empty_run_metrics(task).to_parquet(output_path, index=False)
+        return str(output_path)
+
+    run_ids = run_df["run_id"].astype(str).tolist()
+    phase_df = read_phase_errors_for_runs(raw_db_path, run_ids)
+    phase_by_run = {
+        str(run_id): group.sort_values("cycle_index")
+        for run_id, group in phase_df.groupby("run_id", sort=False)
+    }
+
+    rows = []
+    for run in run_df.itertuples(index=False):
+        run_id = str(run.run_id)
+        try:
+            rows.append(
+                {
+                    "run_id": run_id,
+                    "residual_phase_spacing_error": final_window_phase_error(
+                        phase_by_run.get(run_id, pd.DataFrame()),
+                        task.expected_cycle_count,
+                    ),
+                    "valid_phase_error": True,
+                    "error_phase_error": "",
+                }
+            )
+        except Exception as exc:
+            rows.append(
+                {
+                    "run_id": run_id,
+                    "residual_phase_spacing_error": np.nan,
+                    "valid_phase_error": False,
+                    "error_phase_error": str(exc),
+                }
+            )
+
+    residual_df = pd.DataFrame(rows)
+    if output_path.exists():
+        existing = pd.read_parquet(output_path)
+        output = existing.drop(
+            columns=[
+                "residual_phase_spacing_error",
+                "valid_phase_error",
+                "error_phase_error",
+            ],
+            errors="ignore",
+        ).merge(residual_df, how="left", on="run_id")
+    else:
+        output = run_df.copy()
+        output["coupling_function"] = task.coupling_function
+        output["k"] = float(task.k_value)
+        output = output.merge(residual_df, how="left", on="run_id")
+    output.to_parquet(output_path, index=False)
     return str(output_path)
 
 
@@ -328,6 +415,7 @@ def compute_run_metrics(
 
     errors = run_phase["mean_abs_diff_from_ideal_phase_gap"].to_numpy(dtype=np.float64)
     phase_cycles = run_phase["cycle_index"].to_numpy(dtype=np.int64)
+    residual_phase_spacing_error = final_window_phase_error(run_phase, task.expected_cycle_count)
     converged_cycle = first_stable_cycle(
         phase_cycles=phase_cycles,
         errors=errors,
@@ -387,6 +475,7 @@ def compute_run_metrics(
         "converged_cycle_eps020": np.nan if converged_cycle_eps020 is None else int(converged_cycle_eps020),
         "post_convergence_fluctuation": fluctuation,
         "post_convergence_fluctuation_eps020": fluctuation_eps020,
+        "residual_phase_spacing_error": residual_phase_spacing_error,
         "overall_per": per_from_counts(expected_total, actual_total),
         "transient_per": transient_per,
         "steady_per": steady_per,
@@ -414,6 +503,19 @@ def first_stable_cycle(
             start_index = index - stable_window + 1
             return int(phase_cycles[start_index])
     return None
+
+
+def final_window_phase_error(run_phase: pd.DataFrame, expected_cycle_count: int) -> float:
+    if run_phase.empty:
+        raise ValueError("missing phase_gap_error")
+    cycles = pd.to_numeric(run_phase["cycle_index"], errors="coerce")
+    values = pd.to_numeric(run_phase["mean_abs_diff_from_ideal_phase_gap"], errors="coerce")
+    final_start = max(1, int(expected_cycle_count) - 9)
+    mask = (cycles >= final_start) & (cycles <= int(expected_cycle_count))
+    final_values = values[mask].dropna()
+    if final_values.empty:
+        return np.nan
+    return float(final_values.mean())
 
 
 def moving_window_usable_cycle(
@@ -491,6 +593,37 @@ def aggregate_function(coupling_function: str) -> None:
     output = pd.DataFrame(grouped_rows).sort_values("k").reset_index(drop=True)
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
     output.to_csv(RESULTS_ROOT / f"{slug}_metrics.csv", index=False)
+
+
+def aggregate_phase_error_function(coupling_function: str) -> None:
+    slug = FUNCTION_SLUGS[coupling_function]
+    files = sorted((LOCAL_RUN_ROOT / slug).glob("k_*.parquet"))
+    if not files:
+        return
+    df = pd.concat([pd.read_parquet(path) for path in files], ignore_index=True)
+    if "residual_phase_spacing_error" not in df.columns:
+        return
+
+    grouped_rows = []
+    for k_value, group in df.groupby("k", dropna=False):
+        valid_group = group
+        if "valid" in valid_group.columns:
+            valid_group = valid_group[valid_group["valid"].astype(bool)]
+        if "valid_phase_error" in valid_group.columns:
+            valid_group = valid_group[valid_group["valid_phase_error"].fillna(True).astype(bool)]
+        values = pd.to_numeric(valid_group["residual_phase_spacing_error"], errors="coerce").dropna()
+        grouped_rows.append(
+            {
+                "k": float(k_value),
+                "residual_median": float(values.median()) if not values.empty else np.nan,
+                "residual_q1": float(values.quantile(0.25)) if not values.empty else np.nan,
+                "residual_q3": float(values.quantile(0.75)) if not values.empty else np.nan,
+                "n_runs": int(len(values)),
+            }
+        )
+    output = pd.DataFrame(grouped_rows).sort_values("k").reset_index(drop=True)
+    RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
+    output.to_csv(RESULTS_ROOT / f"{slug}_phase_error.csv", index=False)
 
 
 def metric_quantiles(df: pd.DataFrame, column: str) -> dict[str, float]:

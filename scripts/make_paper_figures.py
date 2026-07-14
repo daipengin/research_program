@@ -112,6 +112,7 @@ def main() -> int:
     make_per_vs_k(frames)
     make_ttu_vs_k(frames)
     make_usable_rate_vs_k(frames)
+    make_phase_error_vs_k()
     make_two_phase_per(frames)
     validate_generated_pdfs()
     return 0
@@ -418,6 +419,48 @@ def make_usable_rate_vs_k(frames: dict[str, pd.DataFrame]) -> None:
     write_plot_csv("fig_usable_rate_vs_k", rows)
 
 
+def make_phase_error_vs_k() -> None:
+    style = apply_style(FULL_WIDTH_SCALE)
+    rows = []
+    fig, ax = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
+    for slug, spec in SERIES.items():
+        path = REANALYSIS_ROOT / f"{slug}_phase_error.csv"
+        df = pd.read_csv(path).sort_values("k").reset_index(drop=True)
+        plot_df = df[["k", "residual_median", "residual_q1", "residual_q3", "n_runs"]].copy()
+        plot_df = plot_df.dropna(subset=["residual_median"])
+        plot_df = plot_df[plot_df["residual_median"] > 0]
+        plot_df.insert(0, "label", spec["label"])
+        plot_df.insert(0, "function", spec["function"])
+        rows.append(plot_df)
+        ax.plot(
+            plot_df["k"],
+            plot_df["residual_median"],
+            label=spec["label"],
+            color=spec["color"],
+            linestyle=spec["linestyle"],
+            marker=spec["marker"],
+            markersize=style.marker_size,
+            linewidth=style.line_width,
+            markevery=max(1, len(plot_df) // 15),
+        )
+        band = plot_df.dropna(subset=["residual_q1", "residual_q3"])
+        band = band[(band["residual_q1"] > 0) & (band["residual_q3"] > 0)]
+        ax.fill_between(
+            band["k"].to_numpy(dtype=float),
+            band["residual_q1"].to_numpy(dtype=float),
+            band["residual_q3"].to_numpy(dtype=float),
+            color=spec["color"],
+            alpha=0.16,
+            linewidth=0,
+        )
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("K")
+    ax.set_ylabel("residual phase-spacing error [rad]")
+    finish_figure(fig, ax, "fig_phase_error_vs_k", style)
+    write_plot_csv("fig_phase_error_vs_k", rows)
+
+
 def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
     style = apply_style(FULL_WIDTH_SCALE)
     rows = []
@@ -576,6 +619,7 @@ def validate_generated_pdfs() -> None:
         "fig_per_vs_k.pdf",
         "fig_ttu_vs_k.pdf",
         "fig_usable_rate_vs_k.pdf",
+        "fig_phase_error_vs_k.pdf",
         "fig_two_phase_per.pdf",
     ]:
         figure_specs.append((name, FULL_WIDTH_SCALE, 1.0))
