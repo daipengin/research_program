@@ -10,6 +10,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
 
 from research_program.simulation.coupling_functions import (
     CouplingFunction,
@@ -113,6 +114,7 @@ def main() -> int:
     make_ttu_vs_k(frames)
     make_usable_rate_vs_k(frames)
     make_phase_error_vs_k()
+    make_phase_error_overlay_vs_k()
     make_two_phase_per(frames)
     validate_generated_pdfs()
     return 0
@@ -461,6 +463,75 @@ def make_phase_error_vs_k() -> None:
     write_plot_csv("fig_phase_error_vs_k", rows)
 
 
+def make_phase_error_overlay_vs_k() -> None:
+    style = apply_style(FULL_WIDTH_SCALE)
+    rows = []
+    fig, ax = plt.subplots(figsize=(3.5, 2.6), constrained_layout=True)
+    for slug, spec in SERIES.items():
+        path = REANALYSIS_ROOT / f"{slug}_phase_error.csv"
+        df = pd.read_csv(path).sort_values("k").reset_index(drop=True)
+        thirty = df[["k", "residual_median", "n_runs"]].dropna(subset=["residual_median"]).copy()
+        thirty = thirty[thirty["residual_median"] > 0]
+        thirty.insert(0, "time_point_min", 30)
+        thirty.insert(0, "residual_column", "residual_median")
+        thirty.insert(0, "label", spec["label"])
+        thirty.insert(0, "function", spec["function"])
+        thirty = thirty.rename(columns={"residual_median": "residual_phase_spacing_error"})
+        rows.append(thirty)
+        ax.plot(
+            thirty["k"],
+            thirty["residual_phase_spacing_error"],
+            color=spec["color"],
+            linestyle=spec["linestyle"],
+            linewidth=style.line_width,
+            alpha=0.95,
+        )
+
+        three = df[["k", "residual_3min_median", "n_runs"]].dropna(subset=["residual_3min_median"]).copy()
+        three = three[three["residual_3min_median"] > 0]
+        three.insert(0, "time_point_min", 3)
+        three.insert(0, "residual_column", "residual_3min_median")
+        three.insert(0, "label", spec["label"])
+        three.insert(0, "function", spec["function"])
+        three = three.rename(columns={"residual_3min_median": "residual_phase_spacing_error"})
+        rows.append(three)
+        ax.plot(
+            three["k"],
+            three["residual_phase_spacing_error"],
+            color=lighten_color(str(spec["color"]), amount=0.55),
+            linestyle=spec["linestyle"],
+            linewidth=style.line_width * 0.7,
+            alpha=0.65,
+        )
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("K")
+    ax.set_ylabel("residual phase-spacing error [rad]")
+    style_axis(ax, style)
+    function_handles = [
+        Line2D(
+            [0],
+            [0],
+            color=str(spec["color"]),
+            linestyle=str(spec["linestyle"]),
+            linewidth=style.line_width,
+            label=str(spec["label"]),
+        )
+        for spec in SERIES.values()
+    ]
+    time_handles = [
+        Line2D([0], [0], color="0.25", linewidth=style.line_width, label="30 min"),
+        Line2D([0], [0], color="0.65", linewidth=style.line_width * 0.7, alpha=0.65, label="3 min"),
+    ]
+    legend_functions = ax.legend(handles=function_handles, frameon=False, loc="lower left")
+    ax.add_artist(legend_functions)
+    ax.legend(handles=time_handles, frameon=False, loc="upper right")
+    fig.savefig(OUTPUT_ROOT / "fig_phase_error_vs_k_overlay.pdf")
+    plt.close(fig)
+    write_plot_csv("fig_phase_error_vs_k_overlay", rows)
+
+
 def make_two_phase_per(frames: dict[str, pd.DataFrame]) -> None:
     style = apply_style(FULL_WIDTH_SCALE)
     rows = []
@@ -573,6 +644,12 @@ def device_color(base_color: str, index: int, count: int) -> tuple[float, float,
     return (float(mixed[0]), float(mixed[1]), float(mixed[2]), 1.0)
 
 
+def lighten_color(base_color: str, *, amount: float) -> tuple[float, float, float, float]:
+    rgb = np.array(mpl.colors.to_rgb(base_color), dtype=float)
+    mixed = rgb * (1.0 - amount) + np.ones(3) * amount
+    return (float(mixed[0]), float(mixed[1]), float(mixed[2]), 1.0)
+
+
 def positive_for_log(values: np.ndarray) -> np.ndarray:
     finite_positive = values[np.isfinite(values) & (values > 0)]
     floor = min(float(np.min(finite_positive)) / 10.0, 1e-6) if finite_positive.size else 1e-6
@@ -620,6 +697,7 @@ def validate_generated_pdfs() -> None:
         "fig_ttu_vs_k.pdf",
         "fig_usable_rate_vs_k.pdf",
         "fig_phase_error_vs_k.pdf",
+        "fig_phase_error_vs_k_overlay.pdf",
         "fig_two_phase_per.pdf",
     ]:
         figure_specs.append((name, FULL_WIDTH_SCALE, 1.0))

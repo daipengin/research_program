@@ -187,7 +187,7 @@ def phase_error_checkpoint_needs_update(task: KTask) -> bool:
     if task.force or not output_path.exists():
         return True
     try:
-        pd.read_parquet(output_path, columns=["residual_phase_spacing_error"])
+        pd.read_parquet(output_path, columns=["residual_phase_spacing_error", "residual_3min"])
     except Exception:
         return True
     return False
@@ -290,6 +290,11 @@ def process_phase_error_task(task: KTask) -> str:
                         phase_by_run.get(run_id, pd.DataFrame()),
                         task.expected_cycle_count,
                     ),
+                    "residual_3min": phase_error_for_cycle_window(
+                        phase_by_run.get(run_id, pd.DataFrame()),
+                        start_cycle=9,
+                        end_cycle=18,
+                    ),
                     "valid_phase_error": True,
                     "error_phase_error": "",
                 }
@@ -299,6 +304,7 @@ def process_phase_error_task(task: KTask) -> str:
                 {
                     "run_id": run_id,
                     "residual_phase_spacing_error": np.nan,
+                    "residual_3min": np.nan,
                     "valid_phase_error": False,
                     "error_phase_error": str(exc),
                 }
@@ -310,6 +316,7 @@ def process_phase_error_task(task: KTask) -> str:
         output = existing.drop(
             columns=[
                 "residual_phase_spacing_error",
+                "residual_3min",
                 "valid_phase_error",
                 "error_phase_error",
             ],
@@ -416,6 +423,7 @@ def compute_run_metrics(
     errors = run_phase["mean_abs_diff_from_ideal_phase_gap"].to_numpy(dtype=np.float64)
     phase_cycles = run_phase["cycle_index"].to_numpy(dtype=np.int64)
     residual_phase_spacing_error = final_window_phase_error(run_phase, task.expected_cycle_count)
+    residual_3min = phase_error_for_cycle_window(run_phase, start_cycle=9, end_cycle=18)
     converged_cycle = first_stable_cycle(
         phase_cycles=phase_cycles,
         errors=errors,
@@ -476,6 +484,7 @@ def compute_run_metrics(
         "post_convergence_fluctuation": fluctuation,
         "post_convergence_fluctuation_eps020": fluctuation_eps020,
         "residual_phase_spacing_error": residual_phase_spacing_error,
+        "residual_3min": residual_3min,
         "overall_per": per_from_counts(expected_total, actual_total),
         "transient_per": transient_per,
         "steady_per": steady_per,
@@ -506,16 +515,24 @@ def first_stable_cycle(
 
 
 def final_window_phase_error(run_phase: pd.DataFrame, expected_cycle_count: int) -> float:
+    final_start = max(1, int(expected_cycle_count) - 9)
+    return phase_error_for_cycle_window(
+        run_phase,
+        start_cycle=final_start,
+        end_cycle=int(expected_cycle_count),
+    )
+
+
+def phase_error_for_cycle_window(run_phase: pd.DataFrame, *, start_cycle: int, end_cycle: int) -> float:
     if run_phase.empty:
         raise ValueError("missing phase_gap_error")
     cycles = pd.to_numeric(run_phase["cycle_index"], errors="coerce")
     values = pd.to_numeric(run_phase["mean_abs_diff_from_ideal_phase_gap"], errors="coerce")
-    final_start = max(1, int(expected_cycle_count) - 9)
-    mask = (cycles >= final_start) & (cycles <= int(expected_cycle_count))
-    final_values = values[mask].dropna()
-    if final_values.empty:
+    mask = (cycles >= int(start_cycle)) & (cycles <= int(end_cycle))
+    window_values = values[mask].dropna()
+    if window_values.empty:
         return np.nan
-    return float(final_values.mean())
+    return float(window_values.mean())
 
 
 def moving_window_usable_cycle(
@@ -612,12 +629,19 @@ def aggregate_phase_error_function(coupling_function: str) -> None:
         if "valid_phase_error" in valid_group.columns:
             valid_group = valid_group[valid_group["valid_phase_error"].fillna(True).astype(bool)]
         values = pd.to_numeric(valid_group["residual_phase_spacing_error"], errors="coerce").dropna()
+        if "residual_3min" in valid_group.columns:
+            values_3min = pd.to_numeric(valid_group["residual_3min"], errors="coerce").dropna()
+        else:
+            values_3min = pd.Series(dtype=float)
         grouped_rows.append(
             {
                 "k": float(k_value),
                 "residual_median": float(values.median()) if not values.empty else np.nan,
                 "residual_q1": float(values.quantile(0.25)) if not values.empty else np.nan,
                 "residual_q3": float(values.quantile(0.75)) if not values.empty else np.nan,
+                "residual_3min_median": float(values_3min.median()) if not values_3min.empty else np.nan,
+                "residual_3min_q1": float(values_3min.quantile(0.25)) if not values_3min.empty else np.nan,
+                "residual_3min_q3": float(values_3min.quantile(0.75)) if not values_3min.empty else np.nan,
                 "n_runs": int(len(values)),
             }
         )
