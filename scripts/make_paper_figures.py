@@ -648,7 +648,7 @@ def make_per_and_phase_error_panels(frames: dict[str, pd.DataFrame]) -> None:
             )
         )
 
-        fig, ax_left = plt.subplots(figsize=(7.2, 2.8), constrained_layout=True)
+        fig, ax_left = plt.subplots(figsize=(7.2, 3.4), constrained_layout=True)
         ax_right = ax_left.twinx()
         ax_left.plot(
             per_plot["k"],
