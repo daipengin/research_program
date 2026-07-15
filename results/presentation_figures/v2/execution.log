@@ -1,0 +1,6 @@
+validation PASS: figure 2 red minimum K values equal condition_metrics.per_optimal_k
+validation PASS: figure 5 censoring uses 180 only for reach rate <=50%
+validation PASS: figure 6 plots only min-gap reach rate >=95%
+validation PASS: gap std KURAMOTO N=5 K=10 has 1000 runs from cycles 171-180
+validation PASS: raw send_log gaps reproduce new_mean/new_max for KURAMOTO N=5 K=10 run/cycle 171
+validation PASS: Noto Sans JP configured; inspect contact_sheet.png for glyphs
