@@ -1,0 +1,27 @@
+design-band PASS KURAMOTO N=5
+design-band PASS KURAMOTO N=10
+design-band PASS KURAMOTO N=20
+design-band PASS KURAMOTO N=50
+design-band PASS LINEAR N=5
+design-band PASS LINEAR N=10
+design-band PASS LINEAR N=20
+design-band PASS LINEAR N=50
+PER optimum PASS KURAMOTO N=5
+PER optimum PASS KURAMOTO N=10
+PER optimum PASS KURAMOTO N=20
+PER optimum PASS KURAMOTO N=50
+PER optimum PASS LINEAR N=5
+PER optimum PASS LINEAR N=10
+PER optimum PASS LINEAR N=20
+PER optimum PASS LINEAR N=50
+PDF PASS fig_convergence_rate_vs_ttu_by_k.pdf
+PDF PASS fig_convergence_rate_vs_ttu_by_k_all_n.pdf
+PDF PASS fig_convergence_speed_two_metrics.pdf
+PDF PASS fig_criterion_random_baseline.pdf
+PDF PASS fig_cs_starvation_demo.pdf
+PDF PASS fig_design_map_n_vs_k.pdf
+PDF PASS fig_n5_demo_uneven_but_lossless.pdf
+PDF PASS fig_per_vs_k.pdf
+PDF PASS fig_scatter_fluctuation_vs_per.pdf
+PDF PASS fig_steady_fluctuation_vs_k.pdf
+PDF PASS fig_transient_demo_min_gap.pdf
