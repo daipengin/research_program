@@ -88,6 +88,55 @@ def first_consecutive_below(
     return None
 
 
+def first_consecutive_above(
+    *,
+    cycle_indices: np.ndarray,
+    values: np.ndarray,
+    threshold: float,
+    consecutive_cycles: int = 10,
+) -> int | None:
+    """Return the first cycle of a consecutive strict-above-threshold window."""
+    if consecutive_cycles < 1:
+        raise ValueError("consecutive_cycles must be positive")
+    streak = 0
+    previous_cycle: int | None = None
+    for cycle_raw, value_raw in zip(cycle_indices, values, strict=True):
+        cycle = int(cycle_raw)
+        value = float(value_raw)
+        is_consecutive = previous_cycle is None or cycle == previous_cycle + 1
+        ok = math.isfinite(value) and value > threshold
+        streak = streak + 1 if ok and is_consecutive else (1 if ok else 0)
+        if streak >= consecutive_cycles:
+            return cycle - consecutive_cycles + 1
+        previous_cycle = cycle
+    return None
+
+
+def censored_convergence_median(
+    convergence_cycles: pd.Series,
+    converged: pd.Series,
+) -> float:
+    """Median with non-converged runs treated as +infinity.
+
+    This is intentionally not the nanmedian among converged runs. With right
+    censoring, the median is finite only when strictly more than half of runs
+    converged; otherwise the reported value is NaN/NULL.
+    """
+    converged_mask = converged.astype(bool)
+    count = len(converged_mask)
+    if count == 0 or int(converged_mask.sum()) <= count / 2:
+        return math.nan
+    finite_cycles = pd.to_numeric(
+        convergence_cycles.loc[converged_mask], errors="coerce"
+    ).dropna()
+    if len(finite_cycles) != int(converged_mask.sum()):
+        raise ValueError("converged rows must have a finite convergence cycle")
+    censored = np.full(count, np.inf, dtype=np.float64)
+    censored[converged_mask.to_numpy()] = finite_cycles.to_numpy(dtype=np.float64)
+    median = float(np.median(censored))
+    return median if math.isfinite(median) else math.nan
+
+
 def first_ttu_cycle(
     cycle_counts: pd.DataFrame,
     *,

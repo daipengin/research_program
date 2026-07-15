@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "experiment": "n_sweep_v2",
+  "coupling_functions": [
+    "KURAMOTO",
+    "LINEAR"
+  ],
+  "device_counts": [
+    5,
+    10,
+    20,
+    50
+  ],
+  "k_values": [
+    1,
+    2,
+    3,
+    5,
+    7,
+    10,
+    15,
+    20,
+    30,
+    50,
+    70,
+    100,
+    150,
+    200,
+    300,
+    500,
+    700,
+    1000,
+    1500,
+    2000
+  ],
+  "strength_ratio": -0.0001,
+  "runs_per_condition": 50,
+  "condition_count": 160,
+  "total_run_count": 8000,
+  "cycle_time_ms": 5000,
+  "duration_ms": 900000,
+  "carrier_sense_duration_ms": 5.0,
+  "airtime_ms": 20.544,
+  "occupied_time_ms": 25.544,
+  "minimum_collision_free_gap_rad": 0.03209953709731907,
+  "epsilon_tolerance_rad_by_device_count": {
+    "5": 1.224537524338598,
+    "10": 0.5962189936206396,
+    "20": 0.28205972826166026,
+    "50": 0.09356416904627267
+  },
+  "consecutive_convergence_cycles": 10,
+  "formal_convergence_definition": "First cycle of 10 consecutive cycles with new_max_abs_dev < epsilon_tol. Non-converged runs are right-censored: run cycle is NULL and converged=false; condition median treats them as +infinity and is NULL when convergence rate <=50%.",
+  "auxiliary_mean_definition": "Same rule using new_mean_abs_dev; auxiliary only.",
+  "mingap_convergence_definition": "First cycle of 10 consecutive cycles with min_gap_rad > 2*pi*occupied_time_ms/cycle_time_ms; same censoring rule.",
+  "ttu_window_cycles": 10,
+  "ttu_per_threshold_percent": 1.0,
+  "master_seed": 20260715,
+  "initial_phase_sampling": "uniform_without_replacement",
+  "initial_phase_master_path": "experiments\\n_sweep_v2\\initial_phase_master.json",
+  "initial_phase_prefix_policy": "device-ID-order first N values from each unsorted 50-device run",
+  "simultaneous_collision_policy": "all send_log rows sharing an exact start time within a cycle fail demodulation",
+  "changes_from_v1": [
+    "unique-within-run initial phase master with a new seed",
+    "formal max-gap-deviation convergence with censored condition median",
+    "min_gap_rad metric and collision-free min-gap convergence",
+    "20-point common K grid"
+  ],
+  "elapsed_seconds": 1187.9823907000246
+}

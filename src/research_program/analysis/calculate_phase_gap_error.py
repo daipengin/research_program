@@ -147,6 +147,7 @@ def compute_mean_abs_gap_error_per_cycle(
     mean_abs_error_ratios = np.full(len(cycle_starts), np.nan, dtype=np.float64)
     new_mean_abs_devs = np.full(len(cycle_starts), np.nan, dtype=np.float64)
     new_max_abs_devs = np.full(len(cycle_starts), np.nan, dtype=np.float64)
+    min_gap_rads = np.full(len(cycle_starts), np.nan, dtype=np.float64)
     observed_device_counts = np.zeros(len(cycle_starts), dtype=np.int64)
     expected_device_counts = np.full(len(cycle_starts), num_devices, dtype=np.int64)
     simultaneous_collision_counts = np.zeros(len(cycle_starts), dtype=np.int64)
@@ -193,6 +194,7 @@ def compute_mean_abs_gap_error_per_cycle(
             new_abs_devs = np.abs(new_all_diffs - ideal_gap)
             new_mean_abs_devs[result_index] = float(np.mean(new_abs_devs))
             new_max_abs_devs[result_index] = float(np.max(new_abs_devs))
+            min_gap_rads[result_index] = float(np.min(new_all_diffs))
 
         if not np.isfinite(cycle_length) or cycle_length <= 0 or len(cycle_df) < 2:
             continue
@@ -219,6 +221,7 @@ def compute_mean_abs_gap_error_per_cycle(
             "mean_abs_diff_from_ideal_phase_gap_ratio": mean_abs_error_ratios,
             "new_mean_abs_dev": new_mean_abs_devs,
             "new_max_abs_dev": new_max_abs_devs,
+            "min_gap_rad": min_gap_rads,
             "observed_device_count": observed_device_counts,
             "expected_device_count": expected_device_counts,
             "has_all_device_sends": observed_device_counts == expected_device_counts,

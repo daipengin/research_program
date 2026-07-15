@@ -169,6 +169,7 @@ def initialize(conn: sqlite3.Connection) -> None:
             mean_abs_diff_from_ideal_phase_gap_ratio REAL,
             new_mean_abs_dev REAL,
             new_max_abs_dev REAL,
+            min_gap_rad REAL,
             observed_device_count INTEGER,
             expected_device_count INTEGER,
             has_all_device_sends INTEGER,
@@ -181,6 +182,11 @@ def initialize(conn: sqlite3.Connection) -> None:
     for attempt in range(20):
         try:
             conn.executescript(schema_sql)
+            phase_gap_columns = {
+                str(row[1]) for row in conn.execute("PRAGMA table_info(phase_gap_error)")
+            }
+            if "min_gap_rad" not in phase_gap_columns:
+                conn.execute("ALTER TABLE phase_gap_error ADD COLUMN min_gap_rad REAL")
             return
         except sqlite3.OperationalError as exc:
             if "locked" not in str(exc).lower() or attempt >= 19:

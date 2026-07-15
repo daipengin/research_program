@@ -642,6 +642,7 @@ class SQLiteEventLogger:
         new_metric_columns = [
             "new_mean_abs_dev",
             "new_max_abs_dev",
+            "min_gap_rad",
             "observed_device_count",
             "expected_device_count",
             "has_all_device_sends",
