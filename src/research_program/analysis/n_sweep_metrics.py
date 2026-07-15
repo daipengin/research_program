@@ -153,7 +153,10 @@ def first_ttu_cycle(
     for start in range(len(cycle_counts) - window_cycles + 1):
         end = start + window_cycles
         expected_window = expected_cumulative[end] - expected_cumulative[start]
-        successful_window = successful_cumulative[end] - successful_cumulative[start]
+        successful_window = min(
+            successful_cumulative[end] - successful_cumulative[start],
+            expected_window,
+        )
         per_percent = 100.0 * (expected_window - successful_window) / expected_window
         if per_percent < per_threshold_percent:
             return int(cycles[end - 1])
@@ -162,7 +165,58 @@ def first_ttu_cycle(
 
 def overall_per_percent(cycle_counts: pd.DataFrame) -> float:
     expected = int(cycle_counts["expected_packets"].sum())
-    successful = int(cycle_counts["successful_packets"].sum())
+    successful = min(int(cycle_counts["successful_packets"].sum()), expected)
     if expected <= 0:
         return math.nan
     return 100.0 * (expected - successful) / expected
+
+
+def bounded_delivery_totals(cycle_counts: pd.DataFrame) -> dict[str, int]:
+    """Return fixed-denominator packet totals without counting excess sends.
+
+    Coupling can shorten an oscillator period enough to produce an additional
+    physical send inside a fixed nominal observation duration. Such sends are
+    real simulator events, but they cannot increase successful delivery beyond
+    the fixed expectation of N packets per nominal cycle.
+    """
+    expected = int(cycle_counts["expected_packets"].sum())
+    actual = min(int(cycle_counts["actual_packets"].sum()), expected)
+    successful = min(int(cycle_counts["successful_packets"].sum()), expected)
+    return {
+        "expected_packets": expected,
+        "actual_packets": actual,
+        "successful_packets": successful,
+    }
+
+
+def convergence_safe_k_bands(
+    condition_df: pd.DataFrame,
+    *,
+    rate_column: str,
+    threshold_percent: float = 95.0,
+) -> pd.DataFrame:
+    """Return the qualifying K envelope and explicit values per function and N."""
+    required = {"coupling_function", "device_count", "k", rate_column}
+    missing = required.difference(condition_df.columns)
+    if missing:
+        raise ValueError(f"condition_df is missing required columns: {sorted(missing)}")
+    rows: list[dict[str, object]] = []
+    for keys, group in condition_df.groupby(
+        ["coupling_function", "device_count"], sort=True
+    ):
+        function_name, device_count = keys
+        qualifying = group[
+            pd.to_numeric(group[rate_column], errors="coerce") >= threshold_percent
+        ].sort_values("k")
+        values = qualifying["k"].to_numpy(dtype=np.float64)
+        rows.append(
+            {
+                "coupling_function": function_name,
+                "device_count": int(device_count),
+                "safe_k_lower": float(values[0]) if len(values) else math.nan,
+                "safe_k_upper": float(values[-1]) if len(values) else math.nan,
+                "safe_k_values": ";".join(f"{value:g}" for value in values),
+                "safe_k_count": len(values),
+            }
+        )
+    return pd.DataFrame(rows)

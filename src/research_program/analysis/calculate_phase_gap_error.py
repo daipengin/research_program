@@ -130,6 +130,7 @@ def compute_mean_abs_gap_error_per_cycle(
     cycle_starts: np.ndarray,
     num_devices: int,
     nominal_cycle_time_ms: float | None = None,
+    carrier_sense_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """
     各サイクルについて，
@@ -166,6 +167,31 @@ def compute_mean_abs_gap_error_per_cycle(
     else:
         first_sends = indexed_df
 
+    intended_df = send_df[["time", "oscillator_id"]].copy()
+    if carrier_sense_df is not None and not carrier_sense_df.empty:
+        required_columns = {"time", "oscillator_id", "action"}
+        missing_columns = required_columns.difference(carrier_sense_df.columns)
+        if missing_columns:
+            raise ValueError(
+                "carrier_sense_df is missing required columns: "
+                f"{sorted(missing_columns)}"
+            )
+        skipped = carrier_sense_df.loc[
+            carrier_sense_df["action"].astype(str) == "skip_busy",
+            ["time", "oscillator_id"],
+        ]
+        intended_df = pd.concat([intended_df, skipped], ignore_index=True)
+    indexed_intended_df = assign_cycles_from_reference_windows(intended_df, cycle_starts)
+    if not indexed_intended_df.empty:
+        first_intended = (
+            indexed_intended_df.sort_values(
+                ["cycle_index", "time", "oscillator_id"], kind="stable"
+            )
+            .drop_duplicates(subset=["cycle_index", "oscillator_id"], keep="first")
+        )
+    else:
+        first_intended = indexed_intended_df
+
     for cycle_idx, cycle_df in first_sends.groupby("cycle_index", sort=False):
         result_index = int(cycle_idx) - 1
         if result_index < 0 or result_index >= len(cycle_starts):
@@ -194,25 +220,48 @@ def compute_mean_abs_gap_error_per_cycle(
             new_abs_devs = np.abs(new_all_diffs - ideal_gap)
             new_mean_abs_devs[result_index] = float(np.mean(new_abs_devs))
             new_max_abs_devs[result_index] = float(np.max(new_abs_devs))
-            min_gap_rads[result_index] = float(np.min(new_all_diffs))
 
         if not np.isfinite(cycle_length) or cycle_length <= 0 or len(cycle_df) < 2:
             continue
 
-        # 同一サイクル内で同じ振動子が複数回送信している場合は，
-        # 最初の1回だけ採用する。
         times = cycle_df[DETECTION_TIME_COLUMN].to_numpy(dtype=np.float64)
         phases = 2.0 * math.pi * ((times - cycle_start) / cycle_length)
         phases = np.mod(phases, 2.0 * math.pi)
         phases.sort()
 
         diffs = np.diff(phases)
-        wrap_diff = (phases[0] + 2.0 * math.pi) - phases[-1]    #最初と最後の差を求めている
+        wrap_diff = (phases[0] + 2.0 * math.pi) - phases[-1]
         all_diffs = np.concatenate([diffs, np.array([wrap_diff], dtype=np.float64)])
 
         mean_abs_error = float(np.mean(np.abs(all_diffs - ideal_gap)))
         mean_abs_errors[result_index] = mean_abs_error
         mean_abs_error_ratios[result_index] = float(mean_abs_error / ideal_gap)
+
+    if nominal_cycle_time_ms is not None:
+        for cycle_idx, cycle_df in first_intended.groupby("cycle_index", sort=False):
+            result_index = int(cycle_idx) - 1
+            if result_index < 0 or result_index >= len(cycle_starts):
+                continue
+            intended_times = pd.to_numeric(
+                cycle_df["time"], errors="coerce"
+            ).to_numpy(dtype=np.float64)
+            intended_times = intended_times[np.isfinite(intended_times)]
+            if len(intended_times) < 2:
+                continue
+            phases = 2.0 * math.pi * (
+                (intended_times - cycle_starts[result_index])
+                / float(nominal_cycle_time_ms)
+            )
+            phases = np.mod(phases, 2.0 * math.pi)
+            phases.sort()
+            gaps = np.concatenate(
+                [
+                    np.diff(phases),
+                    np.array([(phases[0] + 2.0 * math.pi) - phases[-1]]),
+                ]
+            )
+            min_gap_rads[result_index] = float(np.min(gaps))
+
 
     return pd.DataFrame(
         {

@@ -609,6 +609,16 @@ class SQLiteEventLogger:
 
         normalized_send_df = calculate_cycle_data.normalize_oscillator_id_column(send_df, tags)
         normalized_send_df = calculate_cycle_data.normalize_time_column(normalized_send_df, tags)
+        carrier_sense_df = pd.read_sql_query(
+            """
+            SELECT time, oscillator_id, action
+            FROM carrier_sense_log
+            WHERE run_id = ? AND action = 'skip_busy'
+            ORDER BY time, oscillator_id
+            """,
+            self.conn,
+            params=(self.run_id,),
+        )
         reference_id, cycle_starts, is_original_cycle = calculate_cycle_data.build_cycle_starts(
             normalized_send_df,
             cycle_time,
@@ -662,6 +672,7 @@ class SQLiteEventLogger:
                 cycle_starts=nominal_cycle_starts,
                 num_devices=num_devices,
                 nominal_cycle_time_ms=cycle_time,
+                carrier_sense_df=carrier_sense_df,
             )
             phase_df = phase_df.drop(columns=new_metric_columns).merge(
                 nominal_phase_df[["cycle_index", *new_metric_columns]],

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "measured_at": "2026-07-15T22:34:00+09:00",
+  "raw_data_root": "F:\\research_program_data\\n_sweep_v3_raw",
+  "drive": "F:",
+  "drive_free_bytes_at_gate": 957725507584,
+  "drive_free_gib_at_gate": 891.95,
+  "gate_fraction": 0.8,
+  "gate_capacity_gib": 713.56,
+  "minimum_runtime_free_gib": 50,
+  "smoke_runs_per_device_count": 3,
+  "bytes_per_run_by_device_count": {
+    "5": 311296.0,
+    "10": 572074.6666666666,
+    "20": 1092266.6666666667,
+    "50": 2504021.3333333335
+  },
+  "estimated_total_runs": 160000,
+  "estimated_total_bytes": 179186346666.6667,
+  "estimated_total_gib": 166.88,
+  "gate_passed": true,
+  "carrier_sense_log_reduction_required": false
+}
