@@ -1651,6 +1651,36 @@ def _initial_start_times_by_run(params: dict[str, Any]) -> tuple[tuple[int, ...]
     if device_count < 1:
         raise ValueError("device_count must be at least 1")
 
+    master_path_raw = base.get("initial_phase_master_path")
+    if master_path_raw:
+        master_path = Path(str(master_path_raw))
+        master_data = _read_json(master_path)
+        master_runs = master_data.get("start_times_by_run")
+        if not isinstance(master_runs, list):
+            raise ValueError(
+                f"initial phase master is missing start_times_by_run: {master_path}"
+            )
+        if len(master_runs) < runs_per_k:
+            raise ValueError(
+                f"initial phase master has {len(master_runs)} runs, "
+                f"but {runs_per_k} are required"
+            )
+        prefixes: list[tuple[int, ...]] = []
+        for run_index, values in enumerate(master_runs[:runs_per_k]):
+            if not isinstance(values, list) or len(values) < device_count:
+                raise ValueError(
+                    f"initial phase master run {run_index} has fewer than "
+                    f"device_count={device_count} values"
+                )
+            prefix = tuple(int(value) for value in values[:device_count])
+            if any(value < 0 or value >= cycle_time for value in prefix):
+                raise ValueError(
+                    f"initial phase master run {run_index} contains a value "
+                    f"outside [0, {cycle_time})"
+                )
+            prefixes.append(prefix)
+        return tuple(prefixes)
+
     start_ms, end_ms = _initial_phase_range_ms(base, cycle_time)
     rng = random.Random(seed)
     start_times_by_run: list[tuple[int, ...]] = []
@@ -1727,6 +1757,7 @@ def _simulation_request_for_k(
         lora_low_data_rate_optimize=_optional_bool(
             base.get("lora_low_data_rate_optimize", None)
         ),
+        save_carrier_sense_log=bool(base.get("save_carrier_sense_log", False)),
     )
 
 

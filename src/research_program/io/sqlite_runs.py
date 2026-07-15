@@ -166,7 +166,14 @@ def initialize(conn: sqlite3.Connection) -> None:
             run_id TEXT NOT NULL,
             cycle_index INTEGER NOT NULL,
             mean_abs_diff_from_ideal_phase_gap REAL,
-            mean_abs_diff_from_ideal_phase_gap_ratio REAL
+            mean_abs_diff_from_ideal_phase_gap_ratio REAL,
+            new_mean_abs_dev REAL,
+            new_max_abs_dev REAL,
+            observed_device_count INTEGER,
+            expected_device_count INTEGER,
+            has_all_device_sends INTEGER,
+            skipped_device_count INTEGER,
+            simultaneous_collision_count INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_phase_gap_error_run_cycle
             ON phase_gap_error(run_id, cycle_index);

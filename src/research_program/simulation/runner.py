@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from contextlib import closing
 from pathlib import Path
 import re
 from typing import Any, Callable, Literal
@@ -368,7 +369,7 @@ def run_simulation_request(
 
     if sqlite_runs.is_sqlite_run_store(request.output_root):
         request.output_root.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite_runs.connect(request.output_root) as conn:
+        with closing(sqlite_runs.connect(request.output_root)) as conn:
             sqlite_runs.initialize(conn)
     else:
         request.output_root.mkdir(parents=True, exist_ok=True)

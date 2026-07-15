@@ -10,7 +10,10 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from research_program.analysis.calculate_cycle_data import ensure_cycle_data_for_run
+from research_program.analysis.calculate_cycle_data import (
+    ensure_cycle_data_for_run,
+    read_metadata as read_cycle_metadata,
+)
 from research_program.io.send_log import (
     DETECTION_TIME_COLUMN,
     add_detection_time_column,
@@ -126,6 +129,7 @@ def compute_mean_abs_gap_error_per_cycle(
     send_df: pd.DataFrame,
     cycle_starts: np.ndarray,
     num_devices: int,
+    nominal_cycle_time_ms: float | None = None,
 ) -> pd.DataFrame:
     """
     各サイクルについて，
@@ -141,6 +145,14 @@ def compute_mean_abs_gap_error_per_cycle(
 
     mean_abs_errors = np.full(len(cycle_starts), np.nan, dtype=np.float64)
     mean_abs_error_ratios = np.full(len(cycle_starts), np.nan, dtype=np.float64)
+    new_mean_abs_devs = np.full(len(cycle_starts), np.nan, dtype=np.float64)
+    new_max_abs_devs = np.full(len(cycle_starts), np.nan, dtype=np.float64)
+    observed_device_counts = np.zeros(len(cycle_starts), dtype=np.int64)
+    expected_device_counts = np.full(len(cycle_starts), num_devices, dtype=np.int64)
+    simultaneous_collision_counts = np.zeros(len(cycle_starts), dtype=np.int64)
+
+    if nominal_cycle_time_ms is not None and nominal_cycle_time_ms <= 0:
+        raise ValueError("nominal_cycle_time_ms must be positive")
 
     if not indexed_df.empty:
         first_sends = (
@@ -160,6 +172,28 @@ def compute_mean_abs_gap_error_per_cycle(
 
         cycle_start = cycle_starts[result_index]
         cycle_length = cycle_lengths[result_index]
+        observed_device_counts[result_index] = len(cycle_df)
+        start_times = pd.to_numeric(cycle_df["time"], errors="coerce").to_numpy(dtype=np.float64)
+        finite_start_times = start_times[np.isfinite(start_times)]
+        if finite_start_times.size:
+            _, start_counts = np.unique(finite_start_times, return_counts=True)
+            simultaneous_collision_counts[result_index] = int(start_counts[start_counts >= 2].sum())
+
+        if nominal_cycle_time_ms is not None and len(finite_start_times) >= 2:
+            new_phases = 2.0 * math.pi * (
+                (finite_start_times - cycle_start) / float(nominal_cycle_time_ms)
+            )
+            new_phases = np.mod(new_phases, 2.0 * math.pi)
+            new_phases.sort()
+            new_diffs = np.diff(new_phases)
+            new_wrap_diff = (new_phases[0] + 2.0 * math.pi) - new_phases[-1]
+            new_all_diffs = np.concatenate(
+                [new_diffs, np.array([new_wrap_diff], dtype=np.float64)]
+            )
+            new_abs_devs = np.abs(new_all_diffs - ideal_gap)
+            new_mean_abs_devs[result_index] = float(np.mean(new_abs_devs))
+            new_max_abs_devs[result_index] = float(np.max(new_abs_devs))
+
         if not np.isfinite(cycle_length) or cycle_length <= 0 or len(cycle_df) < 2:
             continue
 
@@ -183,6 +217,16 @@ def compute_mean_abs_gap_error_per_cycle(
             "cycle_index": np.arange(1, len(cycle_starts) + 1, dtype=np.int64),
             "mean_abs_diff_from_ideal_phase_gap": mean_abs_errors,
             "mean_abs_diff_from_ideal_phase_gap_ratio": mean_abs_error_ratios,
+            "new_mean_abs_dev": new_mean_abs_devs,
+            "new_max_abs_dev": new_max_abs_devs,
+            "observed_device_count": observed_device_counts,
+            "expected_device_count": expected_device_counts,
+            "has_all_device_sends": observed_device_counts == expected_device_counts,
+            "skipped_device_count": np.maximum(
+                expected_device_counts - observed_device_counts,
+                0,
+            ),
+            "simultaneous_collision_count": simultaneous_collision_counts,
         }
     )
 
@@ -207,6 +251,7 @@ def process_run(run_dir: Path) -> str:
         return f"skip: {run_dir} (empty send_log.csv)"
 
     tags, num_devices = read_metadata(metadata_path)
+    nominal_cycle_time_ms, _ = read_cycle_metadata(metadata_path)
     send_df = normalize_oscillator_id_column(send_df, tags)
     send_df = normalize_time_column(send_df, tags)
 
@@ -216,6 +261,7 @@ def process_run(run_dir: Path) -> str:
         send_df=send_df,
         cycle_starts=cycle_starts,
         num_devices=num_devices,
+        nominal_cycle_time_ms=nominal_cycle_time_ms,
     )
 
     result_df.to_csv(output_path, index=False)

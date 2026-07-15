@@ -13,6 +13,7 @@ import os
 import time
 
 import pandas as pd
+import numpy as np
 
 from research_program.io import sqlite_runs
 from research_program.simulation.coupling_functions import CouplingFunction, resolve_coupling_function
@@ -638,6 +639,35 @@ class SQLiteEventLogger:
             cycle_starts=cycle_starts,
             num_devices=num_devices,
         )
+        new_metric_columns = [
+            "new_mean_abs_dev",
+            "new_max_abs_dev",
+            "observed_device_count",
+            "expected_device_count",
+            "has_all_device_sends",
+            "skipped_device_count",
+            "simultaneous_collision_count",
+        ]
+        range_durations = [float(end) - float(start) for start, end, _ in config.ranges]
+        expected_cycle_count = (
+            int(round(min(range_durations) / cycle_time)) if range_durations else 0
+        )
+        if expected_cycle_count > 0 and len(cycle_starts) > 0:
+            nominal_cycle_starts = float(cycle_starts[0]) + (
+                np.arange(expected_cycle_count, dtype=np.float64) * cycle_time
+            )
+            nominal_phase_df = calculate_phase_gap_error.compute_mean_abs_gap_error_per_cycle(
+                send_df=normalized_send_df,
+                cycle_starts=nominal_cycle_starts,
+                num_devices=num_devices,
+                nominal_cycle_time_ms=cycle_time,
+            )
+            phase_df = phase_df.drop(columns=new_metric_columns).merge(
+                nominal_phase_df[["cycle_index", *new_metric_columns]],
+                on="cycle_index",
+                how="outer",
+                sort=True,
+            )
         sqlite_runs.replace_dataframe(
             self.conn,
             "phase_gap_error",
