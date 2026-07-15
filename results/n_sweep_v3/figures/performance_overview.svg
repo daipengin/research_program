@@ -1,0 +1,144 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='1400' height='1100' viewBox='0 0 1400 1100' font-family='Segoe UI,Arial,sans-serif'>
+<rect width='1400' height='1100' fill='white'/>
+<text x='700' y='32' font-size='21' text-anchor='middle' font-weight='bold' fill='#202124'>n_sweep_v3 performance overview (1000 runs per condition)</text>
+<rect x='80' y='70' width='560' height='390' fill='#fafafa' stroke='#b8b8b8'/>
+<text x='360' y='55' font-size='16' text-anchor='middle' font-weight='bold' fill='#202124'>Median PER (%)</text>
+<line x1='80' y1='70' x2='80' y2='460' stroke='#e2e2e2'/>
+<text x='80' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1</text>
+<line x1='249.644' y1='70' x2='249.644' y2='460' stroke='#e2e2e2'/>
+<text x='249.644' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>10</text>
+<line x1='419.288' y1='70' x2='419.288' y2='460' stroke='#e2e2e2'/>
+<text x='419.288' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>100</text>
+<line x1='588.932' y1='70' x2='588.932' y2='460' stroke='#e2e2e2'/>
+<text x='588.932' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1000</text>
+<line x1='640' y1='70' x2='640' y2='460' stroke='#e2e2e2'/>
+<text x='640' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>2000</text>
+<line x1='80' y1='460' x2='640' y2='460' stroke='#e2e2e2'/>
+<text x='72' y='464' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>0</text>
+<line x1='80' y1='362.5' x2='640' y2='362.5' stroke='#e2e2e2'/>
+<text x='72' y='366.5' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>18.78</text>
+<line x1='80' y1='265' x2='640' y2='265' stroke='#e2e2e2'/>
+<text x='72' y='269' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>37.57</text>
+<line x1='80' y1='167.5' x2='640' y2='167.5' stroke='#e2e2e2'/>
+<text x='72' y='171.5' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>56.35</text>
+<line x1='80' y1='70' x2='640' y2='70' stroke='#e2e2e2'/>
+<text x='72' y='74' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>75.13</text>
+<text x='360' y='502' font-size='12' text-anchor='middle' font-weight='normal' fill='#202124'>K (log scale)</text>
+<polyline points='80,460 131.068,460 160.941,460 198.576,460 223.366,460 249.644,460 279.517,460 300.712,460 330.585,460 368.22,460 393.01,460 419.288,460 449.161,460 470.356,460 500.229,460 537.864,460 562.654,460 588.932,460 618.805,460 640,460' fill='none' stroke='#0072B2' stroke-width='2'/>
+<polyline points='80,460 131.068,460 160.941,460 198.576,460 223.366,460 249.644,460 279.517,460 300.712,460 330.585,460 368.22,460 393.01,460 419.288,460 449.161,460 470.356,460 500.229,460 537.864,460 562.654,460 588.932,450.772 618.805,448.465 640,447.6' fill='none' stroke='#009E73' stroke-width='2'/>
+<polyline points='80,430.514 131.068,434.046 160.941,434.046 198.576,434.046 223.366,434.046 249.644,434.046 279.517,441.111 300.712,446.086 330.585,450.844 368.22,454.665 393.01,456.251 419.288,457.837 449.161,458.846 470.356,459.279 500.229,459.567 537.864,459.712 562.654,459.712 588.932,442.265 618.805,434.479 640,433.037' fill='none' stroke='#E69F00' stroke-width='2'/>
+<polyline points='80,366.566 131.068,374.093 160.941,379.572 198.576,386.81 223.366,391.655 249.644,396.701 279.517,403.651 300.712,408.9 330.585,416.282 368.22,425.078 393.01,431.912 419.288,440.131 449.161,449.099 470.356,453.252 500.229,456.309 537.864,457.693 562.654,443.332 588.932,399.614 618.805,388.079 640,385.974' fill='none' stroke='#D55E00' stroke-width='2'/>
+<polyline points='80,460 131.068,460 160.941,460 198.576,460 223.366,460 249.644,460 279.517,460 300.712,460 330.585,460 368.22,460 393.01,460 419.288,460 449.161,460 470.356,460 500.229,460 537.864,460 562.654,460 588.932,460 618.805,460 640,460' fill='none' stroke='#0072B2' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='80,460 131.068,460 160.941,460 198.576,460 223.366,460 249.644,460 279.517,460 300.712,460 330.585,460 368.22,460 393.01,460 419.288,460 449.161,460 470.356,460 500.229,460 537.864,460 562.654,460 588.932,457.693 618.805,424.241 640,211.42' fill='none' stroke='#009E73' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='80,446.158 131.068,452.935 160.941,455.314 198.576,457.116 223.366,457.837 249.644,458.558 279.517,458.991 300.712,459.279 330.585,459.423 368.22,459.423 393.01,459.567 419.288,459.423 449.161,459.279 470.356,458.702 500.229,456.395 537.864,432.028 562.654,361.303 588.932,360.51 618.805,353.445 640,104.144' fill='none' stroke='#E69F00' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='80,416.455 131.068,433.383 160.941,441.313 198.576,448.753 223.366,451.925 249.644,454.348 279.517,456.02 300.712,456.886 330.585,457.52 368.22,452.906 393.01,439.929 419.288,409.765 449.161,354.973 470.356,309.295 500.229,255.83 537.864,200.923 562.654,230.51 588.932,239.161 618.805,274.689 640,70' fill='none' stroke='#D55E00' stroke-width='2' stroke-dasharray='7 5'/>
+<rect x='740' y='70' width='560' height='390' fill='#fafafa' stroke='#b8b8b8'/>
+<text x='1020' y='55' font-size='16' text-anchor='middle' font-weight='bold' fill='#202124'>Max-gap convergence rate (%)</text>
+<line x1='740' y1='70' x2='740' y2='460' stroke='#e2e2e2'/>
+<text x='740' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1</text>
+<line x1='909.644' y1='70' x2='909.644' y2='460' stroke='#e2e2e2'/>
+<text x='909.644' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>10</text>
+<line x1='1079.288' y1='70' x2='1079.288' y2='460' stroke='#e2e2e2'/>
+<text x='1079.288' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>100</text>
+<line x1='1248.932' y1='70' x2='1248.932' y2='460' stroke='#e2e2e2'/>
+<text x='1248.932' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1000</text>
+<line x1='1300' y1='70' x2='1300' y2='460' stroke='#e2e2e2'/>
+<text x='1300' y='480' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>2000</text>
+<line x1='740' y1='460' x2='1300' y2='460' stroke='#e2e2e2'/>
+<text x='732' y='464' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>0</text>
+<line x1='740' y1='362.5' x2='1300' y2='362.5' stroke='#e2e2e2'/>
+<text x='732' y='366.5' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>25</text>
+<line x1='740' y1='265' x2='1300' y2='265' stroke='#e2e2e2'/>
+<text x='732' y='269' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>50</text>
+<line x1='740' y1='167.5' x2='1300' y2='167.5' stroke='#e2e2e2'/>
+<text x='732' y='171.5' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>75</text>
+<line x1='740' y1='70' x2='1300' y2='70' stroke='#e2e2e2'/>
+<text x='732' y='74' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>100</text>
+<text x='1020' y='502' font-size='12' text-anchor='middle' font-weight='normal' fill='#202124'>K (log scale)</text>
+<polyline points='740,323.11 791.068,314.14 820.941,300.1 858.576,282.16 883.366,268.9 909.644,250.57 939.517,238.48 960.712,234.58 990.585,232.63 1028.22,228.34 1053.01,228.34 1079.288,224.05 1109.161,221.71 1130.356,218.59 1160.229,211.96 1197.864,138.64 1222.654,100.81 1248.932,78.58 1278.805,73.51 1300,71.17' fill='none' stroke='#0072B2' stroke-width='2'/>
+<polyline points='740,417.88 791.068,401.5 820.941,387.07 858.576,349.63 883.366,306.34 909.644,246.67 939.517,160.87 960.712,112.12 990.585,77.02 1028.22,70 1053.01,70 1079.288,70 1109.161,70 1130.356,70 1160.229,70 1197.864,70 1222.654,70.39 1248.932,404.23 1278.805,460 1300,460' fill='none' stroke='#009E73' stroke-width='2'/>
+<polyline points='740,457.66 791.068,454.93 820.941,443.62 858.576,401.89 883.366,355.48 909.644,262.27 939.517,164.38 960.712,104.32 990.585,74.68 1028.22,70.39 1053.01,70 1079.288,70 1109.161,70 1130.356,70 1160.229,70 1197.864,70.39 1222.654,335.98 1248.932,460 1278.805,460 1300,460' fill='none' stroke='#E69F00' stroke-width='2'/>
+<polyline points='740,460 791.068,460 820.941,460 858.576,458.83 883.366,454.54 909.644,415.15 939.517,299.32 960.712,188.56 990.585,91.84 1028.22,71.17 1053.01,70 1079.288,70 1109.161,70 1130.356,70 1160.229,73.9 1197.864,416.32 1222.654,460 1248.932,460 1278.805,460 1300,460' fill='none' stroke='#D55E00' stroke-width='2'/>
+<polyline points='740,307.9 791.068,282.16 820.941,263.44 858.576,243.94 883.366,234.19 909.644,231.07 939.517,229.9 960.712,230.29 990.585,229.51 1028.22,226 1053.01,224.44 1079.288,226 1109.161,220.93 1130.356,216.64 1160.229,202.6 1197.864,121.87 1222.654,77.02 1248.932,70 1278.805,166.72 1300,116.02' fill='none' stroke='#0072B2' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='740,393.7 791.068,356.26 820.941,307.51 858.576,219.76 883.366,148 909.644,86.77 939.517,70 960.712,70 990.585,70 1028.22,70 1053.01,72.34 1079.288,74.68 1109.161,75.46 1130.356,78.19 1160.229,80.92 1197.864,117.58 1222.654,205.33 1248.932,460 1278.805,460 1300,460' fill='none' stroke='#009E73' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='740,434.65 791.068,331.3 820.941,230.29 858.576,114.46 883.366,79.36 909.644,71.17 939.517,70 960.712,70.39 990.585,71.95 1028.22,76.63 1053.01,79.75 1079.288,80.14 1109.161,85.21 1130.356,97.69 1160.229,161.26 1197.864,460 1222.654,460 1248.932,460 1278.805,460 1300,460' fill='none' stroke='#E69F00' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='740,434.26 791.068,231.85 820.941,108.22 858.576,71.95 883.366,72.73 909.644,77.02 939.517,85.6 960.712,112.12 990.585,171.79 1028.22,300.88 1053.01,336.76 1079.288,460 1109.161,460 1130.356,460 1160.229,460 1197.864,460 1222.654,460 1248.932,460 1278.805,460 1300,460' fill='none' stroke='#D55E00' stroke-width='2' stroke-dasharray='7 5'/>
+<rect x='80' y='570' width='560' height='390' fill='#fafafa' stroke='#b8b8b8'/>
+<text x='360' y='555' font-size='16' text-anchor='middle' font-weight='bold' fill='#202124'>Intended min-gap convergence rate (%)</text>
+<line x1='80' y1='570' x2='80' y2='960' stroke='#e2e2e2'/>
+<text x='80' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1</text>
+<line x1='249.644' y1='570' x2='249.644' y2='960' stroke='#e2e2e2'/>
+<text x='249.644' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>10</text>
+<line x1='419.288' y1='570' x2='419.288' y2='960' stroke='#e2e2e2'/>
+<text x='419.288' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>100</text>
+<line x1='588.932' y1='570' x2='588.932' y2='960' stroke='#e2e2e2'/>
+<text x='588.932' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1000</text>
+<line x1='640' y1='570' x2='640' y2='960' stroke='#e2e2e2'/>
+<text x='640' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>2000</text>
+<line x1='80' y1='960' x2='640' y2='960' stroke='#e2e2e2'/>
+<text x='72' y='964' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>0</text>
+<line x1='80' y1='862.5' x2='640' y2='862.5' stroke='#e2e2e2'/>
+<text x='72' y='866.5' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>25</text>
+<line x1='80' y1='765' x2='640' y2='765' stroke='#e2e2e2'/>
+<text x='72' y='769' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>50</text>
+<line x1='80' y1='667.5' x2='640' y2='667.5' stroke='#e2e2e2'/>
+<text x='72' y='671.5' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>75</text>
+<line x1='80' y1='570' x2='640' y2='570' stroke='#e2e2e2'/>
+<text x='72' y='574' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>100</text>
+<text x='360' y='1002' font-size='12' text-anchor='middle' font-weight='normal' fill='#202124'>K (log scale)</text>
+<polyline points='80,599.25 131.068,596.91 160.941,593.4 198.576,590.28 223.366,589.11 249.644,585.6 279.517,584.04 300.712,583.26 330.585,578.19 368.22,571.56 393.01,570 419.288,570 449.161,570 470.356,570 500.229,570 537.864,570 562.654,570 588.932,570 618.805,570 640,570' fill='none' stroke='#0072B2' stroke-width='2'/>
+<polyline points='80,667.89 131.068,656.97 160.941,650.34 198.576,642.93 223.366,637.08 249.644,630.45 279.517,621.87 300.712,617.58 330.585,600.42 368.22,572.34 393.01,570.78 419.288,570 449.161,570 470.356,570 500.229,570 537.864,570 562.654,570 588.932,570 618.805,571.17 640,571.95' fill='none' stroke='#009E73' stroke-width='2'/>
+<polyline points='80,852.75 131.068,823.89 160.941,807.51 198.576,791.13 223.366,781.38 249.644,766.56 279.517,741.6 300.712,718.59 330.585,699.87 368.22,635.91 393.01,576.24 419.288,570 449.161,570 470.356,570 500.229,570 537.864,570 562.654,570 588.932,929.97 618.805,958.83 640,959.61' fill='none' stroke='#E69F00' stroke-width='2'/>
+<polyline points='80,959.61 131.068,959.61 160.941,959.22 198.576,959.22 223.366,959.22 249.644,958.44 279.517,956.1 300.712,953.76 330.585,945.18 368.22,920.22 393.01,860.94 419.288,691.68 449.161,574.29 470.356,570 500.229,570 537.864,570 562.654,959.61 588.932,960 618.805,960 640,960' fill='none' stroke='#D55E00' stroke-width='2'/>
+<polyline points='80,574.68 131.068,573.12 160.941,570.39 198.576,570 223.366,570 249.644,570 279.517,570 300.712,570 330.585,570 368.22,570 393.01,570 419.288,570 449.161,570 470.356,570 500.229,570 537.864,570 562.654,570 588.932,570 618.805,570 640,570' fill='none' stroke='#0072B2' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='80,605.1 131.068,583.26 160.941,572.73 198.576,570 223.366,570 249.644,570 279.517,570 300.712,570 330.585,570 368.22,570 393.01,570 419.288,570 449.161,570 470.356,570 500.229,570 537.864,570 562.654,570 588.932,607.05 618.805,788.4 640,954.15' fill='none' stroke='#009E73' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='80,695.58 131.068,633.57 160.941,596.52 198.576,570.39 223.366,570 249.644,570 279.517,570 300.712,570 330.585,570 368.22,570 393.01,570 419.288,570 449.161,570 470.356,574.68 500.229,572.73 537.864,785.28 562.654,916.32 588.932,952.59 618.805,848.85 640,960' fill='none' stroke='#E69F00' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='80,907.35 131.068,754.08 160.941,647.61 198.576,574.68 223.366,570 249.644,570.39 279.517,574.68 300.712,585.6 330.585,591.84 368.22,683.88 393.01,891.75 419.288,960 449.161,960 470.356,960 500.229,960 537.864,960 562.654,960 588.932,960 618.805,960 640,960' fill='none' stroke='#D55E00' stroke-width='2' stroke-dasharray='7 5'/>
+<rect x='740' y='570' width='560' height='390' fill='#fafafa' stroke='#b8b8b8'/>
+<text x='1020' y='555' font-size='16' text-anchor='middle' font-weight='bold' fill='#202124'>Max-gap censored median cycle</text>
+<line x1='740' y1='570' x2='740' y2='960' stroke='#e2e2e2'/>
+<text x='740' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1</text>
+<line x1='909.644' y1='570' x2='909.644' y2='960' stroke='#e2e2e2'/>
+<text x='909.644' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>10</text>
+<line x1='1079.288' y1='570' x2='1079.288' y2='960' stroke='#e2e2e2'/>
+<text x='1079.288' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>100</text>
+<line x1='1248.932' y1='570' x2='1248.932' y2='960' stroke='#e2e2e2'/>
+<text x='1248.932' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1000</text>
+<line x1='1300' y1='570' x2='1300' y2='960' stroke='#e2e2e2'/>
+<text x='1300' y='980' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>2000</text>
+<line x1='740' y1='960' x2='1300' y2='960' stroke='#e2e2e2'/>
+<text x='732' y='964' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>0</text>
+<line x1='740' y1='862.5' x2='1300' y2='862.5' stroke='#e2e2e2'/>
+<text x='732' y='866.5' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>45</text>
+<line x1='740' y1='765' x2='1300' y2='765' stroke='#e2e2e2'/>
+<text x='732' y='769' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>90</text>
+<line x1='740' y1='667.5' x2='1300' y2='667.5' stroke='#e2e2e2'/>
+<text x='732' y='671.5' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>135</text>
+<line x1='740' y1='570' x2='1300' y2='570' stroke='#e2e2e2'/>
+<text x='732' y='574' font-size='11' text-anchor='end' font-weight='normal' fill='#202124'>180</text>
+<text x='1020' y='1002' font-size='12' text-anchor='middle' font-weight='normal' fill='#202124'>K (log scale)</text>
+<polyline points='909.644,680.5 939.517,770.417 960.712,819.167 990.585,864.667 1028.22,901.5 1053.01,916.667 1079.288,929.667 1109.161,938.333 1130.356,942.667 1160.229,949.167 1197.864,951.333 1222.654,953.5 1248.932,953.5 1278.805,955.667 1300,953.5' fill='none' stroke='#0072B2' stroke-width='2'/>
+<polyline points='909.644,627.417 939.517,736.833 960.712,791 990.585,847.333 1028.22,890.667 1053.01,908 1079.288,921 1109.161,931.833 1130.356,936.167 1160.229,940.5 1197.864,942.667 1222.654,921' fill='none' stroke='#009E73' stroke-width='2'/>
+<polyline points='909.644,592.75 939.517,713 960.712,773.667 990.585,833.25 1028.22,882 1053.01,901.5 1079.288,916.667 1109.161,925.333 1130.356,931.833 1160.229,934 1197.864,903.667' fill='none' stroke='#E69F00' stroke-width='2'/>
+<polyline points='960.712,652.333 990.585,752 1028.22,830 1053.01,860.333 1079.288,884.167 1109.161,899.333 1130.356,899.333 1160.229,864.667' fill='none' stroke='#D55E00' stroke-width='2'/>
+<polyline points='820.941,601.417 858.576,743.333 883.366,804 909.644,849.5 939.517,886.333 960.712,903.667 990.585,921 1028.22,936.167 1053.01,942.667 1079.288,947 1109.161,949.167 1130.356,951.333 1160.229,953.5 1197.864,955.667 1222.654,955.667 1248.932,955.667 1278.805,953.5 1300,940.5' fill='none' stroke='#0072B2' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='858.576,665.333 883.366,747.667 909.644,810.5 939.517,860.333 960.712,884.167 990.585,908 1028.22,927.5 1053.01,934 1079.288,940.5 1109.161,944.833 1130.356,947 1160.229,949.167 1197.864,944.833 1222.654,912.333' fill='none' stroke='#009E73' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='820.941,635 858.576,762.833 883.366,817 909.644,860.333 939.517,891.75 960.712,908 990.585,923.167 1028.22,936.167 1053.01,940.5 1079.288,944.833 1109.161,944.833 1130.356,912.333 1160.229,821.333' fill='none' stroke='#E69F00' stroke-width='2' stroke-dasharray='7 5'/>
+<polyline points='791.068,615.5 820.941,728.167 858.576,818.083 883.366,856 909.644,884.167 939.517,905.833 960.712,916.667 990.585,916.667' fill='none' stroke='#D55E00' stroke-width='2' stroke-dasharray='7 5'/>
+<line x1='470' y1='1045' x2='498' y2='1045' stroke='#0072B2' stroke-width='3'/>
+<text x='504' y='1049' font-size='11' text-anchor='start' font-weight='normal' fill='#202124'>KURAMOTO N=5</text>
+<line x1='605' y1='1045' x2='633' y2='1045' stroke='#009E73' stroke-width='3'/>
+<text x='639' y='1049' font-size='11' text-anchor='start' font-weight='normal' fill='#202124'>KURAMOTO N=10</text>
+<line x1='740' y1='1045' x2='768' y2='1045' stroke='#E69F00' stroke-width='3'/>
+<text x='774' y='1049' font-size='11' text-anchor='start' font-weight='normal' fill='#202124'>KURAMOTO N=20</text>
+<line x1='875' y1='1045' x2='903' y2='1045' stroke='#D55E00' stroke-width='3'/>
+<text x='909' y='1049' font-size='11' text-anchor='start' font-weight='normal' fill='#202124'>KURAMOTO N=50</text>
+<line x1='470' y1='1067' x2='498' y2='1067' stroke='#0072B2' stroke-width='3' stroke-dasharray='7 5'/>
+<text x='504' y='1071' font-size='11' text-anchor='start' font-weight='normal' fill='#202124'>LINEAR N=5</text>
+<line x1='605' y1='1067' x2='633' y2='1067' stroke='#009E73' stroke-width='3' stroke-dasharray='7 5'/>
+<text x='639' y='1071' font-size='11' text-anchor='start' font-weight='normal' fill='#202124'>LINEAR N=10</text>
+<line x1='740' y1='1067' x2='768' y2='1067' stroke='#E69F00' stroke-width='3' stroke-dasharray='7 5'/>
+<text x='774' y='1071' font-size='11' text-anchor='start' font-weight='normal' fill='#202124'>LINEAR N=20</text>
+<line x1='875' y1='1067' x2='903' y2='1067' stroke='#D55E00' stroke-width='3' stroke-dasharray='7 5'/>
+<text x='909' y='1071' font-size='11' text-anchor='start' font-weight='normal' fill='#202124'>LINEAR N=50</text>
+</svg>

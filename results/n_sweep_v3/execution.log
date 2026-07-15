@@ -1,0 +1,487 @@
+[2026-07-15 22:36:28] start conditions=160 runs=160000 raw_root=F:\research_program_data\n_sweep_v3_raw functions=['KURAMOTO', 'LINEAR'] N=[5, 10, 20, 50] K=[1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000]
+[2026-07-15 22:36:28] validation master_unique_prefixes=PASS N=[5,10,20,50] runs=1000
+[2026-07-15 22:37:11] completed function=KURAMOTO N=5 K=1 runs=1000 elapsed_sec=42.402 free_bytes=957419532288
+[2026-07-15 22:37:55] completed function=KURAMOTO N=5 K=2 runs=1000 elapsed_sec=43.863 free_bytes=957113430016
+[2026-07-15 22:38:38] completed function=KURAMOTO N=5 K=3 runs=1000 elapsed_sec=43.714 free_bytes=956807024640
+[2026-07-15 22:39:22] completed function=KURAMOTO N=5 K=5 runs=1000 elapsed_sec=43.386 free_bytes=956500488192
+[2026-07-15 22:40:05] completed function=KURAMOTO N=5 K=7 runs=1000 elapsed_sec=43.190 free_bytes=956193574912
+[2026-07-15 22:40:50] completed function=KURAMOTO N=5 K=10 runs=1000 elapsed_sec=44.933 free_bytes=955886395392
+[2026-07-15 22:41:35] completed function=KURAMOTO N=5 K=15 runs=1000 elapsed_sec=44.928 free_bytes=955578900480
+[2026-07-15 22:42:19] completed function=KURAMOTO N=5 K=20 runs=1000 elapsed_sec=44.662 free_bytes=955271249920
+[2026-07-15 22:43:04] completed function=KURAMOTO N=5 K=30 runs=1000 elapsed_sec=44.871 free_bytes=954963267584
+[2026-07-15 22:43:49] completed function=KURAMOTO N=5 K=50 runs=1000 elapsed_sec=44.394 free_bytes=954654814208
+[2026-07-15 22:44:35] completed function=KURAMOTO N=5 K=70 runs=1000 elapsed_sec=46.103 free_bytes=954346131456
+[2026-07-15 22:45:20] completed function=KURAMOTO N=5 K=100 runs=1000 elapsed_sec=45.740 free_bytes=954037194752
+[2026-07-15 22:46:06] completed function=KURAMOTO N=5 K=150 runs=1000 elapsed_sec=45.513 free_bytes=953728135168
+[2026-07-15 22:46:51] completed function=KURAMOTO N=5 K=200 runs=1000 elapsed_sec=45.497 free_bytes=953418919936
+[2026-07-15 22:47:38] completed function=KURAMOTO N=5 K=300 runs=1000 elapsed_sec=46.124 free_bytes=953109577728
+[2026-07-15 22:48:24] completed function=KURAMOTO N=5 K=500 runs=1000 elapsed_sec=46.788 free_bytes=952799895552
+[2026-07-15 22:49:10] completed function=KURAMOTO N=5 K=700 runs=1000 elapsed_sec=45.503 free_bytes=952490016768
+[2026-07-15 22:49:56] completed function=KURAMOTO N=5 K=1000 runs=1000 elapsed_sec=46.178 free_bytes=952179720192
+[2026-07-15 22:50:42] completed function=KURAMOTO N=5 K=1500 runs=1000 elapsed_sec=46.150 free_bytes=951868694528
+[2026-07-15 22:51:28] completed function=KURAMOTO N=5 K=2000 runs=1000 elapsed_sec=45.611 free_bytes=951557160960
+[2026-07-15 22:52:23] completed function=KURAMOTO N=10 K=1 runs=1000 elapsed_sec=54.815 free_bytes=950993457152
+[2026-07-15 22:53:17] completed function=KURAMOTO N=10 K=2 runs=1000 elapsed_sec=54.340 free_bytes=950429069312
+[2026-07-15 22:54:09] completed function=KURAMOTO N=10 K=3 runs=1000 elapsed_sec=52.495 free_bytes=949863608320
+[2026-07-15 22:55:01] completed function=KURAMOTO N=10 K=5 runs=1000 elapsed_sec=52.005 free_bytes=949297520640
+[2026-07-15 22:55:54] completed function=KURAMOTO N=10 K=7 runs=1000 elapsed_sec=52.105 free_bytes=948731424768
+[2026-07-15 22:56:45] completed function=KURAMOTO N=10 K=10 runs=1000 elapsed_sec=51.803 free_bytes=948164194304
+[2026-07-15 22:57:38] completed function=KURAMOTO N=10 K=15 runs=1000 elapsed_sec=52.507 free_bytes=947595870208
+[2026-07-15 22:58:30] completed function=KURAMOTO N=10 K=20 runs=1000 elapsed_sec=52.320 free_bytes=947026751488
+[2026-07-15 22:59:23] completed function=KURAMOTO N=10 K=30 runs=1000 elapsed_sec=52.454 free_bytes=946456444928
+[2026-07-15 23:00:15] completed function=KURAMOTO N=10 K=50 runs=1000 elapsed_sec=51.958 free_bytes=945884712960
+[2026-07-15 23:01:08] completed function=KURAMOTO N=10 K=70 runs=1000 elapsed_sec=53.456 free_bytes=945312247808
+[2026-07-15 23:02:01] completed function=KURAMOTO N=10 K=100 runs=1000 elapsed_sec=52.846 free_bytes=944739086336
+[2026-07-15 23:02:53] completed function=KURAMOTO N=10 K=150 runs=1000 elapsed_sec=51.979 free_bytes=944165367808
+[2026-07-15 23:03:46] completed function=KURAMOTO N=10 K=200 runs=1000 elapsed_sec=53.022 free_bytes=943591653376
+[2026-07-15 23:04:41] completed function=KURAMOTO N=10 K=300 runs=1000 elapsed_sec=55.416 free_bytes=943017844736
+[2026-07-15 23:05:38] completed function=KURAMOTO N=10 K=500 runs=1000 elapsed_sec=56.988 free_bytes=942444044288
+[2026-07-15 23:06:36] completed function=KURAMOTO N=10 K=700 runs=1000 elapsed_sec=57.359 free_bytes=941870370816
+[2026-07-15 23:07:33] completed function=KURAMOTO N=10 K=1000 runs=1000 elapsed_sec=57.583 free_bytes=941300621312
+[2026-07-15 23:08:31] completed function=KURAMOTO N=10 K=1500 runs=1000 elapsed_sec=57.500 free_bytes=940731752448
+[2026-07-15 23:09:29] completed function=KURAMOTO N=10 K=2000 runs=1000 elapsed_sec=58.327 free_bytes=940163358720
+[2026-07-15 23:10:50] completed function=KURAMOTO N=20 K=1 runs=1000 elapsed_sec=81.040 free_bytes=939091619840
+[2026-07-15 23:12:11] completed function=KURAMOTO N=20 K=2 runs=1000 elapsed_sec=80.666 free_bytes=938015133696
+[2026-07-15 23:13:36] completed function=KURAMOTO N=20 K=3 runs=1000 elapsed_sec=84.857 free_bytes=936937746432
+[2026-07-15 23:14:41] completed function=KURAMOTO N=20 K=5 runs=1000 elapsed_sec=65.293 free_bytes=935855976448
+[2026-07-15 23:15:54] completed function=KURAMOTO N=20 K=7 runs=1000 elapsed_sec=72.662 free_bytes=934773592064
+[2026-07-15 23:16:54] completed function=KURAMOTO N=20 K=10 runs=1000 elapsed_sec=60.575 free_bytes=933690781696
+[2026-07-15 23:18:00] completed function=KURAMOTO N=20 K=15 runs=1000 elapsed_sec=65.596 free_bytes=932603867136
+[2026-07-15 23:19:21] completed function=KURAMOTO N=20 K=20 runs=1000 elapsed_sec=81.556 free_bytes=931515002880
+[2026-07-15 23:20:38] completed function=KURAMOTO N=20 K=30 runs=1000 elapsed_sec=76.253 free_bytes=930424496128
+[2026-07-15 23:21:52] completed function=KURAMOTO N=20 K=50 runs=1000 elapsed_sec=74.549 free_bytes=929331081216
+[2026-07-15 23:23:12] completed function=KURAMOTO N=20 K=70 runs=1000 elapsed_sec=79.519 free_bytes=928234422272
+[2026-07-15 23:24:27] completed function=KURAMOTO N=20 K=100 runs=1000 elapsed_sec=75.013 free_bytes=927135129600
+[2026-07-15 23:25:41] completed function=KURAMOTO N=20 K=150 runs=1000 elapsed_sec=74.745 free_bytes=926034022400
+[2026-07-15 23:26:59] completed function=KURAMOTO N=20 K=200 runs=1000 elapsed_sec=77.130 free_bytes=924932263936
+[2026-07-15 23:28:16] completed function=KURAMOTO N=20 K=300 runs=1000 elapsed_sec=77.725 free_bytes=923829968896
+[2026-07-15 23:29:33] completed function=KURAMOTO N=20 K=500 runs=1000 elapsed_sec=76.205 free_bytes=922727092224
+[2026-07-15 23:30:50] completed function=KURAMOTO N=20 K=700 runs=1000 elapsed_sec=77.205 free_bytes=921624178688
+[2026-07-15 23:32:07] completed function=KURAMOTO N=20 K=1000 runs=1000 elapsed_sec=77.310 free_bytes=920535478272
+[2026-07-15 23:33:27] completed function=KURAMOTO N=20 K=1500 runs=1000 elapsed_sec=79.736 free_bytes=919452807168
+[2026-07-15 23:34:48] completed function=KURAMOTO N=20 K=2000 runs=1000 elapsed_sec=80.871 free_bytes=918371524608
+[2026-07-15 23:37:20] completed function=KURAMOTO N=50 K=1 runs=1000 elapsed_sec=152.647 free_bytes=915874291712
+[2026-07-15 23:39:51] completed function=KURAMOTO N=50 K=2 runs=1000 elapsed_sec=150.578 free_bytes=913361793024
+[2026-07-15 23:42:41] completed function=KURAMOTO N=50 K=3 runs=1000 elapsed_sec=170.035 free_bytes=910837645312
+[2026-07-15 23:45:22] completed function=KURAMOTO N=50 K=5 runs=1000 elapsed_sec=160.778 free_bytes=908299370496
+[2026-07-15 23:48:03] completed function=KURAMOTO N=50 K=7 runs=1000 elapsed_sec=161.562 free_bytes=905750847488
+[2026-07-15 23:50:50] completed function=KURAMOTO N=50 K=10 runs=1000 elapsed_sec=166.982 free_bytes=903192182784
+[2026-07-15 23:53:32] completed function=KURAMOTO N=50 K=15 runs=1000 elapsed_sec=162.173 free_bytes=900618268672
+[2026-07-15 23:55:56] completed function=KURAMOTO N=50 K=20 runs=1000 elapsed_sec=142.630 free_bytes=898033414144
+[2026-07-15 23:58:14] completed function=KURAMOTO N=50 K=30 runs=1000 elapsed_sec=138.230 free_bytes=895434309632
+[2026-07-16 00:01:01] completed function=KURAMOTO N=50 K=50 runs=1000 elapsed_sec=166.084 free_bytes=892817399808
+[2026-07-16 00:03:52] completed function=KURAMOTO N=50 K=70 runs=1000 elapsed_sec=171.742 free_bytes=890185039872
+[2026-07-16 00:06:36] completed function=KURAMOTO N=50 K=100 runs=1000 elapsed_sec=163.492 free_bytes=887535640576
+[2026-07-16 00:09:23] completed function=KURAMOTO N=50 K=150 runs=1000 elapsed_sec=167.746 free_bytes=884864200704
+[2026-07-16 00:12:10] completed function=KURAMOTO N=50 K=200 runs=1000 elapsed_sec=166.862 free_bytes=882181971968
+[2026-07-16 00:14:53] completed function=KURAMOTO N=50 K=300 runs=1000 elapsed_sec=162.457 free_bytes=879492325376
+[2026-07-16 00:17:39] completed function=KURAMOTO N=50 K=500 runs=1000 elapsed_sec=166.374 free_bytes=876800339968
+[2026-07-16 00:20:18] completed function=KURAMOTO N=50 K=700 runs=1000 elapsed_sec=159.195 free_bytes=874143338496
+[2026-07-16 00:23:00] completed function=KURAMOTO N=50 K=1000 runs=1000 elapsed_sec=161.486 free_bytes=871577305088
+[2026-07-16 00:25:40] completed function=KURAMOTO N=50 K=1500 runs=1000 elapsed_sec=159.710 free_bytes=869036392448
+[2026-07-16 00:28:25] completed function=KURAMOTO N=50 K=2000 runs=1000 elapsed_sec=165.297 free_bytes=866498908160
+[2026-07-16 00:29:12] completed function=LINEAR N=5 K=1 runs=1000 elapsed_sec=47.113 free_bytes=866191450112
+[2026-07-16 00:30:02] completed function=LINEAR N=5 K=2 runs=1000 elapsed_sec=50.398 free_bytes=865883787264
+[2026-07-16 00:30:49] completed function=LINEAR N=5 K=3 runs=1000 elapsed_sec=46.768 free_bytes=865575718912
+[2026-07-16 00:31:37] completed function=LINEAR N=5 K=5 runs=1000 elapsed_sec=48.314 free_bytes=865267212288
+[2026-07-16 00:32:30] completed function=LINEAR N=5 K=7 runs=1000 elapsed_sec=52.033 free_bytes=864958722048
+[2026-07-16 00:33:24] completed function=LINEAR N=5 K=10 runs=1000 elapsed_sec=54.391 free_bytes=864649908224
+[2026-07-16 00:34:13] completed function=LINEAR N=5 K=15 runs=1000 elapsed_sec=48.931 free_bytes=864341082112
+[2026-07-16 00:35:03] completed function=LINEAR N=5 K=20 runs=1000 elapsed_sec=50.119 free_bytes=864032002048
+[2026-07-16 00:35:49] completed function=LINEAR N=5 K=30 runs=1000 elapsed_sec=46.263 free_bytes=863722967040
+[2026-07-16 00:36:34] completed function=LINEAR N=5 K=50 runs=1000 elapsed_sec=44.539 free_bytes=863413870592
+[2026-07-16 00:37:18] completed function=LINEAR N=5 K=70 runs=1000 elapsed_sec=44.130 free_bytes=863104716800
+[2026-07-16 00:38:02] completed function=LINEAR N=5 K=100 runs=1000 elapsed_sec=44.433 free_bytes=862795583488
+[2026-07-16 00:38:48] completed function=LINEAR N=5 K=150 runs=1000 elapsed_sec=45.915 free_bytes=862486323200
+[2026-07-16 00:39:37] completed function=LINEAR N=5 K=200 runs=1000 elapsed_sec=48.303 free_bytes=862177046528
+[2026-07-16 00:40:22] completed function=LINEAR N=5 K=300 runs=1000 elapsed_sec=45.595 free_bytes=861867552768
+[2026-07-16 00:41:12] completed function=LINEAR N=5 K=500 runs=1000 elapsed_sec=49.733 free_bytes=861557919744
+[2026-07-16 00:42:03] completed function=LINEAR N=5 K=700 runs=1000 elapsed_sec=51.527 free_bytes=861247713280
+[2026-07-16 00:42:53] completed function=LINEAR N=5 K=1000 runs=1000 elapsed_sec=49.562 free_bytes=860937342976
+[2026-07-16 00:43:43] completed function=LINEAR N=5 K=1500 runs=1000 elapsed_sec=49.630 free_bytes=860625272832
+[2026-07-16 00:44:28] completed function=LINEAR N=5 K=2000 runs=1000 elapsed_sec=45.612 free_bytes=860312616960
+[2026-07-16 00:45:23] completed function=LINEAR N=10 K=1 runs=1000 elapsed_sec=55.004 free_bytes=859745173504
+[2026-07-16 00:46:18] completed function=LINEAR N=10 K=2 runs=1000 elapsed_sec=54.522 free_bytes=859176157184
+[2026-07-16 00:47:18] completed function=LINEAR N=10 K=3 runs=1000 elapsed_sec=60.371 free_bytes=858605965312
+[2026-07-16 00:48:19] completed function=LINEAR N=10 K=5 runs=1000 elapsed_sec=60.877 free_bytes=858034540544
+[2026-07-16 00:49:22] completed function=LINEAR N=10 K=7 runs=1000 elapsed_sec=62.725 free_bytes=857463259136
+[2026-07-16 00:50:26] completed function=LINEAR N=10 K=10 runs=1000 elapsed_sec=64.214 free_bytes=856890548224
+[2026-07-16 00:51:28] completed function=LINEAR N=10 K=15 runs=1000 elapsed_sec=61.876 free_bytes=856317493248
+[2026-07-16 00:52:24] completed function=LINEAR N=10 K=20 runs=1000 elapsed_sec=55.894 free_bytes=855744143360
+[2026-07-16 00:53:21] completed function=LINEAR N=10 K=30 runs=1000 elapsed_sec=57.459 free_bytes=855170232320
+[2026-07-16 00:54:22] completed function=LINEAR N=10 K=50 runs=1000 elapsed_sec=60.333 free_bytes=854596542464
+[2026-07-16 00:55:24] completed function=LINEAR N=10 K=70 runs=1000 elapsed_sec=62.309 free_bytes=854022799360
+[2026-07-16 00:56:27] completed function=LINEAR N=10 K=100 runs=1000 elapsed_sec=62.891 free_bytes=853449142272
+[2026-07-16 00:57:33] completed function=LINEAR N=10 K=150 runs=1000 elapsed_sec=66.284 free_bytes=852875366400
+[2026-07-16 00:58:36] completed function=LINEAR N=10 K=200 runs=1000 elapsed_sec=62.802 free_bytes=852301606912
+[2026-07-16 00:59:31] completed function=LINEAR N=10 K=300 runs=1000 elapsed_sec=55.596 free_bytes=851727716352
+[2026-07-16 01:00:25] completed function=LINEAR N=10 K=500 runs=1000 elapsed_sec=53.225 free_bytes=851153801216
+[2026-07-16 01:01:24] completed function=LINEAR N=10 K=700 runs=1000 elapsed_sec=59.614 free_bytes=850579693568
+[2026-07-16 01:02:25] completed function=LINEAR N=10 K=1000 runs=1000 elapsed_sec=60.330 free_bytes=850007977984
+[2026-07-16 01:03:26] completed function=LINEAR N=10 K=1500 runs=1000 elapsed_sec=61.003 free_bytes=849448861696
+[2026-07-16 01:04:25] completed function=LINEAR N=10 K=2000 runs=1000 elapsed_sec=59.538 free_bytes=849005531136
+[2026-07-16 01:06:00] completed function=LINEAR N=20 K=1 runs=1000 elapsed_sec=94.657 free_bytes=847916769280
+[2026-07-16 01:07:24] completed function=LINEAR N=20 K=2 runs=1000 elapsed_sec=83.880 free_bytes=846823579648
+[2026-07-16 01:08:43] completed function=LINEAR N=20 K=3 runs=1000 elapsed_sec=79.106 free_bytes=845727768576
+[2026-07-16 01:10:25] completed function=LINEAR N=20 K=5 runs=1000 elapsed_sec=102.152 free_bytes=844629823488
+[2026-07-16 01:11:52] completed function=LINEAR N=20 K=7 runs=1000 elapsed_sec=87.316 free_bytes=843530719232
+[2026-07-16 01:13:20] completed function=LINEAR N=20 K=10 runs=1000 elapsed_sec=87.494 free_bytes=842430439424
+[2026-07-16 01:14:36] completed function=LINEAR N=20 K=15 runs=1000 elapsed_sec=76.285 free_bytes=841329070080
+[2026-07-16 01:15:53] completed function=LINEAR N=20 K=20 runs=1000 elapsed_sec=77.408 free_bytes=840227446784
+[2026-07-16 01:17:14] completed function=LINEAR N=20 K=30 runs=1000 elapsed_sec=80.996 free_bytes=839125413888
+[2026-07-16 01:18:42] completed function=LINEAR N=20 K=50 runs=1000 elapsed_sec=88.059 free_bytes=838023081984
+[2026-07-16 01:20:06] completed function=LINEAR N=20 K=70 runs=1000 elapsed_sec=83.672 free_bytes=836920578048
+[2026-07-16 01:21:26] completed function=LINEAR N=20 K=100 runs=1000 elapsed_sec=79.354 free_bytes=835817750528
+[2026-07-16 01:22:52] completed function=LINEAR N=20 K=150 runs=1000 elapsed_sec=86.244 free_bytes=834715795456
+[2026-07-16 01:24:14] completed function=LINEAR N=20 K=200 runs=1000 elapsed_sec=81.830 free_bytes=833614909440
+[2026-07-16 01:25:43] completed function=LINEAR N=20 K=300 runs=1000 elapsed_sec=89.194 free_bytes=832515956736
+[2026-07-16 01:27:06] completed function=LINEAR N=20 K=500 runs=1000 elapsed_sec=82.979 free_bytes=831440338944
+[2026-07-16 01:28:21] completed function=LINEAR N=20 K=700 runs=1000 elapsed_sec=74.990 free_bytes=830421250048
+[2026-07-16 01:29:37] completed function=LINEAR N=20 K=1000 runs=1000 elapsed_sec=76.452 free_bytes=829408256000
+[2026-07-16 01:30:57] completed function=LINEAR N=20 K=1500 runs=1000 elapsed_sec=79.755 free_bytes=828394004480
+[2026-07-16 01:32:08] completed function=LINEAR N=20 K=2000 runs=1000 elapsed_sec=71.303 free_bytes=827658878976
+[2026-07-16 01:34:50] completed function=LINEAR N=50 K=1 runs=1000 elapsed_sec=162.009 free_bytes=825056886784
+[2026-07-16 01:37:38] completed function=LINEAR N=50 K=2 runs=1000 elapsed_sec=167.889 free_bytes=822419980288
+[2026-07-16 01:40:53] completed function=LINEAR N=50 K=3 runs=1000 elapsed_sec=195.146 free_bytes=819765624832
+[2026-07-16 01:44:52] completed function=LINEAR N=50 K=5 runs=1000 elapsed_sec=238.593 free_bytes=817094668288
+[2026-07-16 01:48:55] completed function=LINEAR N=50 K=7 runs=1000 elapsed_sec=242.794 free_bytes=814416420864
+[2026-07-16 01:52:52] completed function=LINEAR N=50 K=10 runs=1000 elapsed_sec=237.603 free_bytes=811731894272
+[2026-07-16 01:56:45] completed function=LINEAR N=50 K=15 runs=1000 elapsed_sec=232.831 free_bytes=809043169280
+[2026-07-16 02:00:40] completed function=LINEAR N=50 K=20 runs=1000 elapsed_sec=234.544 free_bytes=806352965632
+[2026-07-16 02:04:32] completed function=LINEAR N=50 K=30 runs=1000 elapsed_sec=232.114 free_bytes=803661987840
+[2026-07-16 02:08:18] completed function=LINEAR N=50 K=50 runs=1000 elapsed_sec=225.974 free_bytes=800981872640
+[2026-07-16 02:12:15] completed function=LINEAR N=50 K=70 runs=1000 elapsed_sec=236.712 free_bytes=798331097088
+[2026-07-16 02:16:07] completed function=LINEAR N=50 K=100 runs=1000 elapsed_sec=232.236 free_bytes=795743555584
+[2026-07-16 02:19:45] completed function=LINEAR N=50 K=150 runs=1000 elapsed_sec=218.386 free_bytes=793272651776
+[2026-07-16 02:23:22] completed function=LINEAR N=50 K=200 runs=1000 elapsed_sec=217.086 free_bytes=790903185408
+[2026-07-16 02:26:44] completed function=LINEAR N=50 K=300 runs=1000 elapsed_sec=201.958 free_bytes=788658733056
+[2026-07-16 02:30:18] completed function=LINEAR N=50 K=500 runs=1000 elapsed_sec=214.181 free_bytes=786523394048
+[2026-07-16 02:33:52] completed function=LINEAR N=50 K=700 runs=1000 elapsed_sec=213.734 free_bytes=784345112576
+[2026-07-16 02:37:19] completed function=LINEAR N=50 K=1000 runs=1000 elapsed_sec=206.416 free_bytes=782167773184
+[2026-07-16 02:40:49] completed function=LINEAR N=50 K=1500 runs=1000 elapsed_sec=210.621 free_bytes=779921993728
+[2026-07-16 02:43:40] completed function=LINEAR N=50 K=2000 runs=1000 elapsed_sec=171.136 free_bytes=778199048192
+[2026-07-16 03:00:57] start conditions=160 runs=160000 raw_root=F:\research_program_data\n_sweep_v3_raw functions=['KURAMOTO', 'LINEAR'] N=[5, 10, 20, 50] K=[1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100, 150, 200, 300, 500, 700, 1000, 1500, 2000]
+[2026-07-16 03:00:57] validation master_unique_prefixes=PASS N=[5,10,20,50] runs=1000
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=1
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=2
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=3
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=5
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=7
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=10
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=15
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=20
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=30
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=50
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=70
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=100
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=150
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=200
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=300
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=500
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=700
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=1000
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=1500
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=5 K=2000
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=10 K=1
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=10 K=2
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=10 K=3
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=10 K=5
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=10 K=7
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=10 K=10
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=10 K=15
+[2026-07-16 03:00:57] resume-skip function=KURAMOTO N=10 K=20
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=30
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=50
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=70
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=100
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=150
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=200
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=300
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=500
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=700
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=1000
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=1500
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=10 K=2000
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=1
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=2
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=3
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=5
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=7
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=10
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=15
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=20
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=30
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=50
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=70
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=100
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=150
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=200
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=300
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=500
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=700
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=1000
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=1500
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=20 K=2000
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=1
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=2
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=3
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=5
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=7
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=10
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=15
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=20
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=30
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=50
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=70
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=100
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=150
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=200
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=300
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=500
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=700
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=1000
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=1500
+[2026-07-16 03:00:58] resume-skip function=KURAMOTO N=50 K=2000
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=1
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=2
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=3
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=5
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=7
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=10
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=15
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=20
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=30
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=50
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=70
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=100
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=150
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=200
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=300
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=500
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=700
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=1000
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=1500
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=5 K=2000
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=1
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=2
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=3
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=5
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=7
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=10
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=15
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=20
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=30
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=50
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=70
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=100
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=150
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=200
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=300
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=500
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=700
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=1000
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=1500
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=10 K=2000
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=1
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=2
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=3
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=5
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=7
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=10
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=15
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=20
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=30
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=50
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=70
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=100
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=150
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=200
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=300
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=500
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=700
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=1000
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=1500
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=20 K=2000
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=1
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=2
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=3
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=5
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=7
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=10
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=15
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=20
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=30
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=50
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=70
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=100
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=150
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=200
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=300
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=500
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=700
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=1000
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=1500
+[2026-07-16 03:00:58] resume-skip function=LINEAR N=50 K=2000
+[2026-07-16 03:01:54] aggregated function=KURAMOTO N=5 K=2 runs=1000 conditions=1/160
+[2026-07-16 03:01:55] aggregated function=KURAMOTO N=5 K=1 runs=1000 conditions=2/160
+[2026-07-16 03:02:09] aggregated function=KURAMOTO N=5 K=5 runs=1000 conditions=3/160
+[2026-07-16 03:02:11] aggregated function=KURAMOTO N=5 K=3 runs=1000 conditions=4/160
+[2026-07-16 03:03:55] aggregated function=KURAMOTO N=5 K=7 runs=1000 conditions=5/160
+[2026-07-16 03:03:56] aggregated function=KURAMOTO N=5 K=10 runs=1000 conditions=6/160
+[2026-07-16 03:04:10] aggregated function=KURAMOTO N=5 K=15 runs=1000 conditions=7/160
+[2026-07-16 03:04:12] aggregated function=KURAMOTO N=5 K=20 runs=1000 conditions=8/160
+[2026-07-16 03:05:55] aggregated function=KURAMOTO N=5 K=30 runs=1000 conditions=9/160
+[2026-07-16 03:05:55] aggregated function=KURAMOTO N=5 K=50 runs=1000 conditions=10/160
+[2026-07-16 03:06:09] aggregated function=KURAMOTO N=5 K=70 runs=1000 conditions=11/160
+[2026-07-16 03:06:11] aggregated function=KURAMOTO N=5 K=100 runs=1000 conditions=12/160
+[2026-07-16 03:07:52] aggregated function=KURAMOTO N=5 K=150 runs=1000 conditions=13/160
+[2026-07-16 03:07:53] aggregated function=KURAMOTO N=5 K=200 runs=1000 conditions=14/160
+[2026-07-16 03:08:06] aggregated function=KURAMOTO N=5 K=300 runs=1000 conditions=15/160
+[2026-07-16 03:08:08] aggregated function=KURAMOTO N=5 K=500 runs=1000 conditions=16/160
+[2026-07-16 03:09:51] aggregated function=KURAMOTO N=5 K=700 runs=1000 conditions=17/160
+[2026-07-16 03:09:52] aggregated function=KURAMOTO N=5 K=1000 runs=1000 conditions=18/160
+[2026-07-16 03:10:04] aggregated function=KURAMOTO N=5 K=1500 runs=1000 conditions=19/160
+[2026-07-16 03:10:06] aggregated function=KURAMOTO N=5 K=2000 runs=1000 conditions=20/160
+[2026-07-16 03:11:57] aggregated function=KURAMOTO N=10 K=1 runs=1000 conditions=21/160
+[2026-07-16 03:11:57] aggregated function=KURAMOTO N=10 K=2 runs=1000 conditions=22/160
+[2026-07-16 03:12:10] aggregated function=KURAMOTO N=10 K=3 runs=1000 conditions=23/160
+[2026-07-16 03:12:12] aggregated function=KURAMOTO N=10 K=5 runs=1000 conditions=24/160
+[2026-07-16 03:14:01] aggregated function=KURAMOTO N=10 K=7 runs=1000 conditions=25/160
+[2026-07-16 03:14:02] aggregated function=KURAMOTO N=10 K=10 runs=1000 conditions=26/160
+[2026-07-16 03:14:14] aggregated function=KURAMOTO N=10 K=15 runs=1000 conditions=27/160
+[2026-07-16 03:14:16] aggregated function=KURAMOTO N=10 K=20 runs=1000 conditions=28/160
+[2026-07-16 03:16:06] aggregated function=KURAMOTO N=10 K=30 runs=1000 conditions=29/160
+[2026-07-16 03:16:06] aggregated function=KURAMOTO N=10 K=50 runs=1000 conditions=30/160
+[2026-07-16 03:16:18] aggregated function=KURAMOTO N=10 K=70 runs=1000 conditions=31/160
+[2026-07-16 03:16:21] aggregated function=KURAMOTO N=10 K=100 runs=1000 conditions=32/160
+[2026-07-16 03:18:10] aggregated function=KURAMOTO N=10 K=150 runs=1000 conditions=33/160
+[2026-07-16 03:18:10] aggregated function=KURAMOTO N=10 K=200 runs=1000 conditions=34/160
+[2026-07-16 03:18:22] aggregated function=KURAMOTO N=10 K=300 runs=1000 conditions=35/160
+[2026-07-16 03:18:25] aggregated function=KURAMOTO N=10 K=500 runs=1000 conditions=36/160
+[2026-07-16 03:20:15] aggregated function=KURAMOTO N=10 K=700 runs=1000 conditions=37/160
+[2026-07-16 03:20:15] aggregated function=KURAMOTO N=10 K=1000 runs=1000 conditions=38/160
+[2026-07-16 03:20:26] aggregated function=KURAMOTO N=10 K=1500 runs=1000 conditions=39/160
+[2026-07-16 03:20:29] aggregated function=KURAMOTO N=10 K=2000 runs=1000 conditions=40/160
+[2026-07-16 03:21:52] aggregated function=KURAMOTO N=20 K=1 runs=1000 conditions=41/160
+[2026-07-16 03:21:52] aggregated function=KURAMOTO N=20 K=2 runs=1000 conditions=42/160
+[2026-07-16 03:21:57] aggregated function=KURAMOTO N=20 K=3 runs=1000 conditions=43/160
+[2026-07-16 03:21:58] aggregated function=KURAMOTO N=20 K=5 runs=1000 conditions=44/160
+[2026-07-16 03:23:13] aggregated function=KURAMOTO N=20 K=7 runs=1000 conditions=45/160
+[2026-07-16 03:23:14] aggregated function=KURAMOTO N=20 K=10 runs=1000 conditions=46/160
+[2026-07-16 03:23:19] aggregated function=KURAMOTO N=20 K=15 runs=1000 conditions=47/160
+[2026-07-16 03:23:21] aggregated function=KURAMOTO N=20 K=20 runs=1000 conditions=48/160
+[2026-07-16 03:24:25] aggregated function=KURAMOTO N=20 K=50 runs=1000 conditions=49/160
+[2026-07-16 03:24:25] aggregated function=KURAMOTO N=20 K=30 runs=1000 conditions=50/160
+[2026-07-16 03:24:31] aggregated function=KURAMOTO N=20 K=70 runs=1000 conditions=51/160
+[2026-07-16 03:24:33] aggregated function=KURAMOTO N=20 K=100 runs=1000 conditions=52/160
+[2026-07-16 03:25:40] aggregated function=KURAMOTO N=20 K=150 runs=1000 conditions=53/160
+[2026-07-16 03:25:40] aggregated function=KURAMOTO N=20 K=200 runs=1000 conditions=54/160
+[2026-07-16 03:25:47] aggregated function=KURAMOTO N=20 K=300 runs=1000 conditions=55/160
+[2026-07-16 03:25:49] aggregated function=KURAMOTO N=20 K=500 runs=1000 conditions=56/160
+[2026-07-16 03:26:52] aggregated function=KURAMOTO N=20 K=700 runs=1000 conditions=57/160
+[2026-07-16 03:26:53] aggregated function=KURAMOTO N=20 K=1000 runs=1000 conditions=58/160
+[2026-07-16 03:26:57] aggregated function=KURAMOTO N=20 K=1500 runs=1000 conditions=59/160
+[2026-07-16 03:26:59] aggregated function=KURAMOTO N=20 K=2000 runs=1000 conditions=60/160
+[2026-07-16 03:28:38] aggregated function=KURAMOTO N=50 K=1 runs=1000 conditions=61/160
+[2026-07-16 03:28:39] aggregated function=KURAMOTO N=50 K=2 runs=1000 conditions=62/160
+[2026-07-16 03:28:47] aggregated function=KURAMOTO N=50 K=3 runs=1000 conditions=63/160
+[2026-07-16 03:28:51] aggregated function=KURAMOTO N=50 K=5 runs=1000 conditions=64/160
+[2026-07-16 03:30:44] aggregated function=KURAMOTO N=50 K=7 runs=1000 conditions=65/160
+[2026-07-16 03:30:46] aggregated function=KURAMOTO N=50 K=10 runs=1000 conditions=66/160
+[2026-07-16 03:30:54] aggregated function=KURAMOTO N=50 K=15 runs=1000 conditions=67/160
+[2026-07-16 03:30:58] aggregated function=KURAMOTO N=50 K=20 runs=1000 conditions=68/160
+[2026-07-16 03:32:50] aggregated function=KURAMOTO N=50 K=30 runs=1000 conditions=69/160
+[2026-07-16 03:32:53] aggregated function=KURAMOTO N=50 K=50 runs=1000 conditions=70/160
+[2026-07-16 03:33:03] aggregated function=KURAMOTO N=50 K=70 runs=1000 conditions=71/160
+[2026-07-16 03:33:09] aggregated function=KURAMOTO N=50 K=100 runs=1000 conditions=72/160
+[2026-07-16 03:35:06] aggregated function=KURAMOTO N=50 K=150 runs=1000 conditions=73/160
+[2026-07-16 03:35:10] aggregated function=KURAMOTO N=50 K=200 runs=1000 conditions=74/160
+[2026-07-16 03:35:19] aggregated function=KURAMOTO N=50 K=300 runs=1000 conditions=75/160
+[2026-07-16 03:35:24] aggregated function=KURAMOTO N=50 K=500 runs=1000 conditions=76/160
+[2026-07-16 03:37:15] aggregated function=KURAMOTO N=50 K=1000 runs=1000 conditions=77/160
+[2026-07-16 03:37:16] aggregated function=KURAMOTO N=50 K=700 runs=1000 conditions=78/160
+[2026-07-16 03:37:23] aggregated function=KURAMOTO N=50 K=1500 runs=1000 conditions=79/160
+[2026-07-16 03:37:27] aggregated function=KURAMOTO N=50 K=2000 runs=1000 conditions=80/160
+[2026-07-16 03:38:26] aggregated function=LINEAR N=5 K=1 runs=1000 conditions=81/160
+[2026-07-16 03:38:28] aggregated function=LINEAR N=5 K=2 runs=1000 conditions=82/160
+[2026-07-16 03:38:35] aggregated function=LINEAR N=5 K=3 runs=1000 conditions=83/160
+[2026-07-16 03:38:39] aggregated function=LINEAR N=5 K=5 runs=1000 conditions=84/160
+[2026-07-16 03:39:40] aggregated function=LINEAR N=5 K=7 runs=1000 conditions=85/160
+[2026-07-16 03:39:41] aggregated function=LINEAR N=5 K=10 runs=1000 conditions=86/160
+[2026-07-16 03:39:47] aggregated function=LINEAR N=5 K=15 runs=1000 conditions=87/160
+[2026-07-16 03:39:52] aggregated function=LINEAR N=5 K=20 runs=1000 conditions=88/160
+[2026-07-16 03:40:52] aggregated function=LINEAR N=5 K=30 runs=1000 conditions=89/160
+[2026-07-16 03:40:52] aggregated function=LINEAR N=5 K=50 runs=1000 conditions=90/160
+[2026-07-16 03:40:59] aggregated function=LINEAR N=5 K=70 runs=1000 conditions=91/160
+[2026-07-16 03:41:05] aggregated function=LINEAR N=5 K=100 runs=1000 conditions=92/160
+[2026-07-16 03:42:04] aggregated function=LINEAR N=5 K=150 runs=1000 conditions=93/160
+[2026-07-16 03:42:04] aggregated function=LINEAR N=5 K=200 runs=1000 conditions=94/160
+[2026-07-16 03:42:11] aggregated function=LINEAR N=5 K=300 runs=1000 conditions=95/160
+[2026-07-16 03:42:17] aggregated function=LINEAR N=5 K=500 runs=1000 conditions=96/160
+[2026-07-16 03:43:17] aggregated function=LINEAR N=5 K=700 runs=1000 conditions=97/160
+[2026-07-16 03:43:18] aggregated function=LINEAR N=5 K=1000 runs=1000 conditions=98/160
+[2026-07-16 03:43:24] aggregated function=LINEAR N=5 K=1500 runs=1000 conditions=99/160
+[2026-07-16 03:43:30] aggregated function=LINEAR N=5 K=2000 runs=1000 conditions=100/160
+[2026-07-16 03:44:35] aggregated function=LINEAR N=10 K=1 runs=1000 conditions=101/160
+[2026-07-16 03:44:37] aggregated function=LINEAR N=10 K=2 runs=1000 conditions=102/160
+[2026-07-16 03:44:42] aggregated function=LINEAR N=10 K=3 runs=1000 conditions=103/160
+[2026-07-16 03:44:49] aggregated function=LINEAR N=10 K=5 runs=1000 conditions=104/160
+[2026-07-16 03:45:53] aggregated function=LINEAR N=10 K=7 runs=1000 conditions=105/160
+[2026-07-16 03:45:55] aggregated function=LINEAR N=10 K=10 runs=1000 conditions=106/160
+[2026-07-16 03:46:01] aggregated function=LINEAR N=10 K=15 runs=1000 conditions=107/160
+[2026-07-16 03:46:07] aggregated function=LINEAR N=10 K=20 runs=1000 conditions=108/160
+[2026-07-16 03:47:11] aggregated function=LINEAR N=10 K=30 runs=1000 conditions=109/160
+[2026-07-16 03:47:12] aggregated function=LINEAR N=10 K=50 runs=1000 conditions=110/160
+[2026-07-16 03:47:18] aggregated function=LINEAR N=10 K=70 runs=1000 conditions=111/160
+[2026-07-16 03:47:25] aggregated function=LINEAR N=10 K=100 runs=1000 conditions=112/160
+[2026-07-16 03:48:30] aggregated function=LINEAR N=10 K=150 runs=1000 conditions=113/160
+[2026-07-16 03:48:32] aggregated function=LINEAR N=10 K=200 runs=1000 conditions=114/160
+[2026-07-16 03:48:37] aggregated function=LINEAR N=10 K=300 runs=1000 conditions=115/160
+[2026-07-16 03:48:44] aggregated function=LINEAR N=10 K=500 runs=1000 conditions=116/160
+[2026-07-16 03:49:50] aggregated function=LINEAR N=10 K=700 runs=1000 conditions=117/160
+[2026-07-16 03:49:52] aggregated function=LINEAR N=10 K=1000 runs=1000 conditions=118/160
+[2026-07-16 03:49:57] aggregated function=LINEAR N=10 K=1500 runs=1000 conditions=119/160
+[2026-07-16 03:50:00] aggregated function=LINEAR N=10 K=2000 runs=1000 conditions=120/160
+[2026-07-16 03:51:22] aggregated function=LINEAR N=20 K=1 runs=1000 conditions=121/160
+[2026-07-16 03:51:24] aggregated function=LINEAR N=20 K=2 runs=1000 conditions=122/160
+[2026-07-16 03:51:29] aggregated function=LINEAR N=20 K=3 runs=1000 conditions=123/160
+[2026-07-16 03:51:32] aggregated function=LINEAR N=20 K=5 runs=1000 conditions=124/160
+[2026-07-16 03:52:54] aggregated function=LINEAR N=20 K=7 runs=1000 conditions=125/160
+[2026-07-16 03:52:57] aggregated function=LINEAR N=20 K=10 runs=1000 conditions=126/160
+[2026-07-16 03:53:02] aggregated function=LINEAR N=20 K=15 runs=1000 conditions=127/160
+[2026-07-16 03:53:05] aggregated function=LINEAR N=20 K=20 runs=1000 conditions=128/160
+[2026-07-16 03:54:26] aggregated function=LINEAR N=20 K=30 runs=1000 conditions=129/160
+[2026-07-16 03:54:30] aggregated function=LINEAR N=20 K=50 runs=1000 conditions=130/160
+[2026-07-16 03:54:35] aggregated function=LINEAR N=20 K=70 runs=1000 conditions=131/160
+[2026-07-16 03:54:38] aggregated function=LINEAR N=20 K=100 runs=1000 conditions=132/160
+[2026-07-16 03:55:59] aggregated function=LINEAR N=20 K=150 runs=1000 conditions=133/160
+[2026-07-16 03:56:02] aggregated function=LINEAR N=20 K=200 runs=1000 conditions=134/160
+[2026-07-16 03:56:07] aggregated function=LINEAR N=20 K=300 runs=1000 conditions=135/160
+[2026-07-16 03:56:10] aggregated function=LINEAR N=20 K=500 runs=1000 conditions=136/160
+[2026-07-16 03:57:26] aggregated function=LINEAR N=20 K=2000 runs=1000 conditions=137/160
+[2026-07-16 03:57:27] aggregated function=LINEAR N=20 K=700 runs=1000 conditions=138/160
+[2026-07-16 03:57:31] aggregated function=LINEAR N=20 K=1000 runs=1000 conditions=139/160
+[2026-07-16 03:57:36] aggregated function=LINEAR N=20 K=1500 runs=1000 conditions=140/160
+[2026-07-16 03:59:32] aggregated function=LINEAR N=50 K=1 runs=1000 conditions=141/160
+[2026-07-16 03:59:34] aggregated function=LINEAR N=50 K=2 runs=1000 conditions=142/160
+[2026-07-16 03:59:40] aggregated function=LINEAR N=50 K=3 runs=1000 conditions=143/160
+[2026-07-16 03:59:46] aggregated function=LINEAR N=50 K=5 runs=1000 conditions=144/160
+[2026-07-16 04:01:42] aggregated function=LINEAR N=50 K=7 runs=1000 conditions=145/160
+[2026-07-16 04:01:44] aggregated function=LINEAR N=50 K=10 runs=1000 conditions=146/160
+[2026-07-16 04:01:51] aggregated function=LINEAR N=50 K=15 runs=1000 conditions=147/160
+[2026-07-16 04:01:57] aggregated function=LINEAR N=50 K=20 runs=1000 conditions=148/160
+[2026-07-16 04:03:54] aggregated function=LINEAR N=50 K=30 runs=1000 conditions=149/160
+[2026-07-16 04:03:55] aggregated function=LINEAR N=50 K=50 runs=1000 conditions=150/160
+[2026-07-16 04:04:00] aggregated function=LINEAR N=50 K=70 runs=1000 conditions=151/160
+[2026-07-16 04:04:03] aggregated function=LINEAR N=50 K=100 runs=1000 conditions=152/160
+[2026-07-16 04:05:45] aggregated function=LINEAR N=50 K=500 runs=1000 conditions=153/160
+[2026-07-16 04:05:47] aggregated function=LINEAR N=50 K=300 runs=1000 conditions=154/160
+[2026-07-16 04:05:48] aggregated function=LINEAR N=50 K=200 runs=1000 conditions=155/160
+[2026-07-16 04:05:52] aggregated function=LINEAR N=50 K=150 runs=1000 conditions=156/160
+[2026-07-16 04:07:19] aggregated function=LINEAR N=50 K=2000 runs=1000 conditions=157/160
+[2026-07-16 04:07:29] aggregated function=LINEAR N=50 K=700 runs=1000 conditions=158/160
+[2026-07-16 04:07:31] aggregated function=LINEAR N=50 K=1000 runs=1000 conditions=159/160
+[2026-07-16 04:07:36] aggregated function=LINEAR N=50 K=1500 runs=1000 conditions=160/160
+[2026-07-16 04:07:41] validation negative_per_run_count=0
+[2026-07-16 04:07:41] finished conditions=160 runs=160000 elapsed_sec=4003.783
+[2026-07-16 04:07:41] summary simulation_condition_elapsed_sec_sum=14830.659 aggregate_elapsed_sec=4003.783 total_wall_elapsed_sec=19873 negative_per_run_count=0

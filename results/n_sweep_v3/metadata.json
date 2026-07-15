@@ -1,0 +1,93 @@
+{
+  "schema_version": 3,
+  "experiment": "n_sweep_v3",
+  "coupling_functions": [
+    "KURAMOTO",
+    "LINEAR"
+  ],
+  "device_counts": [
+    5,
+    10,
+    20,
+    50
+  ],
+  "k_values": [
+    1,
+    2,
+    3,
+    5,
+    7,
+    10,
+    15,
+    20,
+    30,
+    50,
+    70,
+    100,
+    150,
+    200,
+    300,
+    500,
+    700,
+    1000,
+    1500,
+    2000
+  ],
+  "strength_ratio": -0.0001,
+  "runs_per_condition": 1000,
+  "condition_count": 160,
+  "total_run_count": 160000,
+  "cycle_time_ms": 5000,
+  "duration_ms": 900000,
+  "carrier_sense_duration_ms": 5.0,
+  "airtime_ms": 20.544,
+  "occupied_time_ms": 25.544,
+  "epsilon_tolerance_rad_by_device_count": {
+    "5": 1.224537524338598,
+    "10": 0.5962189936206396,
+    "20": 0.28205972826166026,
+    "50": 0.09356416904627267
+  },
+  "initial_phase_master_path": "experiments\\n_sweep_v3\\initial_phase_master.json",
+  "master_seed": 20261990,
+  "initial_phase_sampling": "uniform_without_replacement",
+  "raw_data_root": "F:\\research_program_data\\n_sweep_v3_raw",
+  "minimum_free_bytes": 53687091200,
+  "storage_plan": {
+    "schema_version": 1,
+    "measured_at": "2026-07-15T22:34:00+09:00",
+    "raw_data_root": "F:\\research_program_data\\n_sweep_v3_raw",
+    "drive": "F:",
+    "drive_free_bytes_at_gate": 957725507584,
+    "drive_free_gib_at_gate": 891.95,
+    "gate_fraction": 0.8,
+    "gate_capacity_gib": 713.56,
+    "minimum_runtime_free_gib": 50,
+    "smoke_runs_per_device_count": 3,
+    "bytes_per_run_by_device_count": {
+      "5": 311296.0,
+      "10": 572074.6666666666,
+      "20": 1092266.6666666667,
+      "50": 2504021.3333333335
+    },
+    "estimated_total_runs": 160000,
+    "estimated_total_bytes": 179186346666.6667,
+    "estimated_total_gib": 166.88,
+    "gate_passed": true,
+    "carrier_sense_log_reduction_required": false
+  },
+  "changes_from_v2": [
+    "fixed-denominator delivery totals saturate excess physical sends at expected packets",
+    "min_gap_rad uses actual sends union carrier-sense skip_busy intended times",
+    "safe K bands use convergence rate >=95 percent",
+    "1000 runs per condition"
+  ],
+  "elapsed_seconds": 4003.76549109997,
+  "elapsed_seconds_scope": "final aggregate-only invocation",
+  "simulation_condition_elapsed_seconds_sum": 14830.659,
+  "simulation_condition_elapsed_hours_sum": 4.1196275,
+  "total_wall_start": "2026-07-15T22:36:28+09:00",
+  "total_wall_end": "2026-07-16T04:07:41+09:00",
+  "total_wall_elapsed_seconds": 19873,
+  "total_wall_elapsed_hours": 5.52027777777778
+}

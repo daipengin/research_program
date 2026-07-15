@@ -8,7 +8,9 @@ import shutil
 import sqlite3
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import closing
+from itertools import groupby
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +23,6 @@ if str(PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 import run_n_sweep_v2 as v2  # noqa: E402
-from research_program.analysis.calculate_phase_gap_error import (  # noqa: E402
-    compute_mean_abs_gap_error_per_cycle,
-)
 from research_program.analysis.n_sweep_metrics import (  # noqa: E402
     bounded_delivery_totals,
     compute_cycle_delivery_counts,
@@ -155,18 +154,34 @@ def main() -> int:
                     f"free_bytes={shutil.disk_usage(raw_root).free}",
                 )
 
+    aggregate_jobs = [
+        (v2.condition_db_path(raw_root, function_name, device_count, k_value),
+         function_name, device_count, k_value)
+        for function_name in functions
+        for device_count in device_counts
+        for k_value in k_values
+    ]
     run_rows: list[dict[str, Any]] = []
-    for function_name in functions:
-        for device_count in device_counts:
-            for k_value in k_values:
-                run_rows.extend(
-                    aggregate_condition_runs(
-                        db_path=v2.condition_db_path(raw_root, function_name, device_count, k_value),
-                        function_name=function_name,
-                        device_count=device_count,
-                        k_value=k_value,
-                    )
-                )
+    with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
+        futures = {
+            executor.submit(
+                aggregate_condition_runs,
+                db_path=db_path,
+                function_name=function_name,
+                device_count=device_count,
+                k_value=k_value,
+            ): (function_name, device_count, k_value)
+            for db_path, function_name, device_count, k_value in aggregate_jobs
+        }
+        for completed_count, future in enumerate(as_completed(futures), start=1):
+            function_name, device_count, k_value = futures[future]
+            condition_rows = future.result()
+            run_rows.extend(condition_rows)
+            v2.log(
+                log_path,
+                f"aggregated function={function_name} N={device_count} K={k_value} "
+                f"runs={len(condition_rows)} conditions={completed_count}/{len(aggregate_jobs)}",
+            )
     run_df = pd.DataFrame(run_rows).sort_values(
         ["coupling_function", "device_count", "k", "run_index"]
     )
@@ -271,50 +286,58 @@ def aggregate_condition_runs(
     rows: list[dict[str, Any]] = []
     with closing(sqlite3.connect(db_path)) as conn:
         conn.row_factory = sqlite3.Row
-        for run in conn.execute("SELECT * FROM runs ORDER BY random_run_index, run_id").fetchall():
-            run_id = str(run["run_id"])
-            send_df = add_detection_time_column(pd.read_sql_query(
-                "SELECT time, oscillator_id, send_count, transmission_end_time, transmission_time_ms "
-                "FROM send_log WHERE run_id = ? ORDER BY time, oscillator_id",
-                conn, params=(run_id,),
-            ))
-            carrier_df = pd.read_sql_query(
-                "SELECT time, oscillator_id, action FROM carrier_sense_log "
-                "WHERE run_id = ? AND action = 'skip_busy' ORDER BY time, oscillator_id",
-                conn, params=(run_id,),
+        run_by_id = {
+            str(run["run_id"]): run
+            for run in conn.execute(
+                "SELECT * FROM runs ORDER BY random_run_index, run_id"
+            ).fetchall()
+        }
+        cycle_start_by_id = {
+            str(run_id): float(cycle_start)
+            for run_id, cycle_start in conn.execute(
+                "SELECT run_id, cycle_start_time FROM calculated_cycle_data "
+                "WHERE cycle_index = 1"
             )
-            cycle_df = pd.read_sql_query(
-                "SELECT cycle_start_time FROM calculated_cycle_data WHERE run_id = ? ORDER BY cycle_index",
-                conn, params=(run_id,),
-            )
-            legacy = pd.read_sql_query(
-                "SELECT cycle_index, mean_abs_diff_from_ideal_phase_gap, "
-                "mean_abs_diff_from_ideal_phase_gap_ratio FROM phase_gap_error "
-                "WHERE run_id = ? ORDER BY cycle_index",
-                conn, params=(run_id,),
+        }
+        phase_all = pd.read_sql_query(
+            "SELECT run_id, cycle_index, mean_abs_diff_from_ideal_phase_gap, "
+            "mean_abs_diff_from_ideal_phase_gap_ratio, new_mean_abs_dev, "
+            "new_max_abs_dev, min_gap_rad, observed_device_count, "
+            "expected_device_count, has_all_device_sends, skipped_device_count, "
+            "simultaneous_collision_count FROM phase_gap_error ORDER BY rowid",
+            conn,
+        )
+        phase_by_id = {
+            str(run_id): group.drop(columns="run_id").sort_values("cycle_index")
+            for run_id, group in phase_all.groupby("run_id", sort=False)
+        }
+        del phase_all
+
+        send_columns = [
+            "time", "oscillator_id", "send_count", "transmission_end_time",
+            "transmission_time_ms",
+        ]
+        send_cursor = conn.execute(
+            "SELECT run_id, time, oscillator_id, send_count, transmission_end_time, "
+            "transmission_time_ms FROM send_log ORDER BY rowid"
+        )
+        seen_run_ids: set[str] = set()
+        for run_id, send_rows in groupby(send_cursor, key=lambda record: str(record[0])):
+            if run_id in seen_run_ids:
+                raise RuntimeError(f"non-contiguous send_log rows for run_id={run_id}")
+            seen_run_ids.add(run_id)
+            run = run_by_id[run_id]
+            send_df = add_detection_time_column(
+                pd.DataFrame(
+                    [tuple(record)[1:] for record in send_rows],
+                    columns=send_columns,
+                )
             )
             expected_cycles = v2.expected_cycles_from_run(run)
-            cycle_starts = float(cycle_df.iloc[0, 0]) + (
+            cycle_starts = cycle_start_by_id[run_id] + (
                 np.arange(expected_cycles, dtype=np.float64) * float(run["cycle_time"])
             )
-            new_phase = compute_mean_abs_gap_error_per_cycle(
-                send_df=send_df,
-                cycle_starts=cycle_starts,
-                num_devices=device_count,
-                nominal_cycle_time_ms=float(run["cycle_time"]),
-                carrier_sense_df=carrier_df,
-            )
-            new_columns = [
-                "new_mean_abs_dev", "new_max_abs_dev", "min_gap_rad",
-                "observed_device_count", "expected_device_count", "has_all_device_sends",
-                "skipped_device_count", "simultaneous_collision_count",
-            ]
-            phase_df = legacy.merge(new_phase[["cycle_index", *new_columns]], on="cycle_index", how="outer", sort=True)
-            conn.execute("DELETE FROM phase_gap_error WHERE run_id = ?", (run_id,))
-            stored = phase_df.copy()
-            stored.insert(0, "run_id", run_id)
-            stored.to_sql("phase_gap_error", conn, if_exists="append", index=False)
-            conn.commit()
+            phase_df = phase_by_id[run_id]
             phase_df = phase_df[phase_df["cycle_index"] <= expected_cycles]
             delivery = compute_cycle_delivery_counts(
                 send_df=send_df, cycle_starts=cycle_starts, device_count=device_count
@@ -365,6 +388,11 @@ def aggregate_condition_runs(
                 "carrier_sense_duration_ms": carrier_ms, "airtime_ms": airtime_ms,
                 "occupied_time_ms": occupied_ms,
             })
+        missing_run_ids = set(run_by_id).difference(seen_run_ids)
+        if missing_run_ids:
+            raise RuntimeError(
+                f"runs without send_log rows in {db_path}: {len(missing_run_ids)}"
+            )
     return rows
 
 

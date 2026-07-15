@@ -1,0 +1,62 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='1200' height='720' viewBox='0 0 1200 720' font-family='Segoe UI,Arial,sans-serif'>
+<rect width='1200' height='720' fill='white'/>
+<text x='600' y='38' font-size='21' text-anchor='middle' font-weight='bold' fill='#202124'>K bands with convergence rate &gt;= 95%</text>
+<line x1='235' y1='65' x2='235' y2='650' stroke='#e5e5e5'/>
+<text x='235' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1</text>
+<line x1='315.25' y1='65' x2='315.25' y2='650' stroke='#e5e5e5'/>
+<text x='315.25' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>2</text>
+<line x1='421.334' y1='65' x2='421.334' y2='650' stroke='#e5e5e5'/>
+<text x='421.334' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>5</text>
+<line x1='501.583' y1='65' x2='501.583' y2='650' stroke='#e5e5e5'/>
+<text x='501.583' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>10</text>
+<line x1='581.833' y1='65' x2='581.833' y2='650' stroke='#e5e5e5'/>
+<text x='581.833' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>20</text>
+<line x1='687.917' y1='65' x2='687.917' y2='650' stroke='#e5e5e5'/>
+<text x='687.917' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>50</text>
+<line x1='768.167' y1='65' x2='768.167' y2='650' stroke='#e5e5e5'/>
+<text x='768.167' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>100</text>
+<line x1='848.417' y1='65' x2='848.417' y2='650' stroke='#e5e5e5'/>
+<text x='848.417' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>200</text>
+<line x1='954.501' y1='65' x2='954.501' y2='650' stroke='#e5e5e5'/>
+<text x='954.501' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>500</text>
+<line x1='1034.75' y1='65' x2='1034.75' y2='650' stroke='#e5e5e5'/>
+<text x='1034.75' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>1000</text>
+<line x1='1115' y1='65' x2='1115' y2='650' stroke='#e5e5e5'/>
+<text x='1115' y='680' font-size='11' text-anchor='middle' font-weight='normal' fill='#202124'>2000</text>
+<text x='215' y='90' font-size='13' text-anchor='end' font-weight='bold' fill='#202124'>KURAMOTO  N=5</text>
+<line x1='235' y1='75' x2='1115' y2='75' stroke='#dddddd'/>
+<line x1='1034.75' y1='73' x2='1115' y2='73' stroke='#6A3D9A' stroke-width='10' stroke-linecap='round'/>
+<line x1='460.289' y1='97' x2='1115' y2='97' stroke='#1B9E77' stroke-width='10' stroke-linecap='round'/>
+<text x='215' y='160' font-size='13' text-anchor='end' font-weight='bold' fill='#202124'>KURAMOTO  N=10</text>
+<line x1='235' y1='145' x2='1115' y2='145' stroke='#dddddd'/>
+<line x1='628.776' y1='143' x2='993.456' y2='143' stroke='#6A3D9A' stroke-width='10' stroke-linecap='round'/>
+<line x1='687.917' y1='167' x2='1115' y2='167' stroke='#1B9E77' stroke-width='10' stroke-linecap='round'/>
+<text x='215' y='230' font-size='13' text-anchor='end' font-weight='bold' fill='#202124'>KURAMOTO  N=20</text>
+<line x1='235' y1='215' x2='1115' y2='215' stroke='#dddddd'/>
+<line x1='628.776' y1='213' x2='954.501' y2='213' stroke='#6A3D9A' stroke-width='10' stroke-linecap='round'/>
+<line x1='726.873' y1='237' x2='993.456' y2='237' stroke='#1B9E77' stroke-width='10' stroke-linecap='round'/>
+<text x='215' y='300' font-size='13' text-anchor='end' font-weight='bold' fill='#202124'>KURAMOTO  N=50</text>
+<line x1='235' y1='285' x2='1115' y2='285' stroke='#dddddd'/>
+<line x1='687.917' y1='283' x2='895.36' y2='283' stroke='#6A3D9A' stroke-width='10' stroke-linecap='round'/>
+<line x1='815.11' y1='307' x2='954.501' y2='307' stroke='#1B9E77' stroke-width='10' stroke-linecap='round'/>
+<text x='215' y='370' font-size='13' text-anchor='end' font-weight='bold' fill='#202124'>LINEAR  N=5</text>
+<line x1='235' y1='355' x2='1115' y2='355' stroke='#dddddd'/>
+<line x1='993.456' y1='353' x2='1034.75' y2='353' stroke='#6A3D9A' stroke-width='10' stroke-linecap='round'/>
+<line x1='235' y1='377' x2='1115' y2='377' stroke='#1B9E77' stroke-width='10' stroke-linecap='round'/>
+<text x='215' y='440' font-size='13' text-anchor='end' font-weight='bold' fill='#202124'>LINEAR  N=10</text>
+<line x1='235' y1='425' x2='1115' y2='425' stroke='#dddddd'/>
+<line x1='501.583' y1='423' x2='895.36' y2='423' stroke='#6A3D9A' stroke-width='10' stroke-linecap='round'/>
+<line x1='315.25' y1='447' x2='993.456' y2='447' stroke='#1B9E77' stroke-width='10' stroke-linecap='round'/>
+<text x='215' y='510' font-size='13' text-anchor='end' font-weight='bold' fill='#202124'>LINEAR  N=20</text>
+<line x1='235' y1='495' x2='1115' y2='495' stroke='#dddddd'/>
+<line x1='460.289' y1='493' x2='815.11' y2='493' stroke='#6A3D9A' stroke-width='10' stroke-linecap='round'/>
+<line x1='421.334' y1='517' x2='895.36' y2='517' stroke='#1B9E77' stroke-width='10' stroke-linecap='round'/>
+<text x='215' y='580' font-size='13' text-anchor='end' font-weight='bold' fill='#202124'>LINEAR  N=50</text>
+<line x1='235' y1='565' x2='1115' y2='565' stroke='#dddddd'/>
+<line x1='421.334' y1='563' x2='548.526' y2='563' stroke='#6A3D9A' stroke-width='10' stroke-linecap='round'/>
+<line x1='421.334' y1='587' x2='581.833' y2='587' stroke='#1B9E77' stroke-width='10' stroke-linecap='round'/>
+<line x1='430' y1='705' x2='470' y2='705' stroke='#6A3D9A' stroke-width='8'/>
+<text x='480' y='710' font-size='12' text-anchor='start' font-weight='normal' fill='#202124'>formal max-gap</text>
+<line x1='640' y1='705' x2='680' y2='705' stroke='#1B9E77' stroke-width='8'/>
+<text x='690' y='710' font-size='12' text-anchor='start' font-weight='normal' fill='#202124'>intended min-gap</text>
+</svg>
