@@ -1,0 +1,2 @@
+wrap PASS KURAMOTO: phi=pi/2 value=1 equals delta=pi/2
+wrap PASS LINEAR: phi=pi/2 value=0.5 equals delta=pi/2
