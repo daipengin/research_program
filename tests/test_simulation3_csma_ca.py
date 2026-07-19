@@ -1,12 +1,14 @@
 from __future__ import annotations
 import tempfile
 import unittest
+import json
 from pathlib import Path
 import pandas as pd
 import numpy as np
 from research_program.analysis.calculate_phase_gap_error import compute_mean_abs_gap_error_per_cycle
 from research_program.io.send_log import add_detection_time_column
 from research_program.simulation3.runner import Simulation3Request, _CSMACAEngine, run_simulation3_request
+from research_program.analysis.n_sweep_metrics import first_consecutive_above
 
 class _MaximumBackoff:
     def uniform(self, _low, high): return high
@@ -39,3 +41,13 @@ class CSMACATest(unittest.TestCase):
         _,cs=self.execute(retries=3,w0=20,wmax=20)
         # The fixed next-cycle anchor is attempted at 15+100 even if it is busy again.
         self.assertIn(115.0,cs[cs.action=='backoff_retry'].time.to_numpy(float))
+
+    def test_n50_fixed_anchors_keep_min_gap_and_do_not_converge(self):
+        root=Path(__file__).resolve().parents[1]
+        starts=json.loads((root/'experiments/n_sweep_v3/initial_phase_master.json').read_text(encoding='utf-8'))['start_times_by_run'][0][:50]
+        anchors=pd.DataFrame({'time':np.concatenate([np.asarray(starts,dtype=float)+k*5000 for k in range(11)]), 'oscillator_id':np.tile(np.arange(50),11), 'action':'skip_busy'})
+        send=add_detection_time_column(pd.DataFrame({'time':[], 'transmission_end_time':[], 'oscillator_id':[], 'send_count':[]}))
+        phase=compute_mean_abs_gap_error_per_cycle(send_df=send,cycle_starts=np.arange(0.,55000.,5000.),num_devices=50,nominal_cycle_time_ms=5000,carrier_sense_df=anchors)
+        self.assertEqual(phase['min_gap_rad'].nunique(),1)
+        self.assertLess(float(phase['min_gap_rad'].iloc[0]),2*np.pi*25.544/5000)
+        self.assertIsNone(first_consecutive_above(cycle_indices=phase.cycle_index.to_numpy(),values=phase.min_gap_rad.to_numpy(),threshold=2*np.pi*25.544/5000))
