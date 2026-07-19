@@ -1,0 +1,14 @@
+{
+  "schema_version": 3,
+  "algorithm": "PCO_D",
+  "coupling_parameter_interpretation": "alpha",
+  "window_modes": [
+    "fixed_r_025",
+    "original_r_1_over_n"
+  ],
+  "condition_count": 56,
+  "runs_per_condition": 50,
+  "initial_time_semantics": "PCO_D initial times are LISTEN starts; first send is start + r*T.",
+  "reception_model": "Collision packets also deliver receive events, matching simulation1 simplified broadcast behavior.",
+  "elapsed_seconds": 1063.3132913999943
+}
