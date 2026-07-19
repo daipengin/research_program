@@ -11,7 +11,8 @@ from research_program.io.send_log import add_detection_time_column
 
 def run_metrics(*, run_dir: Path, run_index: int, device_count: int, cycle_time: float,
                 duration: float, carrier_sense_duration_ms: float, airtime_ms: float,
-                coupling_parameter: float, window_mode: str) -> dict[str, object]:
+                coupling_parameter: float, window_mode: str, algorithm: str = "PCO_D",
+                extra: dict[str, object] | None = None) -> dict[str, object]:
     send = add_detection_time_column(pd.read_csv(run_dir / "send_log.csv"))
     cs_path = run_dir / "carrier_sense_log.csv"
     cs = pd.read_csv(cs_path) if cs_path.exists() else pd.DataFrame()
@@ -28,7 +29,7 @@ def run_metrics(*, run_dir: Path, run_index: int, device_count: int, cycle_time:
     mean_cycle = first_consecutive_below(cycle_indices=c, values=phase["new_mean_abs_dev"].to_numpy(float), threshold=epsilon)
     gap_cycle = first_consecutive_above(cycle_indices=c, values=phase["min_gap_rad"].to_numpy(float), threshold=2*math.pi*occupied/cycle_time)
     final = phase.tail(10)
-    return {"coupling_function":"PCO_D", "coupling_parameter":coupling_parameter, "alpha":coupling_parameter,
+    return {"coupling_function":algorithm, "coupling_parameter":coupling_parameter, "alpha":coupling_parameter,
         "window_mode":window_mode, "device_count":device_count, "run_index":run_index, "run_id":run_dir.name,
         **totals, "raw_send_packets":int(delivery.actual_packets.sum()),
         "simultaneous_collision_count":int(delivery.simultaneous_collision_count.sum()), "overall_per_percent":overall_per_percent(delivery),
@@ -37,4 +38,7 @@ def run_metrics(*, run_dir: Path, run_index: int, device_count: int, cycle_time:
         "aux_mean_converged":mean_cycle is not None, "final_10_cycle_new_mean_abs_dev":float(final.new_mean_abs_dev.mean()),
         "final_10_cycle_new_max_abs_dev":float(final.new_max_abs_dev.mean()), "final_10_cycle_min_gap_median":float(final.min_gap_rad.median()),
         "epsilon_tolerance_rad":epsilon, "minimum_collision_free_gap_rad":2*math.pi*occupied/cycle_time,
-        "carrier_sense_duration_ms":carrier_sense_duration_ms, "airtime_ms":airtime_ms, "occupied_time_ms":occupied}
+        "carrier_sense_duration_ms":carrier_sense_duration_ms, "airtime_ms":airtime_ms, "occupied_time_ms":occupied,
+        "backoff_retry_total":int((cs.get("action", pd.Series(dtype=str)).astype(str) == "backoff_retry").sum()),
+        "retry_exhausted_abandon_total":int((cs.get("action", pd.Series(dtype=str)).astype(str) == "skip_busy_exhausted").sum()),
+        **(extra or {})}
