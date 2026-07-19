@@ -98,6 +98,7 @@ class _PCODEngine:
         self.order = itertools.count()
         self.intervals: list[tuple[float, float, int]] = []
         self.revision = [0] * request.device_count
+        self.next_send_at: list[float | None] = [None] * request.device_count
         self.mode = ["idle"] * request.device_count
         self.send_count = [0] * request.device_count
         self.logger = BufferedCsvEventLogger(output_dir / "send_log.csv", output_dir / "asleep_log.csv",
@@ -124,14 +125,17 @@ class _PCODEngine:
             self.now = time
             if kind == "listen":
                 self.mode[d] = "listening"; self.revision[d] += 1
-                self.schedule(time + self.r.listening_ratio * self.r.cycle_time, d, "send", self.revision[d])
+                self.next_send_at[d] = time + self.r.listening_ratio * self.r.cycle_time
+                self.schedule(self.next_send_at[d], d, "send", self.revision[d])
             elif kind == "receive" and self.mode[d] == "listening":
                 # Same revision invalidation rule as simulation2 PCO-D.
-                remaining = max(0.0, self._next_send_time(d) - time)
+                remaining = max(0.0, (self.next_send_at[d] or time) - time)
                 updated = calculate_new_remaining_ms(remaining_ms=remaining, listening_ratio=self.r.listening_ratio,
                     cycle_time_ms=self.r.cycle_time, alpha=self.r.coupling_parameter)
-                self.revision[d] += 1; self.schedule(time + updated, d, "send", self.revision[d])
+                self.revision[d] += 1; self.next_send_at[d] = time + updated
+                self.schedule(self.next_send_at[d], d, "send", self.revision[d])
             elif kind == "send" and self.mode[d] == "listening" and rev == self.revision[d]:
+                self.next_send_at[d] = None
                 start, end = self._cs_window(time); blocking = self._blocking(d, start, end)
                 if blocking is not None:
                     self.mode[d] = "idle"
@@ -153,10 +157,6 @@ class _PCODEngine:
                 self.schedule(time + (self.r.cycle_time - self.r.listening_ratio * self.r.cycle_time - self.r.airtime_ms) + extension, d, "listen")
         self.logger.flush_logs()
         self._write_metadata()
-
-    def _next_send_time(self, device: int) -> float:
-        candidates = [event[0] for event in self.queue if event[2] == "send" and event[3] == device and event[4] == self.revision[device]]
-        return min(candidates) if candidates else self.now
 
     def _write_metadata(self) -> None:
         with self.logger.metadata_log_path.open("w", newline="", encoding="utf-8") as f:
